@@ -239,7 +239,7 @@ const hud = { objective: $('objective'), room: $('room'), droneHud: $('droneHud'
 let toastT = 0, lastPrompt = '', lastHelp = '', hudT = 0, promptKey = 'E';
 function toast(msg) { hud.toast.textContent = msg; hud.toast.classList.remove('hidden'); toastT = 2.6; }
 const HELP = {
-  foot: [['WASD', 'move'], ['Shift', 'run'], ['Space', 'jump'], ['1 - 6', 'hold an item'], ['F / Click', 'use item / punch'], ['E', 'interact'], ['M', 'map'], ['V', '1st / 3rd person'], ['N', 'day / night'], ['R', 'RV to last checkpoint']],
+  foot: [['WASD', 'move'], ['Shift', 'run'], ['Space', 'jump'], ['1 - 6', 'hold an item'], ['F / Click', 'use item / punch'], ['E', 'interact'], ['M', 'map'], ['V', '1st / 3rd person'], ['N', 'day / night'], ['R', 'RV to last checkpoint'], ['I', 'copy invite link (co-op)']],
   drone: [['WASD', 'fly'], ['Space / Shift', 'up / down'], ['Mouse', 'turn + tilt camera'], ['V', 'drone cam / chase'], ['E', 'bring the drone back']],
   zoom: [['Mouse', 'look around'], ['F', 'lower binoculars']],
   inside: [['WASD', 'walk (out the side door to leave)'], ['E', 'use / sit / lie / open storage'], ['1 - 6', 'hold an item'], ['L', 'interior lights'], ['Space', 'jump'], ['V', '1st / 3rd person'], ['Mouse', 'look (roof hides)']],
@@ -259,21 +259,47 @@ function stateName() {
     default: return player.pos.y > world.heightAt(player.pos.x, player.pos.z) + 2.2 ? 'On the RV roof' : 'On foot';
   }
 }
+const COPY_ICON = '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M5 15V6a2 2 0 0 1 2-2h9" fill="none" stroke="currentColor" stroke-width="2.2"/></svg>';
 function renderRoster() {
-  if (!net.online) { hud.room.classList.add('hidden'); $('pauseRoom').textContent = ''; return; }
+  if (!net.online) { hud.room.classList.add('hidden'); $('pauseRoom').innerHTML = ''; return; }
   const names = session.roster().map(p => `<span style="color:${session.colorOf(p.id)}">${p.id === net.id ? 'You' : escapeHTML(p.n)}</span>`).join(', ');
   hud.room.classList.remove('hidden');
-  hud.room.innerHTML = `👥 Room <b>${net.code}</b> · ${names || 'connecting…'}${net.isHost ? ' <button id="copyLink" class="mini">Copy invite link</button>' : ''}`;
-  const btn = $('copyLink');
-  if (btn) btn.onclick = () => copyInvite();
-  $('pauseRoom').innerHTML = `Room <b>${net.code}</b> — invite: <span class="link">${inviteLink()}</span>`;
+  hud.room.innerHTML = `👥 Room <b>${net.code}</b> · ${names || 'connecting…'} <button class="copyBtn mini" data-copy="link" title="Copy invite link">${COPY_ICON}<span>Invite</span></button>`;
+  $('pauseRoom').innerHTML = `<div class="invite">
+      <div class="irow"><span>Room code</span><code>${net.code}</code><button class="copyBtn" data-copy="code" title="Copy room code">${COPY_ICON}<span>Copy</span></button></div>
+      <div class="irow"><span>Invite link</span><input class="ilink" readonly value="${inviteLink()}" /><button class="copyBtn" data-copy="link" title="Copy invite link">${COPY_ICON}<span>Copy</span></button></div>
+      <div class="ihint">Send the link (or the code) to a friend — 2 players share each RV.</div>
+    </div>`;
 }
 const escapeHTML = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const inviteLink = () => `${location.origin}${location.pathname}?room=${net.code}`;
-function copyInvite() {
-  const l = inviteLink();
-  (navigator.clipboard ? navigator.clipboard.writeText(l) : Promise.reject()).then(() => toast('📋 Invite link copied — send it to a friend'), () => toast('Invite link: ' + l));
+// Clipboard API needs https + a click; fall back to the old execCommand trick if it's blocked
+function copyText(text) {
+  const legacy = () => new Promise((res, rej) => {
+    const ta = document.createElement('textarea');
+    ta.value = text; ta.setAttribute('readonly', ''); ta.style.cssText = 'position:fixed;top:-1000px;left:0;opacity:0';
+    document.body.appendChild(ta); ta.select(); ta.setSelectionRange(0, text.length);
+    let ok = false; try { ok = document.execCommand('copy'); } catch (e) { /* ignore */ }
+    ta.remove(); ok ? res() : rej(new Error('copy blocked'));
+  });
+  return navigator.clipboard && window.isSecureContext ? navigator.clipboard.writeText(text).catch(legacy) : legacy();
 }
+function onCopyClick(e) {
+  const btn = e.target.closest('.copyBtn');
+  if (!btn) return;
+  e.preventDefault(); e.stopPropagation();
+  const what = btn.dataset.copy, text = what === 'code' ? net.code : inviteLink(), label = btn.querySelector('span'), old = label.textContent;
+  copyText(text).then(() => {
+    btn.classList.add('ok'); label.textContent = 'Copied!';
+    toast(what === 'code' ? `📋 Room code ${net.code} copied` : '📋 Invite link copied — send it to a friend');
+  }, () => {
+    label.textContent = 'Select it';
+    const inp = $('pauseRoom').querySelector('.ilink'); if (inp) { inp.focus(); inp.select(); }
+  });
+  setTimeout(() => { btn.classList.remove('ok'); label.textContent = old; }, 1800);
+}
+hud.room.addEventListener('click', onCopyClick);
+$('pauseRoom').addEventListener('click', e => { if (e.target.classList.contains('ilink')) e.target.select(); onCopyClick(e); });
 hud.prompt.addEventListener('click', e => { if (!input.touch) return; input.tap(e.target.closest('.alt') ? 'KeyX' : 'Key' + promptKey); });
 $('minimap').addEventListener('click', () => minimap.toggleBig());
 $('bigmap').addEventListener('click', () => minimap.toggleBig(false));
@@ -384,6 +410,7 @@ function globalKeys() {
     else toast('Only the driver can reset this RV');
   }
   if (input.wasPressed('Tab')) hud.help.classList.toggle('hidden');
+  if (input.wasPressed('KeyI') && net.online) copyText(inviteLink()).then(() => toast('📋 Invite link copied — send it to a friend'), () => toast('Press Esc to see the invite link'));
   if (!drone.active && (player.mode === 'foot' || player.mode === 'inside')) for (let i = 1; i <= 6; i++) if (input.wasPressed('Digit' + i)) inv.equip(i - 1);
 }
 

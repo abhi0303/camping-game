@@ -77,6 +77,7 @@ export class Session {
     });
     net.on('welcome', d => {                             // guest: we're in
       this.mySlot = d.slot;
+      g.player.char.setColors(PLAYER_COLORS[d.slot % PLAYER_COLORS.length]);   // you wear your slot's outfit too
       this.applyWorld(d.world);
       d.rvs.forEach(s => { this._ensureRVs(s.i + 1); g.rvs[s.i].applyNet(s); });
       d.st.forEach(s => g.inv.applyStorage(s.rv, s.id, s.s));

@@ -119,6 +119,23 @@ export class Character {
   }
 
   // hidden in first-person / cockpit so the camera doesn't see the inside of the head or torso
+  // Recolour the outfit in place (vertex colours), e.g. when you get your co-op slot
+  setColors(colors) {
+    const next = { ...this.col, ...colors }, pairs = [];
+    for (const k of ['jacket', 'jacketLt', 'shirt', 'jeans', 'jeansDk']) if (next[k] !== undefined && next[k] !== this.col[k]) pairs.push([new THREE.Color(this.col[k]), new THREE.Color(next[k])]);
+    this.col = next;
+    if (!pairs.length) return;
+    const inHand = o => { for (let p = o; p; p = p.parent) if (p === this.hand) return true; return false; };
+    this.root.traverse(o => {
+      const c = o.isMesh && !inHand(o) && o.geometry.attributes.color;
+      if (!c) return;
+      let changed = false;
+      for (let i = 0; i < c.count; i++) for (const [from, to] of pairs) {
+        if (Math.abs(c.getX(i) - from.r) < 1e-3 && Math.abs(c.getY(i) - from.g) < 1e-3 && Math.abs(c.getZ(i) - from.b) < 1e-3) { c.setXYZ(i, to.r, to.g, to.b); changed = true; break; }
+      }
+      if (changed) c.needsUpdate = true;
+    });
+  }
   setHeadVisible(v) { this.j.head.visible = v; this.j.neck.children[0].visible = v; this.j.spine.children[0].visible = v; }
 
   punch() {
