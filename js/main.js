@@ -264,11 +264,11 @@ function renderRoster() {
   if (!net.online) { hud.room.classList.add('hidden'); $('pauseRoom').innerHTML = ''; return; }
   const names = session.roster().map(p => `<span style="color:${session.colorOf(p.id)}">${p.id === net.id ? 'You' : escapeHTML(p.n)}</span>`).join(', ');
   hud.room.classList.remove('hidden');
-  hud.room.innerHTML = `👥 Room <b>${net.code}</b> <span class="dim">(${Math.max(1, session.players.size)}/6)</span> · ${names || 'connecting…'} <button class="copyBtn mini" data-copy="link" title="Copy invite link">${COPY_ICON}<span>Invite</span></button>`;
+  hud.room.innerHTML = `👥 Room <b>${net.code}</b> <span class="dim">(${Math.max(1, session.players.size)}/8)</span> · ${names || 'connecting…'} <button class="copyBtn mini" data-copy="link" title="Copy invite link">${COPY_ICON}<span>Invite</span></button>`;
   $('pauseRoom').innerHTML = `<div class="invite">
       <div class="irow"><span>Room code</span><code>${net.code}</code><button class="copyBtn" data-copy="code" title="Copy room code">${COPY_ICON}<span>Copy</span></button></div>
       <div class="irow"><span>Invite link</span><input class="ilink" readonly value="${inviteLink()}" /><button class="copyBtn" data-copy="link" title="Copy invite link">${COPY_ICON}<span>Copy</span></button></div>
-      <div class="ihint">Send the link (or the code) to a friend — 2 players share each RV.</div>
+      <div class="ihint">Send the link (or the code) to friends — up to 4 players ride in one RV (8 per room).</div>
     </div>`;
 }
 const escapeHTML = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));

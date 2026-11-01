@@ -166,9 +166,10 @@ export class Player {
       dr: d && d.active ? [r2(d.pos.x), r2(d.pos.y), r2(d.pos.z), r2(d.yaw)] : 0 };
   }
   // stand next to the RV's side door, facing it
-  spawnBesideRV() {
+  spawnBesideRV(k = 0) {
     this.toWorld();
-    this.pos.copy(this.rv.toWorld(new THREE.Vector3(-3.2, 0, 0.6)));
+    const spot = [[-3.2, 0.6], [-3.2, -1.3], [-4.7, 0.6], [-4.7, -1.3]][k % 4];
+    this.pos.copy(this.rv.toWorld(new THREE.Vector3(spot[0], 0, spot[1])));
     this.pos.y = this.world.groundAt(this.pos.x, this.pos.z);
     this.visY = this.pos.y; this.yaw = this.rv.heading + Math.PI / 2; this.mode = 'foot'; this.grounded = true;
   }

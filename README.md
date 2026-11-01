@@ -1,6 +1,6 @@
 # RV Van – Jungle Trail
 
-A low-poly RV adventure in plain HTML/CSS/JS + Three.js. Start at the trailhead, drive through a hilly jungle, clear the road, rebuild the broken bridge over the river and reach the hilltop camp. Play alone or with friends (up to 6), on desktop or mobile.
+A low-poly RV adventure in plain HTML/CSS/JS + Three.js. Start at the trailhead, drive through a hilly jungle, clear the road, rebuild the broken bridge over the river and reach the hilltop camp. Play alone or with friends (up to 8, 4 per RV), on desktop or mobile.
 
 ## Play locally
 
@@ -27,7 +27,7 @@ All paths are relative, so the game works from the repo sub-folder. `.nojekyll` 
 
 - **Host:** on the start screen, enter your name and press **Host co-op**. You get a room code; press **Copy invite link** (top of the screen) and send it to friends.
 - **Join:** open the invite link (or type the code) and press **Join a friend**.
-- **Teams:** every **2 players share one RV**. With 3–4 players a second RV appears at the trailhead, and with 5–6 a third. Your team's RV is assigned automatically.
+- **Teams:** up to **4 players share one RV** (driver, passenger, and two more at the dinette, sofa or beds). With 5–8 players a second RV appears at the trailhead. Your RV is assigned automatically, and you can still walk over and ride in the other one.
 - **Seats:** one player drives and the other can take the **passenger seat**, or sit or lie anywhere inside, and rides along. Seats are exclusive, so nobody can take the driver seat while someone is using it.
 - **Shared progress:** road blocks, the bridge (including its physics), materials, supply crates, camping gear and day/night are shared. Each RV's Gear Locker, fridge and storage bay are shared by the two people using it.
 

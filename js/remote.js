@@ -12,6 +12,8 @@ export const PLAYER_COLORS = [
   { jacket: 0x2f7a3c, jacketLt: 0x3c8f4a, shirt: 0xf2b880, jeans: 0x25365e, jeansDk: 0x1e2d4f, css: '#9be39f' },   // green jacket · peach tee · dark denim
   { jacket: 0xb0641e, jacketLt: 0xc47830, shirt: 0x7fd1c7, jeans: 0x6b6f78, jeansDk: 0x5b5f68, css: '#ffc07a' },   // orange jacket · teal tee · grey pants
   { jacket: 0x6a3c9b, jacketLt: 0x7d4fae, shirt: 0xf2a6c2, jeans: 0x7ea3d6, jeansDk: 0x6b8fc2, css: '#d0a8ff' },   // purple jacket · pink tee · light denim
+  { jacket: 0x1f7f80, jacketLt: 0x2b9596, shirt: 0xf4f1e6, jeans: 0x5a3e2b, jeansDk: 0x4a3223, css: '#7fe0e0' },   // teal jacket · off-white tee · brown pants
+  { jacket: 0x6b4a2e, jacketLt: 0x7d5a3a, shirt: 0xd9e86a, jeans: 0x2f4f3a, jeansDk: 0x263f2f, css: '#e8c39a' },   // brown jacket · lime tee · olive pants
 ];
 
 function nameTag(text, color) {

@@ -1,7 +1,9 @@
 import { makeRoomCode } from './net.js';
 import { PLAYER_COLORS } from './remote.js';
 
-const MAX_PLAYERS = 6;
+const MAX_PLAYERS = 8;
+export const PER_RV = 4;        // up to 4 friends travel together in one RV
+const MAX_RVS = 2;
 
 // Co-op session glue: who's here, which RV each pair uses, and keeping the shared world in sync.
 // The host is the authority for shared things (road blocks, bridge, materials, crates, night).
@@ -44,7 +46,7 @@ export class Session {
     g.bridgeWorld.role = net.isHost ? 'host' : 'guest';
     g.editor.hooks.remoteBuild = net.isGuest ? d => net.send('buildReq', { d }, true) : null;
   }
-  rvFor(slot) { return Math.min(Math.floor(slot / 2), 2); }
+  rvFor(slot) { return Math.min(Math.floor(slot / PER_RV), MAX_RVS - 1); }
   _ensureRVs(n) { while (this.g.rvs.length < n) this.g.addRV(); }
 
   worldState() {
@@ -88,12 +90,12 @@ export class Session {
       d.st.forEach(s => g.inv.applyStorage(s.rv, s.id, s.s));
       this.players = new Map(d.roster.map(p => [p.id, { n: p.n, c: p.c }]));
       g.player.rv = g.rvs[this.rvFor(d.slot)];
-      g.player.spawnBesideRV();
+      g.player.spawnBesideRV(d.slot % PER_RV);          // teammates stand side by side, not on top of each other
       this.sendState();
-      g.toast(`✅ Joined! You share RV ${this.rvFor(d.slot) + 1}`);
+      g.toast(`✅ Joined! You ride in RV ${this.rvFor(d.slot) + 1} — up to ${PER_RV} players per RV`);
       g.onRoster();
     });
-    net.on('full', () => g.toast('That room is full (6 players).'));
+    net.on('full', () => g.toast(`That room is full (${MAX_PLAYERS} players).`));
     net.on('roster', d => {
       this.players = new Map(d.map(p => [p.id, { n: p.n, c: p.c }]));
       for (const id of [...g.remotes.map.keys()]) if (!this.players.has(id)) g.remotes.remove(id);
