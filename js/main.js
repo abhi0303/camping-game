@@ -15,7 +15,7 @@ import { Materials, MAT_INFO } from './materials.js';
 import { MiniMap } from './minimap.js';
 import { START, CAMP, BRIDGE } from './terrain.js';
 import { AXLE_F, AXLE_R } from './rvDims.js';
-import { Net } from './net.js';
+import { Net, cleanRoomCode } from './net.js';
 import { Remotes } from './remote.js';
 import { Session } from './multiplayer.js';
 import { TouchUI } from './touch.js';
@@ -264,7 +264,7 @@ function renderRoster() {
   if (!net.online) { hud.room.classList.add('hidden'); $('pauseRoom').innerHTML = ''; return; }
   const names = session.roster().map(p => `<span style="color:${session.colorOf(p.id)}">${p.id === net.id ? 'You' : escapeHTML(p.n)}</span>`).join(', ');
   hud.room.classList.remove('hidden');
-  hud.room.innerHTML = `👥 Room <b>${net.code}</b> · ${names || 'connecting…'} <button class="copyBtn mini" data-copy="link" title="Copy invite link">${COPY_ICON}<span>Invite</span></button>`;
+  hud.room.innerHTML = `👥 Room <b>${net.code}</b> <span class="dim">(${Math.max(1, session.players.size)}/6)</span> · ${names || 'connecting…'} <button class="copyBtn mini" data-copy="link" title="Copy invite link">${COPY_ICON}<span>Invite</span></button>`;
   $('pauseRoom').innerHTML = `<div class="invite">
       <div class="irow"><span>Room code</span><code>${net.code}</code><button class="copyBtn" data-copy="code" title="Copy room code">${COPY_ICON}<span>Copy</span></button></div>
       <div class="irow"><span>Invite link</span><input class="ilink" readonly value="${inviteLink()}" /><button class="copyBtn" data-copy="link" title="Copy invite link">${COPY_ICON}<span>Copy</span></button></div>
@@ -353,7 +353,7 @@ const setUseSave = v => { useSave = v; M.cont.classList.toggle('on', v); M.fresh
 setUseSave(useSave);
 M.cont.onclick = () => setUseSave(true); M.fresh.onclick = () => setUseSave(false);
 const roomParam = new URLSearchParams(location.search).get('room');
-if (roomParam) { M.code.value = roomParam.toUpperCase(); M.status.textContent = 'You were invited! Pick a name and press Join.'; M.join.classList.add('pulse'); }
+if (roomParam) { M.code.value = cleanRoomCode(roomParam); M.status.textContent = 'You were invited! Pick a name and press Join.'; M.join.classList.add('pulse'); }
 const playerName = () => { const n = (M.name.value || 'Camper').trim().slice(0, 16) || 'Camper'; try { localStorage.setItem('rv-name', n); } catch (e) { /* ignore */ } return n; };
 const busy = b => [M.solo, M.host, M.join].forEach(x => { x.disabled = b; });
 function loadOrReset() { if (useSave) applySave(Save.load()); else Save.clear(); }
@@ -365,8 +365,25 @@ function startGame(msg) {
   lastT = performance.now();
   if (msg) toast(msg);
 }
-M.solo.onclick = () => { playerName(); loadOrReset(); startGame('Walk up to the side door to go inside'); };
+// typed a code but pressed Solo/Host? warn once — that's the usual "my friend isn't in my game" mistake
+let codeWarned = false;
+function codeTyped() {
+  if (cleanRoomCode(M.code.value).length < 4 || codeWarned) return false;
+  codeWarned = true; M.join.classList.add('pulse');
+  M.status.textContent = '⚠ You typed a room code — press "Join a friend" to play together. (Press again to ignore the code.)';
+  return true;
+}
+M.code.addEventListener('input', () => {
+  const v = M.code.value;
+  if (/room=/i.test(v)) M.code.value = cleanRoomCode(v);           // a whole invite link was pasted
+  else if (v !== v.toUpperCase().replace(/\s/g, '')) M.code.value = v.toUpperCase().replace(/\s/g, '');
+  M.join.classList.toggle('pulse', cleanRoomCode(M.code.value).length >= 4); codeWarned = false;
+});
+M.code.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); M.join.click(); } });
+M.name.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); (cleanRoomCode(M.code.value).length >= 4 ? M.join : M.solo).click(); } });
+M.solo.onclick = () => { if (codeTyped()) return; playerName(); loadOrReset(); startGame('Walk up to the side door to go inside'); };
 M.host.onclick = async () => {
+  if (codeTyped()) return;
   busy(true); M.status.textContent = 'Creating a room…';
   try {
     loadOrReset();
@@ -377,7 +394,7 @@ M.host.onclick = async () => {
   } catch (e) { M.status.textContent = '⚠ ' + (e.message || e); busy(false); }
 };
 M.join.onclick = async () => {
-  const code = M.code.value.trim().toUpperCase();
+  const code = cleanRoomCode(M.code.value);
   if (code.length < 4) { M.status.textContent = 'Type the room code your friend sent you.'; return; }
   busy(true); M.status.textContent = 'Connecting to room ' + code + '…';
   try { await session.join(code, playerName()); gear.netId = net.id; startGame('Connected! Waiting for the host…'); }

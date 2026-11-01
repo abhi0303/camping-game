@@ -42,7 +42,7 @@ export class Remotes {
       r = { id, char, tag, s, pos: new THREE.Vector3(s.x, s.y, s.z), yaw: s.yw || 0, item: null, itemType: null, drone: null, color: col.css };
       this.map.set(id, r);
     }
-    r.s = s;
+    r.s = s; r.last = performance.now();
     return r;
   }
   remove(id) {
@@ -55,8 +55,10 @@ export class Remotes {
   seatTaken(i, seat) { for (const r of this.map.values()) if (r.s.f && r.s.rv === i && r.s.se === seat) return r.s.n || 'Someone'; return null; }
 
   tick(dt) {
-    const k = 1 - Math.exp(-14 * dt);
+    const k = 1 - Math.exp(-14 * dt), now = performance.now();
     for (const r of this.map.values()) {
+      const away = now - (r.last || now) > 4000;
+      if (away !== r.away) { r.away = away; r.tag.material.opacity = away ? 0.4 : 1; }
       const s = r.s, rv = s.f ? this.rvs[s.rv] : null, parent = rv ? rv.body : this.scene;
       if (r.char.root.parent !== parent) { parent.add(r.char.root); r.pos.set(s.x, s.y, s.z); r.yaw = s.yw; }
       if ((r.pos.x - s.x) ** 2 + (r.pos.z - s.z) ** 2 > 36) r.pos.set(s.x, s.y, s.z);

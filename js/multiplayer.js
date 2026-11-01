@@ -13,7 +13,11 @@ export class Session {
     this.players = new Map();         // id -> { n: name, c: slot }
     this.myName = 'Player'; this.mySlot = 0;
     this.tP = 0; this.tR = 0; this.tW = 0; this.tB = 0; this.dirty = true;
+    this.lastTick = performance.now();
     this._wire();
+    // Background tabs stop requestAnimationFrame (the game loop). Keep the connection alive and
+    // keep teammates updated from a timer so you never 'vanish' from their screen.
+    setInterval(() => { if (this.online && performance.now() - this.lastTick > 1200) this._send(1, true); }, 1000);
   }
   get online() { return this.net.online; }
   roster() { return [...this.players.entries()].map(([id, p]) => ({ id, ...p })).sort((a, b) => a.c - b.c); }
@@ -72,6 +76,7 @@ export class Session {
       this._ensureRVs(this.rvFor(slot) + 1);
       net.sendTo(from, 'welcome', { slot, world: this.worldState(), rvs: g.rvs.map(r => r.netState()), st: this.storages(), roster: this.roster() });
       net.send('roster', this.roster());
+      this.sendState();
       g.toast(`👋 ${d.n || 'A player'} joined`);
       g.onRoster();
     });
@@ -84,11 +89,17 @@ export class Session {
       this.players = new Map(d.roster.map(p => [p.id, { n: p.n, c: p.c }]));
       g.player.rv = g.rvs[this.rvFor(d.slot)];
       g.player.spawnBesideRV();
+      this.sendState();
       g.toast(`✅ Joined! You share RV ${this.rvFor(d.slot) + 1}`);
       g.onRoster();
     });
     net.on('full', () => g.toast('That room is full (6 players).'));
-    net.on('roster', d => { this.players = new Map(d.map(p => [p.id, { n: p.n, c: p.c }])); g.onRoster(); });
+    net.on('roster', d => {
+      this.players = new Map(d.map(p => [p.id, { n: p.n, c: p.c }]));
+      for (const id of [...g.remotes.map.keys()]) if (!this.players.has(id)) g.remotes.remove(id);
+      this.sendState();                                  // make sure newcomers see us right away
+      g.onRoster();
+    });
     net.on('p', (d, from) => { if (from !== net.id) g.remotes.upsert(from, d); });
     net.on('rv', d => {
       this._ensureRVs(d.i + 1);
@@ -144,10 +155,13 @@ export class Session {
   sendPack(d) { if (this.online) this.net.send('undep', { id: d.id }); }
   colorOf(id) { const p = this.players.get(id); return PLAYER_COLORS[(p ? p.c : 0) % PLAYER_COLORS.length].css; }
 
-  tick(dt) {
+  sendState() { if (this.online && this.g.player) this.net.send('p', { ...this.g.player.netState(), n: this.myName, c: this.mySlot }); }
+  tick(dt) { this.lastTick = performance.now(); this._send(dt, false); }
+  _send(dt, force) {
     if (!this.online) return;
     const net = this.net, g = this.g;
     this.tP += dt; this.tR += dt; this.tW += dt; this.tB += dt;
+    if (force) this.dirty = true;
     if (this.tP >= 1 / 12) { this.tP = 0; net.send('p', { ...g.player.netState(), n: this.myName, c: this.mySlot }); }
     if (this.tR >= 1 / 15) { this.tR = 0; for (const r of g.rvs) if (r.isLocal(net)) { if (!r.owner) r.owner = net.id; net.send('rv', r.netState()); } }
     if (net.isHost) {

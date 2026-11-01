@@ -4,6 +4,17 @@
 const PREFIX = 'rv-jungle-trail-';
 const ALPHA = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
+// PeerJS defaults (Google STUN + PeerJS TURN relay) plus a few more STUN servers for tricky networks
+function peerOptions() {
+  const base = (window.peerjs && window.peerjs.util && window.peerjs.util.defaultConfig && window.peerjs.util.defaultConfig.iceServers) || [];
+  return { debug: 0, config: { iceServers: [...base, { urls: ['stun:stun1.l.google.com:19302', 'stun:stun2.l.google.com:19302', 'stun:stun3.l.google.com:19302'] }, { urls: 'stun:global.stun.twilio.com:3478' }] } };
+}
+// "abcd e", "abcde", or a whole invite link -> "ABCDE"
+export function cleanRoomCode(v) {
+  const m = /room=([A-Za-z0-9]+)/.exec(v || '');
+  return (m ? m[1] : (v || '')).toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
+}
+
 export function makeRoomCode() { let s = ''; for (let i = 0; i < 5; i++) s += ALPHA[(Math.random() * ALPHA.length) | 0]; return s; }
 
 export class Net {
@@ -11,6 +22,11 @@ export class Net {
     this.mode = 'solo';          // solo | host | guest
     this.peer = null; this.id = 'local'; this.code = '';
     this.conns = []; this.hostConn = null; this.handlers = {};
+    // hidden tabs can lose the broker connection; reconnect when the player comes back
+    document.addEventListener('visibilitychange', () => {
+      const p = this.peer;
+      if (!document.hidden && p && p.disconnected && !p.destroyed) { try { p.reconnect(); } catch (e) { /* ignore */ } }
+    });
   }
   get online() { return this.mode !== 'solo'; }
   get isHost() { return this.mode === 'host'; }
@@ -21,7 +37,7 @@ export class Net {
   host(code) {
     return new Promise((resolve, reject) => {
       if (!window.Peer) { reject(new Error('Multiplayer library could not load (check your internet).')); return; }
-      const peer = this.peer = new window.Peer(PREFIX + code, { debug: 0 });
+      const peer = this.peer = new window.Peer(PREFIX + code, peerOptions());
       let opened = false;
       peer.on('open', id => { opened = true; this.mode = 'host'; this.id = id; this.code = code; resolve(code); });
       peer.on('connection', c => c.on('open', () => { this.conns.push(c); this._wire(c); this._emit('join', null, c.peer); }));
@@ -33,7 +49,7 @@ export class Net {
   join(code) {
     return new Promise((resolve, reject) => {
       if (!window.Peer) { reject(new Error('Multiplayer library could not load (check your internet).')); return; }
-      const peer = this.peer = new window.Peer({ debug: 0 });
+      const peer = this.peer = new window.Peer(peerOptions());
       const fail = e => { clearTimeout(t); reject(e); };
       const t = setTimeout(() => fail(new Error('Could not reach that room. Check the code and that the host is online.')), 20000);
       peer.on('open', id => {
