@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#1e2130" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="description" content="Low-poly RV jungle adventure — drive, clear the trail, build a bridge and camp with friends. Plays in the browser on desktop and mobile." />
+  <title>RV Van – Jungle Trail</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🚐</text></svg>" />
+  <link rel="stylesheet" href="css/style.css" />
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <!-- HUD -->
+  <div id="hud">
+    <div id="title" class="panel">
+      <div class="t1">RV Van</div>
+      <div class="t2">Jungle Trail</div>
+    </div>
+
+    <div id="topright" class="panel">
+      <span id="fps">-- fps</span>
+      <select id="quality" title="Graphics quality">
+        <option value="low">Low (cool &amp; quiet)</option>
+        <option value="medium" selected>Medium</option>
+        <option value="high">High</option>
+      </select>
+    </div>
+
+    <div id="room" class="panel hidden"></div>
+    <div id="state" class="panel"></div>
+    <div id="objective" class="panel"></div>
+    <canvas id="minimap" width="180" height="180"></canvas>
+    <div id="prompt" class="hidden"></div>
+    <div id="toast" class="hidden"></div>
+
+    <div id="speedo" class="panel hidden">
+      <div id="speed">0</div>
+      <div class="unit">km/h</div>
+      <div id="gear">N</div>
+      <div id="speedIcons"><span id="icoLights">LIGHTS</span></div>
+    </div>
+
+    <div id="help" class="panel">
+      <div class="help-head">Controls <span class="dim">(Tab to hide)</span></div>
+      <div id="helpBody"></div>
+    </div>
+
+    <!-- backpack hotbar -->
+    <div id="hotbarWrap">
+      <div id="matsBar" class="panel hidden"></div>
+      <div id="hbName"></div>
+      <div id="hotbar"></div>
+    </div>
+
+    <!-- drone camera overlay -->
+    <div id="droneHud" class="hidden">
+      <div class="corner tl"></div><div class="corner tr"></div><div class="corner bl"></div><div class="corner br"></div>
+      <div class="rec"><span class="dot"></span>REC · DRONE CAM</div>
+      <div class="cross"></div>
+      <div class="stats"><span id="dAlt">ALT 0 m</span><span id="dDist">DIST 0 m</span><span id="dSpd">0 km/h</span><span id="dBat">BATT 100%</span></div>
+      <div id="dWarn"></div>
+    </div>
+    <div id="binoHud" class="hidden"><svg viewBox="0 0 160 100" preserveAspectRatio="xMidYMid slice"><defs><mask id="binoMask"><rect x="-200" y="-200" width="560" height="500" fill="#fff"/><circle cx="62" cy="50" r="31" fill="#000"/><circle cx="98" cy="50" r="31" fill="#000"/></mask></defs><rect x="-200" y="-200" width="560" height="500" fill="#05070a" fill-opacity="0.95" mask="url(#binoMask)"/></svg></div>
+  </div>
+
+  <!-- full map -->
+  <div id="bigmap" class="hidden"><canvas id="bigmapCanvas" width="720" height="720"></canvas></div>
+
+  <!-- storage popup -->
+  <div id="storageUI" class="hidden">
+    <div class="sbox">
+      <div class="shead">
+        <span id="sTitle"></span>
+        <span class="sbtns"><button id="sTakeAll">Take all</button><button id="sClose">Close (E)</button></span>
+      </div>
+      <div class="scols">
+        <div class="scol"><div class="slabel" id="sCap"></div><div class="sgrid" id="sGrid"></div></div>
+        <div class="sarrow">⇄</div>
+        <div class="scol"><div class="slabel" id="bCap"></div><div class="sgrid" id="bGrid"></div></div>
+      </div>
+      <div class="sinfo" id="sInfo">Click an item to move it between the storage and your backpack.</div>
+    </div>
+  </div>
+
+  <!-- Start menu / pause -->
+  <div id="overlay">
+    <div class="card">
+      <h1>RV Van</h1>
+      <p class="sub">Drive through the jungle, clear the trail, rebuild the bridge and reach the hilltop camp — alone or with friends.</p>
+      <div id="menuStart">
+        <label class="mrow"><span>Your name</span><input id="mName" maxlength="16" autocomplete="off" /></label>
+        <div id="mSaveRow" class="mrow hidden"><span>Saved progress</span><button id="mContinue" class="mbtn">Continue</button><button id="mNew" class="mbtn">New game</button></div>
+        <div class="mrow"><button id="mSolo" class="mbig">▶ Play solo</button><button id="mHost" class="mbig alt">👥 Host co-op</button></div>
+        <div class="mrow"><input id="mCode" placeholder="ROOM CODE" maxlength="6" autocomplete="off" /><button id="mJoin" class="mbig alt">Join a friend</button></div>
+        <p id="mStatus" class="small"></p>
+      </div>
+      <div id="menuPause" class="hidden">
+        <button id="play">Resume</button>
+        <p id="pauseRoom" class="small"></p>
+      </div>
+      <div class="grid desk-only">
+        <div><b>WASD</b> move</div><div><b>Shift</b> run</div><div><b>Space</b> jump</div>
+        <div><b>F / Click</b> use / punch</div><div><b>E</b> interact</div><div><b>1 - 6</b> hold an item</div>
+        <div><b>X</b> pack up gear</div><div><b>V</b> camera</div><div><b>M</b> map</div>
+        <div><b>L</b> lights</div><div><b>N</b> day / night</div><div><b>R</b> RV to checkpoint</div>
+      </div>
+      <p class="dim small desk-only">Esc frees the mouse. Choose "Low" quality (top-right) if your laptop gets warm.</p>
+      <p class="dim small touch-only">Left thumb: move · right thumb: look · tap the prompt to interact. Landscape works best.</p>
+      <p id="loadErr" class="err hidden"></p>
+    </div>
+  </div>
+  <div id="rotateHint">📱↻ Turn your phone sideways to play</div>
+
+  <script>
+    (function () {
+      function show(msg) { var e = document.getElementById('loadErr'); e.classList.remove('hidden'); e.textContent = msg; }
+      window.addEventListener('error', function (e) { show('Error: ' + (e.message || e) + (e.error && e.error.stack ? ' @ ' + e.error.stack.split('\n').slice(1, 4).join(' | ') : '')); });
+      setTimeout(function () {
+        if (window.__gameReady) return;
+        show(location.protocol === 'file:'
+          ? 'Please open this through a local server: run "python3 -m http.server 8000" in this folder, then visit http://localhost:8000'
+          : 'Could not load the 3D engine. Check your internet connection (Three.js loads from a CDN).');
+      }, 4000);
+    })();
+  </script>
+  <!-- peer-to-peer multiplayer (works on static hosting) -->
+  <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
