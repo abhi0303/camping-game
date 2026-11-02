@@ -32,6 +32,10 @@ import { app } from './app.js';
 import { Farm } from './farm/farm.js';
 import { FarmMenu } from './farm/menu.js';
 import { FarmPanel } from './farm/panel.js';
+import { FarmEconomy } from './farm/economy.js';
+import { Farmland } from './farm/farmland.js';
+import { FarmUI } from './farm/farmui.js';
+import { MARKET, STORE, PLOTS, FARM_CENTER, inFarm } from './farm/layout.js';
 
 const $ = id => document.getElementById(id);
 
@@ -131,6 +135,12 @@ const farm = new Farm({ net, session, toast: m => toast(m),
   onGone: msg => backToMenu(msg, 'farm'), onRoster: () => renderRoster(), onHosting: () => renderRoster() });
 session.farm = farm;
 survival.g.farmHud = () => farmHud();
+// the farm itself: plots, shelters, animals and the market. The numbers come from the server (farmEco).
+const farmland = new Farmland(scene, world, { onMarket: () => farmUI.open('market'), onStore: () => farmUI.open('store'),
+  onPlot: i => farmUI.open('plot', i), onShelter: b => farmUI.open('shelter', b) });
+const farmEco = new FarmEconomy({ net, toast: m => toast(m), onGone: msg => farm.gone(msg, true),
+  onChange: st => { farmland.setState(st); farmUI.render(); farmUI.renderBar(farm.active); if (!overlay.classList.contains('hidden')) farmPanel.render(); } });
+const farmUI = new FarmUI({ eco: farmEco, materials, toast: m => toast(m), hooks: uiHooks });
 
 function setupRV(r) { r.onMsg = m => toast(m); r.onCheckpoint = onCheckpoint; }
 setupRV(rv0);
@@ -169,6 +179,7 @@ player.worldActs = () => {
   l.push(...obstacles.acts(eq && eq.type));
   for (const a of crateActs) if (!a.c.taken) l.push(a);
   l.push(benchAct, boardAct, towerBenchAct, castleBenchAct, ...flagActs, ...survival.acts(), ...structures.acts());
+  if (farm.active) l.push(...farmland.acts());
   return l;
 };
 
@@ -194,7 +205,15 @@ const OBJ = [
 const STAGE_OBJ = { tbuild: 9, siege: 10, trail2: 11, cbuild: 12, giants: 13, won: 14 };
 // Farm World: the same trail to clear, then the north is yours to explore (no siege, no giants)
 const nearValley = () => anyRV(r => Math.hypot(r.root.position.x - VALLEY.x, r.root.position.z - VALLEY.z) < 70) || Math.hypot(player.pos.x - VALLEY.x, player.pos.z - VALLEY.z) < 70;
-const FARM_OBJ = [...OBJ.slice(0, 8),
+const farmHas = fn => farmEco.ready && fn(farmEco.st);
+const FARM_OBJ = [
+  { text: 'Walk to the farm east of the trailhead (follow the 🌾 FARM sign by the road)', done: () => inFarm(whereAmI().x, whereAmI().z) || farmHas(s => s.buildings.length > 0), at: () => FARM_CENTER },
+  { text: 'Get 20 wood: chop trees and put the logs in the Farm store — or buy wood at the Market', done: () => farmHas(s => s.inventory.wood >= 20 || s.buildings.length > 0), at: () => STORE },
+  { text: 'Build a chicken coop: walk up to a plot sign', done: () => farmHas(s => s.buildings.some(b => b.type === 'coop')), at: () => PLOTS[0] },
+  { text: 'Buy chickens (and feed) at the Market', done: () => farmHas(s => s.animals.some(a => a.type === 'chicken')), at: () => MARKET },
+  { text: 'Chickens lay eggs over time, even while nobody plays — sell eggs at the Market', done: () => farmEco.sold, at: () => MARKET },
+  { text: 'Grow the farm: goats need a goat shed, cows a barn, horses a stable', done: () => farmHas(s => s.buildings.length >= 3), at: () => FARM_CENTER },
+  ...OBJ.slice(0, 8),
   { text: 'Explore north over the pass to Watchtower Valley (clear the road on the way)', done: nearValley, at: () => world.towerBenchPos },
   { text: '🌾 Your world is saved online — any member can open it, together or alone', done: () => false, at: () => world.campPos },
 ];
@@ -395,7 +414,7 @@ function renderRoster() {
     </div>`;
 }
 // Farm World: room bar + the members panel in the pause menu
-const farmPanel = new FarmPanel($('pauseRoom'), { farm, session, net, toast: m => toast(m), copy: t => copyText(t),
+const farmPanel = new FarmPanel($('pauseRoom'), { farm, session, net, eco: farmEco, toast: m => toast(m), copy: t => copyText(t),
   syncLabel: () => (net.isHost ? '🔄 Sync everyone — fresh copy, voice restart, weak links reconnect' : net.online ? '🔄 Reconnect & sync — if a teammate is missing or the voice breaks' : '🔄 Rejoin the world'),
   after: () => renderVoice() });
 function renderFarmRoster() {
@@ -603,6 +622,8 @@ if (flash) { if (farmMenu.mode === 'farm') farmMenu.status('⚠ ' + flash, true)
 async function enterFarm(L, status, isNew) {
   const r = await farm.enter(L, status);
   gear.netId = String(L.memberId || 'f').slice(0, 8) + Date.now().toString(36);   // ids of gear you set down
+  farmland.enable();                   // clear the ground, put up the market, the store and the plots
+  farmEco.start(L);
   startGame(r.role === 'host'
     ? (isNew || r.fresh ? `🌾 Welcome to ${L.roomName}! World code ${L.code} — invite friends from the menu (Esc)` : `🌾 Welcome back to ${L.roomName}`)
     : `🌾 You joined ${r.hostName || 'your friend'} in ${L.roomName}`);
@@ -676,13 +697,14 @@ overlay.addEventListener('click', e => { if (e.target === overlay && started) re
 $('menuBtn').addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); openMenu(); });
 document.addEventListener('pointerlockchange', () => {
   // Esc frees the mouse -> pause menu
-  if (!document.pointerLockElement && started && !input.dragging && !inv.isOpen && !editor.open && !designer.open) openMenu();
+  if (!document.pointerLockElement && started && !input.dragging && !inv.isOpen && !farmUI.isOpen && !editor.open && !designer.open) openMenu();
 });
 // installable app: back button (Android) closes the open popup or shows the menu
 app.init({
   toast: m => toast(m),
   onBack: () => {
-    if (inv.isOpen) inv.closeStorage();
+    if (farmUI.isOpen) farmUI.close();
+    else if (inv.isOpen) inv.closeStorage();
     else if (designer.open) designer.close();
     else if (editor.open) editor.close();
     else if (minimap.bigOpen) minimap.toggleBig(false);
@@ -743,6 +765,7 @@ function step(dt) {
   remotes.localId = net.online ? net.id : 'local';
   remotes.tick(dt);
   survival.update(dt, input);
+  if (farm.active) farmland.update(dt, farmEco.serverNow());
   structures.update(dt, camera.position);
   tracers.update(dt);
   player.char.root.getWorldPosition(pw);

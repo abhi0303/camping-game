@@ -11,7 +11,8 @@ const FILES = [
   ...['main', 'world', 'terrain', 'rv', 'rvModel', 'rvInterior', 'rvDims', 'player', 'character', 'camera', 'input', 'touch', 'audio', 'inventory',
     'items', 'gear', 'drone', 'bridge', 'bridgeEditor', 'obstacles', 'materials', 'minimap', 'net', 'multiplayer', 'remote', 'save', 'utils',
     'zombies', 'survival', 'combat', 'voice', 'structures', 'designer', 'giants', 'app',
-    'farm/config', 'farm/api', 'farm/logins', 'farm/farm', 'farm/menu', 'farm/panel'].map(f => `./js/${f}.js`),
+    'farm/config', 'farm/api', 'farm/logins', 'farm/farm', 'farm/menu', 'farm/panel',
+    'farm/layout', 'farm/models', 'farm/farmland', 'farm/economy', 'farm/farmui'].map(f => `./js/${f}.js`),
 ];
 const LIBS = [
   'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js',

@@ -107,6 +107,8 @@ export class Farm {
       const r = await api.heartbeat(this.L, { epoch, online: this.online(), world });
       if (epoch !== this.epoch || this.role !== 'host') return;
       if (r.superseded) { this._superseded(r); return; }
+      // someone in the game is no longer a member (removed while their kick message got lost): put them out
+      for (const id of r.gone || []) this.g.session.kickMember(id, 'removed');
       if (world) { this.savedJs = js; this.savedAt = now; this.lastSaveAt = Date.now(); }
       if (this.fails >= 2) this.g.toast('✅ Connected to the Farm World server again — progress saved');
       this.fails = 0;

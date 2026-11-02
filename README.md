@@ -75,7 +75,33 @@ A permanent world for a group of up to 4 friends. It's saved on the Farm World s
 - **Who hosts:** the first member to open the world hosts the live game; the others join them. If the host leaves or their browser crashes, one of the remaining players takes over automatically and play goes on.
 - **Saving:** the host saves the world every ~25 s when something changed, right after important events (objectives, checkpoints, the bridge) and when the page closes. If the server can't be reached, the game keeps going and saves once it's back.
 - **Owner tools (Esc menu):** remove a member (frees their place, ends their logins), delete the world (type its name to confirm). Everyone can *Log out on this device*.
-- No zombies, nights, siege or giants in Farm World. You clear the same trail, rebuild the bridge and explore. Animals, the market, vehicles and building come in later updates.
+- No zombies, nights, siege or giants in Farm World. You clear the same trail, rebuild the bridge and explore — and run a farm.
+
+### The farm
+
+The farm is in a clearing just east of the trailhead (follow the **🌾 FARM** sign by the road). Everything on it belongs to the whole group: one shared money balance (💰, starts at ₹500), one store of goods, the same shelters and animals for every member, online or not.
+
+- **Farm store:** put the logs and stones you collect (chopping trees, rockfalls, crates) into the farm. Logs become 🪵 wood, stones stay 🪨 stone. Planks stay with you for the bridge.
+- **Plots:** 8 plots. Walk up to a plot sign to build a shelter on it:
+
+  | Shelter | Cost | Holds |
+  |---|---|---|
+  | 🏠 Chicken coop | ₹100 · 20 wood | 6 chickens |
+  | 🛖 Goat shed | ₹250 · 40 wood | 4 goats |
+  | 🏚 Cow barn | ₹500 · 60 wood · 20 stone | 3 cows |
+  | 🐎 Horse stable | ₹600 · 60 wood · 20 stone | 2 horses |
+- **Market:** buy animals, 🌾 feed, wood and stone; sell 🥚 eggs, 🥛 goat milk, 🍼 cow milk, wood and stone. The **Recent** tab shows who bought, sold or built what.
+
+  | Animal | Price | Eats (feed / h) | Makes |
+  |---|---|---|---|
+  | 🐔 Chicken | ₹40 | 0.25 | 1 egg every 2 h (sells for ₹6) |
+  | 🐐 Goat | ₹150 | 0.5 | 1 goat milk every 4 h (₹30) |
+  | 🐄 Cow | ₹400 | 1 | 1 cow milk every 2 h (₹25) |
+  | 🐴 Horse | ₹600 | 0.75 | — (for carts and riding, coming later) |
+- **Feed and health:** animals eat from the shared feed (₹2 each). Fed animals make goods and stay healthy; without feed they get hungry after about a day, stop producing and grow weak (they don't die). Feed them again and they recover. Walk up to a shelter to see each animal's health and hunger.
+- **While nobody plays:** animals keep eating and producing. When anyone opens the world, the server works out what happened since, using its own clock, for up to a week of absence. The stores hold at most 60 eggs and 30 of each milk, so sell before they fill up.
+- **Safe for a group:** every purchase, sale and build is checked by the server against the shared money and goods. Two members buying at the same moment can't spend the same money; a double click or a retry after a lost connection never buys twice.
+- The money bar above the hotbar and the Esc menu show the money, the animals, what they make per hour and how long the feed lasts. Animals walk around their pens the same way on every player's screen.
 
 The shared world is everything the zombie save holds except your personal backpack: road blocks, crates, materials, the bridge, the RV's checkpoint, the RV storages and the objective.
 
@@ -187,7 +213,7 @@ Global: **M** map, **K** sound, **B** mic on / off (co-op), **R** RV back to the
 - `js/combat.js` – shotgun and cannon
 - `js/minimap.js` – minimap and full map
 - `js/app.js`, `sw.js`, `manifest.webmanifest`, `icons/` – installable app: service worker (offline cache), install button / iOS hint, full screen, wake lock, back button
-- `js/farm/` – Farm World: server address (`config.js`), API calls (`api.js`), logins kept on this device (`logins.js`), the session that hosts / joins / saves / hands over the world (`farm.js`), start-menu screens (`menu.js`), Esc-menu members panel (`panel.js`)
+- `js/farm/` – Farm World: server address (`config.js`), API calls (`api.js`), logins kept on this device (`logins.js`), the session that hosts / joins / saves / hands over the world (`farm.js`), start-menu screens (`menu.js`), Esc-menu members panel (`panel.js`); the farm: plot layout (`layout.js`), models (`models.js`), farm in the world + animals (`farmland.js`), shared money and goods (`economy.js`), market / store / plot / shelter popups and the money bar (`farmui.js`)
 - `server/` – the Farm World server (Cloudflare Worker + NeonDB): API, migrations, tests, setup and deploy steps in [`server/README.md`](server/README.md)
 
 ## Performance

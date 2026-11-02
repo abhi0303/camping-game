@@ -5,6 +5,7 @@ import { openDb, one } from './db.js';
 import { safeEqual } from './crypto.js';
 import { migrate } from './migrations.js';
 import * as R from './rooms.js';
+import * as F from './farm.js';
 
 const routes = [
   ['GET', /^\/v1\/health$/, health],
@@ -21,6 +22,9 @@ const routes = [
   ['POST', /^\/v1\/rooms\/([^/]+)\/session$/, R.openSession, true],
   ['POST', /^\/v1\/rooms\/([^/]+)\/heartbeat$/, R.heartbeat, true],
   ['POST', /^\/v1\/rooms\/([^/]+)\/verify$/, R.verifyTicket, true],
+  ['GET', /^\/v1\/rooms\/([^/]+)\/farm$/, F.farmState, true],
+  ['POST', /^\/v1\/rooms\/([^/]+)\/farm$/, F.farmAct, true],
+  ['GET', /^\/v1\/rooms\/([^/]+)\/farm\/history$/, F.farmHistory, true],
 ];
 
 async function health(req, env, db) {
@@ -35,6 +39,10 @@ async function adminMigrate(req, env, db) {
   return json({ ok: true, applied });
 }
 
+// New tables are created by the first request after a deploy (once per worker instance; a database
+// lock makes sure two instances never do it at the same time). POST /v1/admin/migrate does the same.
+const schemaReady = new Set();      // databases already checked by this worker instance
+
 export default {
   async fetch(req, env, ctx) {
     const cors = corsHeaders(req, env);
@@ -48,6 +56,8 @@ export default {
       const args = re.exec(path).slice(1).map(decodeURIComponent);
       if (hasCode) args[0] = R.cleanCode(args[0]);
       db = openDb(env);
+      const dbKey = env.__pool || env.DATABASE_URL;
+      if (!schemaReady.has(dbKey) && fn !== adminMigrate) { await migrate(db.pool); schemaReady.add(dbKey); }
       res = await fn(req, env, db, ...args);
     } catch (e) {
       res = errorResponse(e);

@@ -48,6 +48,7 @@ export class FarmPanel {
       <div class="fp-top"><div><div class="fp-title">🌾 ${esc(L.roomName || 'Farm World')}</div>
         <div class="small dim">code <b class="fp-code">${esc(L.code)}</b> · ${saved}</div></div>
         <div class="fp-counts"><span class="fp-count" title="Registered members (max ${max})">👥 Members ${members.length}/${max}</span><span class="fp-count" title="Playing right now (max 4)">🟢 Online ${nOnline}/4</span></div></div>
+      ${this._farmLine()}
       ${rows}
       ${canInvite ? `<button class="fbtn go" data-f="invite">➕ Invite a friend</button>` : L.isOwner ? '<div class="fmsg">All 4 places are taken. Remove a member to invite someone new.</div>' : '<div class="fmsg">Want to add a friend? The owner can invite them from this menu.</div>'}
       ${this.link ? `<div class="finv"><input readonly value="${esc(this.link)}" /><button class="fbtn" data-f="copyinv">Copy</button></div><div class="fmsg">Send this link to your friend · works once · valid for 72 hours</div>` : ''}
@@ -60,6 +61,15 @@ export class FarmPanel {
     if (this.c.after) this.c.after();
   }
 
+  // production overview: money, animals, what they make per hour, how long the feed lasts
+  _farmLine() {
+    const e = this.c.eco;
+    if (!e || !e.ready) return '';
+    const animals = ['chicken', 'goat', 'cow', 'horse'].map(t => `${e.cat(t).icon} ${e.count(t)}`).join(' · ');
+    const makes = ['egg', 'goat_milk', 'cow_milk'].filter(p => e.makesPerHour(p) > 0).map(p => `${e.cat(p).icon} +${e.makesPerHour(p).toFixed(1)}/h`).join(' · ');
+    const fh = e.feedHours();
+    return `<div class="fp-farm">🏡 Farm · 💰 ₹${e.money} · ${animals}${makes ? ' · ' + makes : ''}${isFinite(fh) ? ` · 🌾 feed for ${fh < 1 ? '<1' : Math.round(fh)} h` : ''}</div>`;
+  }
   async _click(e) {
     const b = e.target.closest('[data-f]');
     if (!b) return;
