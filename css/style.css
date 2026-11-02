@@ -423,3 +423,9 @@ body.touch .mrow input, body.touch #mCode { font-size: 16px; }      /* iPhone zo
 #appRow .small { opacity: .85; }
 .shareIco { display: inline-block; border: 1.5px solid currentColor; border-radius: 4px; padding: 0 4px; font-size: 11px; }
 @media (orientation: portrait) and (pointer: coarse) and (min-width: 600px) { #rotateHint { display: none; } }
+
+/* ---------- no long-press selection / copy menu / blue highlight while playing ---------- */
+*, *::before, *::after { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: rgba(0,0,0,0); }
+input, textarea { -webkit-user-select: text; user-select: text; -webkit-touch-callout: default; }
+canvas, img, svg { -webkit-user-drag: none; }
+:not(input):not(textarea)::selection { background: transparent; }

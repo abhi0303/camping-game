@@ -33,6 +33,17 @@ export class Input {
     addEventListener('mouseup', () => { this.dragging = false; });
     canvas.addEventListener('wheel', e => { this.wheel += Math.sign(e.deltaY); this.lastInput = performance.now(); e.preventDefault(); }, { passive: false });
     canvas.addEventListener('contextmenu', e => e.preventDefault());
+    // Long-press on phones: no "select the whole page" blue highlight, copy menu, callout or image drag —
+    // they also cancel the finger held on the joystick. Text fields keep it (long-press to paste a code / link).
+    const editable = t => { const el = t && t.nodeType === 3 ? t.parentElement : t; return !!el && !!el.closest && !!el.closest('input, textarea, [contenteditable="true"], .irow code'); };
+    document.addEventListener('contextmenu', e => { if (!editable(e.target)) e.preventDefault(); });
+    document.addEventListener('selectstart', e => { if (!editable(e.target)) e.preventDefault(); });
+    document.addEventListener('dragstart', e => { if (!editable(e.target)) e.preventDefault(); });
+    // anything that still got selected somehow: clear it as soon as the finger lifts
+    addEventListener('touchend', () => {
+      const sel = window.getSelection && window.getSelection();
+      if (sel && sel.rangeCount && !editable(document.activeElement) && !editable(sel.anchorNode)) sel.removeAllRanges();
+    }, { passive: true });
     document.addEventListener('pointerlockchange', () => { this.locked = document.pointerLockElement === canvas; });
   }
   requestLock() {
