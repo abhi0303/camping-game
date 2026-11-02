@@ -2,16 +2,19 @@
 // Everything feeds the normal Input object, so the game code doesn't care where input comes from.
 const BUTTONS = [
   // code, label per mode ({mode: label}), modes shown
-  ['KeyF', { foot: '✊', item: '🛠️' }, 'foot'],
+  ['KeyF', { foot: '✊', item: '🛠️', gun: '💥' }, 'foot'],
   ['Space', { foot: '⤒', drive: '🅿️', drone: '▲' }, 'foot drive drone'],
   ['KeyE', { foot: 'E', drive: '🚪', seat: '⬆️', drone: '↩️' }, 'foot drive seat drone'],
   ['KeyC', { foot: '⤓', drone: '▼' }, 'foot drone'],
+  ['KeyG', { foot: 'GUN' }, 'foot'],
   ['KeyV', { foot: '👁️', drive: '🎥', seat: '👁️', drone: '🎥' }, 'foot drive seat drone'],
   ['KeyQ', { drive: '🛋️' }, 'drive'],
   ['KeyH', { drive: '📯' }, 'drive'],
   ['KeyL', { drive: '💡', seat: '💡' }, 'drive seat'],
   ['KeyR', { drive: '↺' }, 'drive'],
 ];
+
+const GUN_SVG = '<svg class="gunIco" viewBox="0 0 64 22" aria-hidden="true"><path d="M17 6h46v3.4H31V12h-2l-1 3.4h-3.2L24 12h-6.5L3.4 19.5 1 13.4z M34 10.6h12.5v3.6H34z" fill="currentColor"/></svg>';
 
 export class TouchUI {
   constructor(input) {
@@ -63,7 +66,7 @@ export class TouchUI {
     document.addEventListener('gesturestart', e => e.preventDefault());
   }
 
-  // mode: foot | drive | seat | drone ; holding: true when an item is in hand
+  // mode: foot | drive | seat | drone ; holding: true when an item is in hand, 'gun' with the shotgun out
   setMode(mode, holding) {
     if (!this.enabled) return;
     const key = mode + (holding ? '+' : '');
@@ -72,7 +75,8 @@ export class TouchUI {
     this.btns.forEach((b, i) => {
       const def = BUTTONS[i], show = def[2].split(' ').includes(mode);
       b.style.display = show ? '' : 'none';
-      b.textContent = (holding && def[1].item) || def[1][mode] || def[1].foot || '';
+      const lab = (holding === 'gun' && def[1].gun) || (holding === true && def[1].item) || def[1][mode] || def[1].foot || '';
+      if (lab === 'GUN') b.innerHTML = GUN_SVG; else b.textContent = lab;
     });
   }
 }

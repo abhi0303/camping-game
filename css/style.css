@@ -63,7 +63,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #2a2d3a; f
 .hb.empty { opacity: .55; }
 .hb.sel { border-color: #f2c14e; box-shadow: 0 0 0 2px rgba(242,193,78,.35); }
 .hb .n { position: absolute; top: 2px; left: 5px; font-size: 10px; font-weight: 700; opacity: .7; }
-#prompt { bottom: 150px; }
+#prompt { bottom: 176px; }
 
 /* ---------- storage popup ---------- */
 #storageUI { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(10,12,20,.45); z-index: 5; }
@@ -151,7 +151,8 @@ body.touch .touch-only { display: block; }
 body.touch .desk-only { display: none !important; }
 
 /* ---------- co-op room panel ---------- */
-#room { position: absolute; top: 16px; left: 50%; transform: translateX(-50%); padding: 6px 12px; font-size: 13px; pointer-events: auto; white-space: nowrap; max-width: calc(100vw - 420px); overflow: hidden; text-overflow: ellipsis; }
+#topc { position: absolute; top: 16px; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 6px; max-width: calc(100vw - 420px); }
+#room { padding: 6px 12px; font-size: 13px; pointer-events: auto; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 
 /* ---------- touch controls ---------- */
 html, body { overscroll-behavior: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
@@ -173,7 +174,13 @@ body.touch #hotbarWrap { bottom: 8px; left: 40%; }
 body.touch .hb { width: 42px; height: 42px; font-size: 22px; pointer-events: auto; }
 body.touch #speedo { right: auto; left: 50%; transform: translateX(-50%); bottom: auto; top: 54px; width: 120px; padding: 6px; }
 body.touch #speed { font-size: 30px; }
-body.touch #room { max-width: 60vw; font-size: 11px; top: 8px; }
+body.touch #topc { top: 8px; max-width: 56vw; gap: 4px; }
+body.touch #room { font-size: 11px; }
+body.touch #cycle { font-size: 11px; padding: 3px 10px; }
+body.touch #team { top: 182px; font-size: 11px; min-width: 140px; }
+body.touch #vitals { width: 220px; }
+body.touch #gunSlot { width: 42px; height: 42px; font-size: 20px; }
+body.touch #prompt { bottom: 132px; }
 #rotateHint { display: none; }
 @media (orientation: portrait) and (pointer: coarse) {
   #rotateHint { display: flex; position: fixed; inset: 0; z-index: 20; align-items: center; justify-content: center; background: rgba(18,20,30,.94); font-size: 20px; font-weight: 700; text-align: center; padding: 30px; }
@@ -192,3 +199,56 @@ body.touch #room { max-width: 60vw; font-size: 11px; top: 8px; }
 .copyBtn.ok { background: #3fbf5a; color: #fff; }
 .copyBtn.mini { margin-left: 8px; padding: 4px 9px; font-size: 12px; vertical-align: middle; }
 @media (max-width: 640px) { .irow > span { display: none; } }
+
+/* ---------- zombie nights ---------- */
+#cycle { padding: 5px 14px; font-size: 13px; font-weight: 700; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; transition: background .4s, border-color .4s; }
+#cycle.night { background: rgba(70, 14, 16, .82); border-color: rgba(255, 90, 70, .45); color: #ffd6cf; }
+#cycle.wait { background: rgba(90, 60, 10, .85); border-color: rgba(242, 193, 78, .6); color: #ffe7a8; }
+#cycle.soon { animation: pulse 1.2s ease-in-out infinite; border-color: rgba(255, 150, 90, .6); }
+#team { position: absolute; top: 252px; right: 16px; padding: 7px 10px; font-size: 12px; min-width: 176px; display: grid; gap: 5px; }
+.trow { display: grid; grid-template-columns: 10px 1fr 64px 16px; gap: 6px; align-items: center; }
+.trow i { width: 10px; height: 10px; border-radius: 50%; }
+.trow span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
+.trow b { height: 7px; border-radius: 4px; background: rgba(0,0,0,.45); overflow: hidden; }
+.trow u { display: block; height: 100%; background: #5bd16a; text-decoration: none; transition: width .25s; }
+.trow u.mid { background: #f2c14e; } .trow u.low { background: #ff5a4a; }
+.trow em { font-style: normal; text-align: center; }
+.trow.dn span { color: #ff9a8a; } .trow.away { opacity: .5; }
+#vitals { display: flex; align-items: center; gap: 8px; width: 260px; }
+.hpbar { flex: 1; height: 10px; border-radius: 6px; background: rgba(20,22,30,.8); border: 1px solid rgba(255,255,255,.18); overflow: hidden; }
+#hpFill { height: 100%; width: 100%; background: linear-gradient(#7be88a, #3fb556); transition: width .2s; }
+#hpFill.mid { background: linear-gradient(#ffd56a, #e0a83a); } #hpFill.low { background: linear-gradient(#ff7a6a, #d23a2e); }
+#hpText { font-size: 13px; font-weight: 800; min-width: 54px; text-shadow: 0 1px 3px rgba(0,0,0,.8); }
+#hbRow { display: flex; gap: 10px; align-items: center; }
+#gunSlot { pointer-events: auto; cursor: pointer; border-color: rgba(255, 120, 90, .35); }
+#gunSlot.sel { border-color: #ff7a5a; box-shadow: 0 0 0 2px rgba(255,122,90,.35); }
+#cross { position: absolute; left: 50%; top: 50%; width: 30px; height: 30px; transform: translate(-50%, -50%); }
+#cross::before, #cross::after { content: ''; position: absolute; background: rgba(255,255,255,.9); box-shadow: 0 0 2px rgba(0,0,0,.9); }
+#cross::before { left: 14px; top: 0; width: 2px; height: 30px; }
+#cross::after { top: 14px; left: 0; width: 30px; height: 2px; }
+#cross { border-radius: 50%; border: 2px solid rgba(255,255,255,.35); box-sizing: border-box; }
+#cross.hit::before, #cross.hit::after { background: #ff4a3a; }
+#cross.hit { border-color: rgba(255,74,58,.8); transform: translate(-50%, -50%) rotate(45deg) scale(1.15); }
+#hurt { position: fixed; inset: 0; pointer-events: none; opacity: 0; background: radial-gradient(ellipse at center, rgba(255,0,0,0) 40%, rgba(200,0,0,.55) 100%); z-index: 2; }
+#hurt.on { animation: hurtFlash .5s ease-out; }
+@keyframes hurtFlash { from { opacity: 1; } to { opacity: 0; } }
+#downed { position: fixed; inset: 0; pointer-events: none; z-index: 2; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+  background: radial-gradient(ellipse at center, rgba(0,0,0,0) 30%, rgba(110,0,0,.6) 100%); }
+#downed .dtitle { font-size: 36px; font-weight: 900; color: #ffc1b6; text-shadow: 0 3px 12px rgba(0,0,0,.8); }
+#downedText { font-size: 16px; font-weight: 700; background: rgba(20,10,12,.7); padding: 8px 16px; border-radius: 10px; }
+body.downed #game { filter: grayscale(.75) brightness(.85); }
+/* pause menu: player list + kick */
+.plist { max-width: 540px; margin: 0 auto 10px; display: grid; gap: 6px; text-align: left; }
+.phead { font-size: 12px; opacity: .75; text-align: center; }
+.prow { display: flex; align-items: center; gap: 8px; background: #23273a; border-radius: 8px; padding: 6px 10px; font-size: 14px; }
+.prow i { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+.prow span { flex: 1; font-weight: 700; }
+.prow em { font-style: normal; font-size: 11px; opacity: .6; font-weight: 600; margin-left: 4px; }
+.kickBtn { pointer-events: auto; cursor: pointer; border: 0; border-radius: 7px; padding: 5px 12px; font-weight: 800; font-size: 12px; background: #5a3040; color: #ffd7d7; }
+.kickBtn:hover { background: #7a3a4c; }
+.kickBtn.sure { background: #e0453a; color: #fff; }
+.zinfo { background: rgba(120, 30, 30, .35); border: 1px solid rgba(255,120,100,.25); border-radius: 10px; padding: 8px 12px; margin: 4px 0 14px; line-height: 1.45; }
+.gunIco { width: 40px; height: 14px; color: #ffb08f; filter: drop-shadow(0 1px 1px rgba(0,0,0,.6)); }
+#gunSlot.sel .gunIco { color: #ffd2c0; }
+.tb .gunIco { width: 40px; height: 15px; color: #fff; }
+body.touch #gunSlot .gunIco { width: 34px; }

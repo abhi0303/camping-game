@@ -8,7 +8,7 @@ export const ITEMS = {
   chainsaw: { name: 'Chainsaw', icon: '🪚', use: 'chop', power: 2, hold: 'saw', desc: 'Cuts fallen trees and jungle trees into logs fast. Loud!' },
   axe: { name: 'Axe', icon: '🪓', use: 'chop', power: 1, hold: 'tool', desc: 'Chop fallen trees and jungle trees for logs.' },
   sledge: { name: 'Sledgehammer', icon: '⚒️', use: 'smash', hold: 'tool', desc: 'Smash rocks blocking the trail (gives stones).' },
-  hammer: { name: 'Hammer', icon: '🔨', use: 'swing', hold: 'tool', desc: 'Needed to stake down the tent.' },
+  hammer: { name: 'Hammer', icon: '🔨', use: 'swing', hold: 'tool', desc: 'Stakes down the tent — and repairs the RV after zombie attacks (press F next to it).' },
   rope: { name: 'Rope', icon: '🪢', use: 'info', hold: 'carry', desc: 'Guy lines — needed to pitch the tent.' },
   flashlight: { name: 'Flashlight', icon: '🔦', use: 'light', hold: 'aim', desc: 'Toggle a light beam. Great at night.' },
   binoculars: { name: 'Binoculars', icon: '🔭', use: 'zoom', hold: 'carry', desc: 'Zoom in on far-away things.' },
@@ -16,9 +16,9 @@ export const ITEMS = {
   chair: { name: 'Camping chair', icon: '🪑', use: 'deploy', hold: 'carry', desc: 'Unfold it anywhere outside and sit.' },
   sleepingbag: { name: 'Sleeping bag', icon: '🛌', use: 'deploy', hold: 'carry', desc: 'Roll it out and sleep under the stars.' },
   lantern: { name: 'Lantern', icon: '🏮', use: 'deploy', hold: 'carry', desc: 'Glows while carried. Place it on the ground.' },
-  water: { name: 'Water bottle', icon: '💧', use: 'consume', hold: 'carry', desc: 'Drink for a burst of energy (run faster).' },
-  sandwich: { name: 'Sandwich', icon: '🥪', use: 'consume', hold: 'carry', desc: 'Eat for a burst of energy (run faster).' },
-  soda: { name: 'Soda', icon: '🥤', use: 'consume', hold: 'carry', desc: 'Sugar rush! Run faster for a while.' },
+  water: { name: 'Water bottle', icon: '💧', use: 'consume', hold: 'carry', desc: 'Drink: +25 health and a burst of energy (run faster).' },
+  sandwich: { name: 'Sandwich', icon: '🥪', use: 'consume', hold: 'carry', desc: 'Eat: +25 health and a burst of energy (run faster).' },
+  soda: { name: 'Soda', icon: '🥤', use: 'consume', hold: 'carry', desc: 'Sugar rush! +25 health and you run faster for a while.' },
 };
 
 export const GLOW = new THREE.MeshLambertMaterial({ vertexColors: true, emissive: 0xffd890, emissiveIntensity: 1.3 });
@@ -82,6 +82,17 @@ const BUILD = {
     b.box(0.06, 0.02, 0.05, 0, 0, 0.04, 0x3a3c40);
   },
   drone: b => droneBody(b, true),
+  // pump shotgun: barrel runs along the forearm (-y), top of the gun = +z
+  shotgun: b => {
+    b.box(0.05, 0.2, 0.075, 0, -0.03, 0.035, 0x2c2e33);                      // receiver
+    b.cyl(0.018, 0.018, 0.5, 7, 0, -0.38, 0.062, 0x24262a);                  // barrel
+    b.cyl(0.013, 0.013, 0.36, 6, 0, -0.32, 0.026, 0x1e2024);                 // magazine tube
+    b.cyl(0.025, 0.025, 0.17, 7, 0, -0.33, 0.03, 0x6a3c1c);                  // pump
+    b.box(0.048, 0.3, 0.07, 0, 0.2, 0.0, 0x7a4a26, 'solid', 0.2, 0, 0);      // stock
+    b.box(0.05, 0.05, 0.085, 0, 0.36, -0.03, 0x4a2c16, 'solid', 0.2, 0, 0);  // butt pad
+    b.box(0.03, 0.05, 0.05, 0, 0.03, -0.02, 0x1e2024);                       // trigger guard
+    b.box(0.012, 0.015, 0.015, 0, -0.62, 0.085, 0xd8d2c0);                    // front bead
+  },
   controller: b => {
     b.box(0.17, 0.03, 0.09, 0, 0.0, 0.05, 0x2a2b2e);
     for (const s of [1, -1]) b.cyl(0.008, 0.01, 0.025, 5, s * 0.05, 0.025, 0.05, 0x111111);

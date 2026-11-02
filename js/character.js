@@ -7,7 +7,7 @@ const COL = {
 };
 
 // Box whose top and bottom have different sizes (gives the faceted low-poly look)
-function tbox(wt, dt, wb, db, h) {
+export function tbox(wt, dt, wb, db, h) {
   const g = new THREE.BoxGeometry(1, h, 1);
   const p = g.attributes.position;
   for (let i = 0; i < p.count; i++) {
@@ -29,7 +29,7 @@ export class Character {
     this.cur = {}; this.tgt = {};
     POSE_KEYS.forEach(k => { this.cur[k] = 0; this.tgt[k] = 0; });
     this.t = 0; this.phase = 0;
-    this.punchT = 1; this.punchHand = 1; this.fightTimer = 0; this.landT = 0; this.swingT = 1; this.swingKind = 'chop';
+    this.punchT = 1; this.punchHand = 1; this.fightTimer = 0; this.landT = 0; this.swingT = 1; this.swingKind = 'chop'; this.recoilT = 0;
     this._build();
   }
 
@@ -144,6 +144,7 @@ export class Character {
     return true;
   }
   land(strength) { this.landT = clamp(strength, 0, 1); }
+  recoil() { this.recoilT = 1; }
   // Tool swing: 'chop' (overhead strike) or 'saw' (push forward + vibrate)
   swing(kind) {
     if (this.swingT < 1) return false;
@@ -160,6 +161,7 @@ export class Character {
     this.punchT = Math.min(1, this.punchT + dt / 0.32);
     this.fightTimer = Math.max(0, this.fightTimer - dt);
     this.landT = Math.max(0, this.landT - dt * 4);
+    this.recoilT = Math.max(0, this.recoilT - dt * 5);
     this.swingT = Math.min(1, this.swingT + dt / (this.swingKind === 'saw' ? 0.6 : 0.5));
     const mode = s.mode;
 
@@ -212,6 +214,12 @@ export class Character {
       T.shLx = -2.85; T.shLz = 0.35; T.elL = -1.7;
       T.shRx = 0.05; T.shRz = -0.12; T.elR = -0.3;
       T.spineX = 0; T.neckX = 0.2; rate = 8;
+    } else if (mode === 'downed') {
+      // hurt and lying on the ground (the root is tipped onto its back by the player pitch)
+      const br2 = Math.sin(t * 3) * 0.04;
+      T.knL = 0.35; T.knR = 0.12; T.hipLx = -0.3; T.hipRx = -0.05; T.anL = 0.3; T.anR = 0.4;
+      T.shLx = -0.2; T.shLz = 0.55 + br2; T.elL = -0.5; T.shRx = -0.6; T.shRz = -0.4; T.elR = -1.2;
+      T.spineX = -0.05 + br2; T.neckX = 0.25; T.spineZ = 0.08; rate = 6;
     } else if (mode === 'climb') {
       this.phase += dt * 5;
       const sp = Math.sin(this.phase);
@@ -241,6 +249,17 @@ export class Character {
       else if (hold === 'carry') { T.shRz = -0.18; T.elR = -0.2; T.shRx *= 0.4; }
       else if (hold === 'controller') { T.shLx = T.shRx = -0.55; T.elL = T.elR = -1.45; T.shLz = -0.28; T.shRz = 0.28; T.neckX = 0.3; }
       else if (hold === 'binoculars') { T.shLx = T.shRx = -1.35; T.elL = T.elR = -2.25; T.shLz = -0.3; T.shRz = 0.3; }
+      else if (hold === 'gun') {
+        // both hands on the shotgun, pointing where you aim (s.aim = pitch up/down)
+        const ap = s.aim || 0, k = this.recoilT;
+        T.shRx = -1.2 - ap - 0.45 * k; T.elR = -0.37 + 0.15 * k; T.shRz = -0.08;
+        T.shLx = -1.42 - ap - 0.35 * k; T.shLz = -0.62; T.elL = -0.22;
+        T.spineY = 0.12; T.spineX = (mode === 'run' ? 0.12 : 0.05) - 0.08 * k; T.neckX = -0.1 - ap * 0.5;
+        rate = 20;
+      } else if (hold === 'carryP') {
+        // a teammate over the shoulders: both arms up holding them
+        T.shLx = -2.35; T.shLz = 0.25; T.elL = -1.75; T.shRx = -2.35; T.shRz = -0.25; T.elR = -1.75; T.spineX = 0.18;
+      }
     }
     if (this.swingT < 1 && onFoot) {
       const t = this.swingT, L = (a, b, k) => a + (b - a) * k;

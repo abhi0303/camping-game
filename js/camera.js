@@ -128,6 +128,13 @@ export class CameraRig {
       goal = player.focusWorld(this._v);
       let maxD = this.distTarget, minP = -0.25;
       if (inRV) { maxD = Math.min(maxD, 4.6); minP = 0.55; }
+      // shotgun out: over-the-shoulder view so the crosshair isn't hidden behind your own back
+      this.shoulder = damp(this.shoulder || 0, player.aiming && !inRV ? 1 : 0, 8, dt);
+      if (this.shoulder > 0.01) {
+        const k = this.shoulder;
+        goal.x += Math.cos(this.yaw) * 0.62 * k; goal.z -= Math.sin(this.yaw) * 0.62 * k; goal.y += 0.12 * k;
+        maxD = maxD + (Math.min(maxD, 3.8) - maxD) * k;
+      }
       if (this.pitch < minP) this.pitch = minP - (minP - this.pitch) * Math.exp(-6 * dt); // ease up when stepping inside
       this.dist = damp(this.dist, maxD, 6, dt);
     }

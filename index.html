@@ -37,7 +37,11 @@
       </select>
     </div>
 
-    <div id="room" class="panel hidden"></div>
+    <div id="topc">
+      <div id="room" class="panel hidden"></div>
+      <div id="cycle" class="panel"></div>
+    </div>
+    <div id="team" class="panel hidden"></div>
     <div id="state" class="panel"></div>
     <div id="objective" class="panel"></div>
     <canvas id="minimap" width="180" height="180"></canvas>
@@ -59,9 +63,11 @@
     <!-- backpack hotbar -->
     <div id="hotbarWrap">
       <div id="matsBar" class="panel hidden"></div>
+      <div id="vitals"><div class="hpbar"><div id="hpFill"></div></div><span id="hpText">❤ 100</span></div>
       <div id="hbName"></div>
-      <div id="hotbar"></div>
+      <div id="hbRow"><div id="gunSlot" class="hb" title="Shotgun (G)"><span class="n">G</span><svg class="gunIco" viewBox="0 0 64 22" aria-hidden="true"><path d="M17 6h46v3.4H31V12h-2l-1 3.4h-3.2L24 12h-6.5L3.4 19.5 1 13.4z M34 10.6h12.5v3.6H34z" fill="currentColor"/></svg></div><div id="hotbar"></div></div>
     </div>
+    <div id="cross" class="hidden"></div>
 
     <!-- drone camera overlay -->
     <div id="droneHud" class="hidden">
@@ -73,6 +79,9 @@
     </div>
     <div id="binoHud" class="hidden"><svg viewBox="0 0 160 100" preserveAspectRatio="xMidYMid slice"><defs><mask id="binoMask"><rect x="-200" y="-200" width="560" height="500" fill="#fff"/><circle cx="62" cy="50" r="31" fill="#000"/><circle cx="98" cy="50" r="31" fill="#000"/></mask></defs><rect x="-200" y="-200" width="560" height="500" fill="#05070a" fill-opacity="0.95" mask="url(#binoMask)"/></svg></div>
   </div>
+
+  <div id="hurt"></div>
+  <div id="downed" class="hidden"><div class="dtitle">💀 You're down!</div><div id="downedText"></div></div>
 
   <!-- full map -->
   <div id="bigmap" class="hidden"><canvas id="bigmapCanvas" width="720" height="720"></canvas></div>
@@ -113,8 +122,10 @@
         <div><b>WASD</b> move</div><div><b>Shift</b> run</div><div><b>Space</b> jump</div>
         <div><b>F / Click</b> use / punch</div><div><b>E</b> interact</div><div><b>1 - 6</b> hold an item</div>
         <div><b>X</b> pack up gear</div><div><b>V</b> camera</div><div><b>M</b> map</div>
-        <div><b>L</b> lights</div><div><b>N</b> day / night</div><div><b>R</b> RV to checkpoint</div>
+        <div><b>L</b> lights</div><div><b>G</b> shotgun</div><div><b>R</b> RV to checkpoint</div>
+        <div><b>Hold E</b> revive friend</div><div><b>X</b> carry friend</div><div><b>Esc</b> menu / kick</div>
       </div>
+      <p class="small zinfo">🧟 Every 3 minutes night falls for 5 minutes and zombies come. Shoot them, or climb onto the RV roof — but then they attack the RV. Repair it with the hammer in the morning: the next night only comes once it's fixed.</p>
       <p class="dim small desk-only">Esc frees the mouse. Choose "Low" quality (top-right) if your laptop gets warm.</p>
       <p class="dim small touch-only">Left thumb: move · right thumb: look · tap the prompt to interact. Landscape works best.</p>
       <p id="loadErr" class="err hidden"></p>

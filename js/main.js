@@ -17,9 +17,12 @@ import { START, CAMP, BRIDGE } from './terrain.js';
 import { AXLE_F, AXLE_R } from './rvDims.js';
 import { Net, cleanRoomCode } from './net.js';
 import { Remotes } from './remote.js';
-import { Session } from './multiplayer.js';
+import { Session, MAX_PLAYERS } from './multiplayer.js';
 import { TouchUI } from './touch.js';
 import { Save, CheckpointFlags } from './save.js';
+import { Zombies } from './zombies.js';
+import { Survival } from './survival.js';
+import { Combat, Tracers } from './combat.js';
 
 const $ = id => document.getElementById(id);
 
@@ -73,6 +76,24 @@ let objI = 0;
 const session = new Session({ net, player, rvs, addRV, remotes, obstacles, bridgeWorld, editor, materials, world, inv, gear,
   toast: m => toast(m), getObj: () => objI, setObj: v => { objI = v; }, onRoster: () => renderRoster() });
 
+/* ---------- zombie nights: zombies, shotgun, health, revive/carry, RV damage ---------- */
+const zombies = new Zombies(scene, world);
+const tracers = new Tracers(scene);
+const combat = new Combat({ camera, rig, player, gear, zombies, tracers, world, toast: m => toast(m), onHits: (h, x, z) => survival.onHits(h, x, z) });
+const survival = new Survival({ net, session, player, rvs, remotes, zombies, combat, gear, inv, world, camera, toast: m => toast(m), myName: () => session.myName });
+remotes.tracers = tracers; remotes.listener = camera.position; remotes.localRoot = player.char.root; remotes.night = () => survival.isNight;
+gear.repair = type => survival.repair(type);
+player.canDrive = rv => survival.canDrive(rv);
+player.netExtra = () => ({ sh: combat.shots, sf: survival.safeRV() });
+Object.assign(session.g, {
+  onPlayerGone: id => survival.playerGone(id),
+  survivalState: () => survival.state(),
+  applySurvival: d => survival.applyState(d),
+  onBackground: dt => survival.background(dt),
+  // kicked by the host: back to the start screen with a message
+  onKicked: msg => { try { sessionStorage.setItem('rv-flash', msg); } catch (e) { /* ignore */ } location.replace(location.pathname); },
+});
+
 function setupRV(r) { r.onMsg = m => toast(m); r.onCheckpoint = onCheckpoint; }
 setupRV(rv0);
 function addRV() {
@@ -86,7 +107,6 @@ player.canUseSeat = (rv, seat) => remotes.seatTaken(rvs.indexOf(rv), seat);
 player.onDrive = rv => session.claimRV(rv);
 gear.onDeploy = d => session.sendDeploy(d);
 gear.onPack = d => session.sendPack(d);
-world.onNightChange = n => session.sendNight(n);
 obstacles.onChange = () => { session.dirty = true; };
 materials.onChange(() => { session.dirty = true; });
 player.spawnBesideRV();
@@ -106,7 +126,7 @@ player.worldActs = () => {
   const l = gear.worldActs(), eq = inv.equippedItem();
   l.push(...obstacles.acts(eq && eq.type));
   for (const a of crateActs) if (!a.c.taken) l.push(a);
-  l.push(benchAct, boardAct, ...flagActs);
+  l.push(benchAct, boardAct, ...flagActs, ...survival.acts());
   return l;
 };
 
@@ -141,7 +161,8 @@ function mapMarkers() {
   for (const c of world.crates) if (!c.taken) markers.push({ x: c.pos.x, z: c.pos.z, icon: '📦' });
   markers.push({ x: CAMP.x, z: CAMP.z, icon: '🏕️', label: 'Hilltop Camp' });
   rvs.forEach((r, i) => { if (!(player.frame === 'rv' && player.rv === r)) markers.push({ x: r.root.position.x, z: r.root.position.z, icon: '🚐', label: rvs.length > 1 ? `RV ${i + 1}` : 'RV', edge: r === player.rv }); });
-  remotes.each((r, p) => markers.push({ x: p.x, z: p.z, dot: r.color, label: r.s.n, edge: true }));
+  remotes.each((r, p) => markers.push({ x: p.x, z: p.z, dot: r.color, label: (r.s.dn ? '⬇ ' : '') + r.s.n, edge: true }));
+  for (const z of zombies.list) if (z.st !== 4) markers.push({ x: z.x, z: z.z, dot: '#e0362a' });
   if (drone.active) markers.push({ x: drone.pos.x, z: drone.pos.z, icon: '🚁' });
   const t = OBJ[objI].at(); markers.push({ x: t.x, z: t.z, ring: true, edge: true });
   return markers;
@@ -171,7 +192,7 @@ function collectSave() {
   const bw = bridgeWorld;
   return { v: 1, t: Date.now(), obj: objI, obst: obstacles.stateArray(), crates: world.crates.map(c => (c.taken ? 1 : 0)), mats: { ...materials.c },
     br: bw.design && bw.state === 'built' ? { d: bw.design, sp: bw.spent } : null, rvs: rvs.map(r => r.cp),
-    bag: inv.backpack.map(it => (it ? it.type : null)), st: inv.sets.map(set => set.map(st => ({ id: st.id, s: inv.types(st) }))), night: world.nightTarget };
+    bag: inv.backpack.map(it => (it ? it.type : null)), st: inv.sets.map(set => set.map(st => ({ id: st.id, s: inv.types(st) }))), sv: survival.state() };
 }
 function applySave(s) {
   if (!s || s.v !== 1) return false;
@@ -183,7 +204,7 @@ function applySave(s) {
   flags.setReached(Math.max(...rvs.map(r => r.cp)));
   inv.setBackpack(s.bag || []);
   (s.st || []).forEach((set, i) => set.forEach(x => inv.applyStorage(i, x.id, x.s)));
-  if (s.night) world.setNight(1, true);
+  if (s.sv) survival.applyState(s.sv);
   objI = s.obj || 0;
   player.spawnBesideRV();
   return true;
@@ -235,11 +256,11 @@ addEventListener('resize', () => {
 
 /* ---------- HUD ---------- */
 const hud = { objective: $('objective'), room: $('room'), droneHud: $('droneHud'), binoHud: $('binoHud'), dAlt: $('dAlt'), dDist: $('dDist'), dSpd: $('dSpd'), dBat: $('dBat'), dWarn: $('dWarn'),
-  prompt: $('prompt'), toast: $('toast'), state: $('state'), speedo: $('speedo'), speed: $('speed'), gear: $('gear'), lights: $('icoLights'), help: $('help'), helpBody: $('helpBody'), fps: $('fps') };
+  prompt: $('prompt'), toast: $('toast'), gunSlot: $('gunSlot'), state: $('state'), speedo: $('speedo'), speed: $('speed'), gear: $('gear'), lights: $('icoLights'), help: $('help'), helpBody: $('helpBody'), fps: $('fps') };
 let toastT = 0, lastPrompt = '', lastHelp = '', hudT = 0, promptKey = 'E';
 function toast(msg) { hud.toast.textContent = msg; hud.toast.classList.remove('hidden'); toastT = 2.6; }
 const HELP = {
-  foot: [['WASD', 'move'], ['Shift', 'run'], ['Space', 'jump'], ['1 - 6', 'hold an item'], ['F / Click', 'use item / punch'], ['E', 'interact'], ['M', 'map'], ['V', '1st / 3rd person'], ['N', 'day / night'], ['R', 'RV to last checkpoint'], ['I', 'copy invite link (co-op)']],
+  foot: [['WASD', 'move'], ['Shift', 'run'], ['Space', 'jump'], ['G', 'shotgun out / away'], ['F / Click', 'shoot / use item / punch'], ['1 - 6', 'hold an item'], ['E', 'interact (hold: revive)'], ['X', 'carry a downed teammate'], ['M', 'map'], ['V', '1st / 3rd person'], ['R', 'RV to last checkpoint'], ['I', 'copy invite link (co-op)']],
   drone: [['WASD', 'fly'], ['Space / Shift', 'up / down'], ['Mouse', 'turn + tilt camera'], ['V', 'drone cam / chase'], ['E', 'bring the drone back']],
   zoom: [['Mouse', 'look around'], ['F', 'lower binoculars']],
   inside: [['WASD', 'walk (out the side door to leave)'], ['E', 'use / sit / lie / open storage'], ['1 - 6', 'hold an item'], ['L', 'interior lights'], ['Space', 'jump'], ['V', '1st / 3rd person'], ['Mouse', 'look (roof hides)']],
@@ -248,6 +269,8 @@ const HELP = {
   drive: [['W / S', 'gas / brake + reverse'], ['A / D', 'steer'], ['Space', 'handbrake'], ['H', 'horn'], ['L', 'headlights'], ['V', 'chase / cockpit'], ['E', 'get out (when slow)'], ['Q', 'walk to the back'], ['M', 'map'], ['R', 'back to last checkpoint']],
 };
 function stateName() {
+  if (player.downed) return player.carried ? '⬇ Down — being carried' : '⬇ Down!';
+  if (player.carrying) return '🤝 Carrying ' + session.nameOf(player.carrying);
   if (drone.active) return 'Flying the drone';
   if (gear.zooming) return 'Binoculars';
   switch (player.mode) {
@@ -264,11 +287,13 @@ function renderRoster() {
   if (!net.online) { hud.room.classList.add('hidden'); $('pauseRoom').innerHTML = ''; return; }
   const names = session.roster().map(p => `<span style="color:${session.colorOf(p.id)}">${p.id === net.id ? 'You' : escapeHTML(p.n)}</span>`).join(', ');
   hud.room.classList.remove('hidden');
-  hud.room.innerHTML = `👥 Room <b>${net.code}</b> <span class="dim">(${Math.max(1, session.players.size)}/8)</span> · ${names || 'connecting…'} <button class="copyBtn mini" data-copy="link" title="Copy invite link">${COPY_ICON}<span>Invite</span></button>`;
-  $('pauseRoom').innerHTML = `<div class="invite">
+  hud.room.innerHTML = `👥 Room <b>${net.code}</b> <span class="dim">(${Math.max(1, session.players.size)}/${MAX_PLAYERS})</span> · ${names || 'connecting…'} <button class="copyBtn mini" data-copy="link" title="Copy invite link">${COPY_ICON}<span>Invite</span></button>`;
+  const plist = session.roster().map(p => `<div class="prow"><i style="background:${session.colorOf(p.id)}"></i><span>${p.id === net.id ? 'You' : escapeHTML(p.n)}${p.c === 0 ? ' <em>host</em>' : ''}</span>${net.isHost && p.id !== net.id ? `<button class="kickBtn" data-kick="${p.id}">Kick</button>` : ''}</div>`).join('');
+  $('pauseRoom').innerHTML = `<div class="plist"><div class="phead">Players ${Math.max(1, session.players.size)}/${MAX_PLAYERS}${session.isFull ? ' · room full' : ''}</div>${plist}</div>
+    <div class="invite">
       <div class="irow"><span>Room code</span><code>${net.code}</code><button class="copyBtn" data-copy="code" title="Copy room code">${COPY_ICON}<span>Copy</span></button></div>
       <div class="irow"><span>Invite link</span><input class="ilink" readonly value="${inviteLink()}" /><button class="copyBtn" data-copy="link" title="Copy invite link">${COPY_ICON}<span>Copy</span></button></div>
-      <div class="ihint">Send the link (or the code) to friends — up to 4 players ride in one RV (8 per room).</div>
+      <div class="ihint">Send the link (or the code) to friends — up to ${MAX_PLAYERS} players, all in one RV.</div>
     </div>`;
 }
 const escapeHTML = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -299,9 +324,20 @@ function onCopyClick(e) {
   setTimeout(() => { btn.classList.remove('ok'); label.textContent = old; }, 1800);
 }
 hud.room.addEventListener('click', onCopyClick);
-$('pauseRoom').addEventListener('click', e => { if (e.target.classList.contains('ilink')) e.target.select(); onCopyClick(e); });
+$('pauseRoom').addEventListener('click', e => {
+  if (e.target.classList.contains('ilink')) e.target.select();
+  const k = e.target.closest('.kickBtn');
+  if (k) {   // two taps: "Kick" -> "Sure?" -> kicked
+    e.preventDefault(); e.stopPropagation();
+    if (k.dataset.sure) session.kick(k.dataset.kick);
+    else { k.dataset.sure = '1'; k.textContent = 'Sure?'; k.classList.add('sure'); setTimeout(() => { if (k.isConnected) { delete k.dataset.sure; k.textContent = 'Kick'; k.classList.remove('sure'); } }, 2500); }
+    return;
+  }
+  onCopyClick(e);
+});
 hud.prompt.addEventListener('click', e => { if (!input.touch) return; input.tap(e.target.closest('.alt') ? 'KeyX' : 'Key' + promptKey); });
 $('minimap').addEventListener('click', () => minimap.toggleBig());
+$('gunSlot').addEventListener('click', e => { e.stopPropagation(); combat.toggle(); });
 $('bigmap').addEventListener('click', () => minimap.toggleBig(false));
 
 function updateHUD(dt) {
@@ -321,6 +357,7 @@ function updateHUD(dt) {
   if (hudT > 0) return;
   hudT = 0.12; // DOM writes ~8x per second only
   hud.state.textContent = stateName() + (player.boost ? '  ⚡ boosted' : '') + (player.swimming ? '  🏊 swimming' : '');
+  hud.gunSlot.classList.toggle('sel', combat.out);
   updateObjective();
   hud.droneHud.classList.toggle('hidden', !(drone.active && rig.droneView === 'cam'));
   hud.binoHud.classList.toggle('hidden', !gear.zooming);
@@ -353,10 +390,11 @@ const setUseSave = v => { useSave = v; M.cont.classList.toggle('on', v); M.fresh
 setUseSave(useSave);
 M.cont.onclick = () => setUseSave(true); M.fresh.onclick = () => setUseSave(false);
 const roomParam = new URLSearchParams(location.search).get('room');
+try { const f = sessionStorage.getItem('rv-flash'); if (f) { sessionStorage.removeItem('rv-flash'); M.status.textContent = '⚠ ' + f; } } catch (e) { /* ignore */ }
 if (roomParam) { M.code.value = cleanRoomCode(roomParam); M.status.textContent = 'You were invited! Pick a name and press Join.'; M.join.classList.add('pulse'); }
 const playerName = () => { const n = (M.name.value || 'Camper').trim().slice(0, 16) || 'Camper'; try { localStorage.setItem('rv-name', n); } catch (e) { /* ignore */ } return n; };
 const busy = b => [M.solo, M.host, M.join].forEach(x => { x.disabled = b; });
-function loadOrReset() { if (useSave) applySave(Save.load()); else Save.clear(); }
+function loadOrReset() { if (useSave) applySave(Save.load()); else { Save.clear(); survival.reset(); } }
 function startGame(msg) {
   audio.init();
   overlay.classList.add('hidden'); $('menuStart').classList.add('hidden'); $('menuPause').classList.remove('hidden');
@@ -417,7 +455,7 @@ canvas.addEventListener('click', () => { if (started && !paused && !input.locked
 /* ---------- global keys ---------- */
 function globalKeys() {
   if (input.wasPressed('KeyV')) toast(rig.toggle(player));
-  if (input.wasPressed('KeyN')) { const n = world.nightTarget ? 0 : 1; world.setNight(n); toast(n ? 'Night' : 'Day'); if (n && player.mode === 'drive' && !player.rv.headlights) player.rv.toggleHeadlights(); }
+  if (input.wasPressed('KeyG')) combat.toggle();
   if (input.wasPressed('KeyK')) toast(audio.toggleMute() ? 'Sound off' : 'Sound on');
   if (input.wasPressed('KeyM')) minimap.toggleBig();
   if (input.wasPressed('Escape') && minimap.bigOpen) minimap.toggleBig(false);
@@ -440,8 +478,9 @@ function step(dt) {
   globalKeys();
   const ctrl = player.update(dt, input, rig);
   gear.update(dt, input);
+  combat.update(dt, input);
   for (const r of rvs) {
-    if (r.isLocal(net)) r.update(dt, r === player.rv && player.mode === 'drive' ? ctrl : null);
+    if (r.isLocal(net)) r.update(dt, r === player.rv && player.mode === 'drive' && survival.canDrive(r) ? ctrl : null);
     else r.netUpdate(dt);
     r.setAudible(r === player.rv && player.frame === 'rv');
   }
@@ -453,7 +492,10 @@ function step(dt) {
     player.rv.setCutaway(camera.position, !!freezeCam[6], false);
   } else rig.update(dt, input, player, player.rv);
   for (const r of rvs) if (r !== player.rv) r.setCutaway(camera.position, false, false);
+  remotes.localId = net.online ? net.id : 'local';
   remotes.tick(dt);
+  survival.update(dt, input);
+  tracers.update(dt);
   player.char.root.getWorldPosition(pw);
   focus.copy(drone.active ? drone.pos : player.mode === 'drive' ? player.rv.root.position : pw);
   world.update(dt, focus, camera);
@@ -462,7 +504,7 @@ function step(dt) {
   session.tick(dt);
   if (started && (saveT += dt) > 45) { saveT = 0; saveNow(); }
   const tmode = drone.active ? 'drone' : player.mode === 'drive' ? 'drive' : (player.mode === 'seat' || player.mode === 'lie') ? 'seat' : 'foot';
-  touch.setMode(tmode, !!inv.equippedItem());
+  touch.setMode(tmode, combat.out ? 'gun' : !!inv.equippedItem());
   input.stickRun = tmode === 'foot';
   updateHUD(dt);
   input.endFrame();
@@ -472,7 +514,7 @@ function frame(now) {
   requestAnimationFrame(frame);
   if (paused || editor.open) {   // nothing to animate behind the designer / pause menu: save the GPU
     if (requestRender) { renderer.render(scene, camera); requestRender = false; }
-    if (editor.open && net.online) session.tick(Math.min(0.05, (now - lastT) / 1000));
+    if (editor.open && net.online) { const bdt = Math.min(0.05, (now - lastT) / 1000); session.tick(bdt); survival.background(bdt); }
     lastT = now; input.endFrame();
     return;
   }
@@ -495,7 +537,9 @@ addEventListener('beforeunload', () => saveNow());
 step(0.016);
 renderer.render(scene, camera);
 requestAnimationFrame(frame);
-window.__game = { net, session, player, rvs, remotes, obstacles, bridgeWorld, materials, world, inv, gear, editor, input, applySave, collectSave, saveNow, get objI() { return objI; } };
+window.__game = { net, session, player, rvs, remotes, obstacles, bridgeWorld, materials, world, inv, gear, editor, input, rig, camera, zombies, survival, combat, applySave, collectSave, saveNow, get objI() { return objI; },
+  // test hooks: advance the game n frames / pin the camera
+  run: n => { for (let i = 0; i < n; i++) step(1 / 60); renderer.render(scene, camera); }, setCam: a => { freezeCam = a; } };
 
 /* ---------- debug screenshots: ?shot=inside | drive | bridgegood,align,drive&keys=KeyW | editor ... ---------- */
 const qs = new URLSearchParams(location.search);
@@ -515,7 +559,12 @@ if (qs.has('shot')) {
   if (/inside|sit|sofa|lie|bunk|fridge/.test(s)) { player.placeInside(); run(20); }
   if (s.includes('sit')) { player.sitAt('dinetteA'); run(80); }
   if (s.includes('drive')) { player.enterDriver(true); run(120); }
-  if (s.includes('night')) { world.setNight(1); rv.headlights = true; rv.interiorLights = true; }
+  if (s.includes('night')) { world.setNight(1, true); rv.headlights = true; rv.interiorLights = true; }
+  if (s.includes('zombies')) {   // a zombie night around the player (debug screenshots)
+    survival._setPhase('night', 300, 1); world.night = 0.999;
+    for (let i = 0; i < 8; i++) { const a = i * 0.8 - 1.5, d = 5 + (i % 3) * 3; const z = zombies.spawn(player.pos.x + Math.sin(a) * d, player.pos.z + Math.cos(a) * d, 1.6); z.st = 1; z.t = 2; }
+  }
+  if (s.includes('gun')) { combat.setOut(true); rig.yaw = player.yaw + Math.PI; rig.pitch = 0.12; }
   if (s.includes('editor')) { materials.addAll({ logs: 20, planks: 20, rope: 10, stone: 10 }); editor.design = sample(!s.includes('weak')); editor.show(); }
   if (s.includes('bigmap')) minimap.toggleBig(true);
   if (qs.get('keys')) qs.get('keys').split(',').forEach(k => input.down.add(k));

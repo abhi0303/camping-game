@@ -23,6 +23,8 @@ export class Gear {
     this.controller = itemModel('controller');
     this.obstacles = null; this.materials = null;   // set by main
     this.netId = 'l'; this.depSeq = 0; this.onDeploy = null; this.onPack = null;
+    this.gunOut = false;          // the shotgun everyone carries (G)
+    this.repair = null;           // (toolType) => true if that swing repaired an RV (set by main)
     this._fireAct = { pos: world.firePos, r: 2.8, label: () => 'Throw a log on the campfire', act: () => this._feedFire() };
   }
 
@@ -34,13 +36,16 @@ export class Gear {
   holdPose() {
     if (this.drone.active) return 'controller';
     if (this.zooming) return 'binoculars';
+    if (this.player.carrying) return 'carryP';
+    if (this.gunOut) return 'gun';
     const it = this.inv.equippedItem();
     return it ? ITEMS[it.type].hold : null;
   }
 
   refreshHeld() {
     const it = this.inv.equippedItem();
-    const type = this.drone.active ? 'controller' : (it ? it.type : null);
+    if (it && this.gunOut) this.gunOut = false;          // picked an item from the hotbar: shotgun goes away
+    const type = this.drone.active ? 'controller' : this.player.carrying ? null : this.gunOut ? 'shotgun' : (it ? it.type : null);
     if (!it || it.type !== 'flashlight') this.flashOn = false;
     if (this.zooming && (!it || it.type !== 'binoculars')) this.zooming = false;
     if (type === this.heldType) return;
@@ -59,9 +64,14 @@ export class Gear {
     this.skipFrame = true;
     switch (def.use) {
       case 'chop': if (p.char.swing(it.type === 'chainsaw' ? 'saw' : 'chop')) this._chop(it.type); break;
-      case 'swing': if (p.char.swing('chop')) { audio.thud(240, 0.06); this._hint('hammer', 'The hammer is needed to stake down the tent.'); } break;
+      case 'swing':
+        if (p.char.swing('chop')) { if (!(this.repair && this.repair(it.type))) { audio.thud(240, 0.06); this._hint('hammer', 'The hammer stakes down the tent — and repairs the RV after a zombie night.'); } }
+        break;
       case 'smash':
-        if (p.char.swing('chop')) { if (!(p.mode === 'foot' && this.obstacles.hit(p.pos.x, p.pos.z, 'sledge'))) { audio.thud(250, 0.06); this._hint('smash', 'Walk up to rocks blocking the trail and smash them (gives stones).'); } }
+        if (p.char.swing('chop')) {
+          if (this.repair && this.repair(it.type)) break;
+          if (!(p.mode === 'foot' && this.obstacles.hit(p.pos.x, p.pos.z, 'sledge'))) { audio.thud(250, 0.06); this._hint('smash', 'Walk up to rocks blocking the trail and smash them (gives stones).'); }
+        }
         break;
       case 'info': this.toast(def.desc); break;
       case 'light': this.flashOn = !this.flashOn; audio.click(); this.toast('Flashlight ' + (this.flashOn ? 'on' : 'off')); break;
@@ -69,7 +79,8 @@ export class Gear {
       case 'deploy': this._deploy(it); break;
       case 'consume':
         this.inv.removeItem(it); this.boostT = 30; audio.thud(320, 0.08);
-        this.toast(`${def.name}: energy boost! You run faster for 30 s`); break;
+        p.hp = Math.min(100, (p.hp ?? 100) + 25);
+        this.toast(`${def.name}: +25 ❤ and an energy boost (run faster for 30 s)`); break;
       case 'drone': this._launchDrone(); break;
     }
     return true;

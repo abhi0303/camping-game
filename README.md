@@ -1,6 +1,6 @@
 # RV Van – Jungle Trail
 
-A low-poly RV adventure in plain HTML/CSS/JS + Three.js. Start at the trailhead, drive through a hilly jungle, clear the road, rebuild the broken bridge over the river and reach the hilltop camp. Play alone or with friends (up to 8, 4 per RV), on desktop or mobile.
+A low-poly RV adventure in plain HTML/CSS/JS + Three.js. Start at the trailhead, drive through a hilly jungle, clear the road, rebuild the broken bridge over the river and reach the hilltop camp — and survive the zombie nights. Play alone or with up to 3 friends (4 players, one RV), on desktop or mobile.
 
 ## Play locally
 
@@ -27,13 +27,25 @@ All paths are relative, so the game works from the repo sub-folder. `.nojekyll` 
 
 - **Host:** on the start screen, enter your name and press **Host co-op**. You get a room code; press **Copy invite link** (top of the screen) and send it to friends.
 - **Join:** open the invite link (or type the code) and press **Join a friend**.
-- **Teams:** up to **4 players share one RV** (driver, passenger, and two more at the dinette, sofa or beds). With 5–8 players a second RV appears at the trailhead. Your RV is assigned automatically, and you can still walk over and ride in the other one.
+- **Room size:** a room holds **4 players**, and all 4 share one RV (driver, passenger, and two more at the dinette, sofa or beds). A 5th player who tries to join sees *"That room is full"*.
+- **Leaving:** closing or refreshing the tab removes you from the room right away (no duplicate players when you come back). A player whose connection dies is removed after 15 seconds of silence.
+- **Kick:** the host can remove a player from the pause menu (**Esc → Kick**, then confirm). Kicked players go back to the start screen and can't rejoin that room.
 - **Seats:** one player drives and the other can take the **passenger seat**, or sit or lie anywhere inside, and rides along. Seats are exclusive, so nobody can take the driver seat while someone is using it.
-- **Shared progress:** road blocks, the bridge (including its physics), materials, supply crates, camping gear and day/night are shared. Each RV's Gear Locker, fridge and storage bay are shared by the two people using it.
+- **Shared progress:** road blocks, the bridge (including its physics), materials, supply crates, camping gear, the day/night clock, the zombies and the RV's health are shared. The RV's Gear Locker, fridge and storage bay are shared too.
 
-**How it works:** browsers connect directly to each other with WebRTC. PeerJS's free public service only helps them find each other, which is why this works on GitHub Pages without a game server. The host's game is the authority for shared things, and whoever drives an RV controls that RV. If the host leaves, the others continue solo.
+**How it works:** browsers connect directly to each other with WebRTC. PeerJS's free public service only helps them find each other, which is why this works on GitHub Pages without a game server. The host's game is the authority for shared things (including the zombies), and whoever drives the RV controls it. Every player sends their avatar to the host, and the host sends everyone one snapshot with all players in it, so all screens show the same people. If the host leaves, the others continue solo.
 
 **Limits:** connections go peer-to-peer, with PeerJS's free relay as a fallback. Very strict networks (some offices or schools) can still block WebRTC. The public PeerJS service has no uptime guarantee; for a big audience, run your own PeerJS server.
+
+## Zombie nights
+
+- The day lasts **3 minutes**; then night falls for **5 minutes** and **zombies** rise out of the jungle and come for the players. The timer is at the top of the screen.
+- Everyone has a **pump shotgun with unlimited ammo**: press **G** (or tap the shotgun) to take it out, **click / F** to shoot. It hits hardest up close. It's drawn automatically when night falls.
+- Each player has **health** (bar at the bottom; teammates' health shows in the team list and above their heads). Health comes back during the day, slowly at night when you're safe, and faster lying in a bed. Food and drinks from the fridge give +25.
+- At 0 health you're **down**. A teammate can **revive** you (hold **E** next to you) or **carry** you (**X**) to a safe spot and put you down (**X** again). If nobody helps in time, you wake up inside the RV. Solo, you wake up there after a few seconds.
+- **The RV is safe:** zombies can't climb onto the roof (ladder at the back) or get inside. Instead they **attack the RV**. Shoot them off before it's wrecked. A wrecked RV can't be driven, and the zombies can reach the people in and on it.
+- Driving into zombies kills them (and dents the RV a little).
+- **Morning:** the zombies collapse. **Repair the RV** with the hammer (or sledgehammer) from the Gear Locker: stand next to it and press **F**. **The next night only comes once the RV is back to 100%.**
 
 ## Saving
 
@@ -46,7 +58,8 @@ All paths are relative, so the game works from the repo sub-folder. `.nojekyll` 
 
 - **Left thumb:** joystick to move or steer. A full push runs.
 - **Right thumb:** drag to look.
-- **Buttons** change with what you're doing: on foot (use / punch, jump, interact, crouch, camera), driving (handbrake, horn, lights, get out, walk to the back, reset), and the drone (up / down).
+- **Buttons** change with what you're doing: on foot (use / punch / 💥 shoot, jump, interact, crouch, shotgun, camera), driving (handbrake, horn, lights, get out, walk to the back, reset), and the drone (up / down).
+- Tapping the prompt next to a downed teammate starts the revive; stay close until it finishes.
 - **Tap** the prompt pill to interact, a hotbar slot to hold an item, and the minimap for the full map.
 - Phones start on Low quality with a lighter jungle. Landscape works best.
 
@@ -59,11 +72,12 @@ All paths are relative, so the game works from the repo sub-folder. `.nojekyll` 
 | Space | jump | Space | handbrake |
 | C | crouch | H | horn |
 | 1–6 | hold an item | L | headlights |
-| F / click | use item / punch | V | chase / cockpit view |
-| E | interact / open storage | E | get out (when slow) |
-| X | pack up camping gear | Q | walk to the back |
+| G | shotgun out / away | V | chase / cockpit view |
+| F / click | shoot / use item / punch | E | get out (when slow) |
+| E (hold) | interact / revive a teammate | Q | walk to the back |
+| X | carry a teammate / pack up gear | | |
 
-Global: **M** map, **K** sound, **N** day/night, **R** RV back to the last checkpoint, **Tab** hide help, **Esc** pause.
+Global: **M** map, **K** sound, **R** RV back to the last checkpoint, **Tab** hide help, **Esc** pause (co-op: player list, kick).
 
 ## The trail
 
@@ -87,11 +101,13 @@ Global: **M** map, **K** sound, **N** day/night, **R** RV back to the last check
 - `js/rv.js`, `js/rvModel.js`, `js/rvInterior.js`, `js/rvDims.js` – the RV
 - `js/player.js`, `js/character.js`, `js/camera.js` – player, animation, cameras
 - `js/items.js`, `js/inventory.js`, `js/gear.js`, `js/drone.js` – items, storages, item use, drone
+- `js/survival.js`, `js/zombies.js`, `js/combat.js` – day/night clock, health, revive/carry, RV damage + repair; zombie AI and drawing; the shotgun
 - `js/minimap.js` – minimap and full map
 
 ## Performance
 
 - The jungle is drawn with instanced meshes split into chunks (off-screen trees are skipped). A typical frame is about 100 draw calls and 150k triangles.
 - Frame rate is capped (60, or 30 on Low). The game drops to 15 fps after 25 s idle when playing solo, and stops rendering while paused or while the bridge designer is open.
-- Network traffic is small: about 12 player updates and 15 RV updates per second, each a few hundred bytes.
+- All zombies together are drawn with 7 instanced meshes, so 20 zombies cost about the same as one. At most 24 are around at once.
+- Network traffic is small: 10 player snapshots, 10 zombie snapshots and 15 RV updates per second, each a few hundred bytes.
 - Quality menu (top-right): **Low** (no shadows, shorter view distance, 30 fps), **Medium**, **High**.

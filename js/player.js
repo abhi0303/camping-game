@@ -38,6 +38,9 @@ export class Player {
     this._v = new THREE.Vector3(); this._w = new THREE.Vector3();
     this.rvs = [rv]; this.canUseSeat = () => null; this.onDrive = null; this.anim = { a: 'idle', sp: 0, st: 0, hd: null };
     this.gear = null; this.extraActs = []; this.worldActs = null; this.boost = false; this.seatExit = null; this.lieT = 0; this.swimming = false;
+    // survival: health, knocked down, carried by / carrying a teammate (peer ids), shotgun aim
+    this.hp = 100; this.downed = false; this.carried = null; this.carrying = null; this.aiming = false; this.aimPitch = 0;
+    this.canDrive = () => true; this.netExtra = null;
     this._buildInteractions();
   }
 
@@ -152,7 +155,8 @@ export class Player {
     this.rv = best;
   }
   _seatFree(name) {
-    if (this.mode === 'tween') return false;
+    if (this.mode === 'tween' || this.downed) return false;
+    if (this.carrying) { this.toastMsg('Put your teammate down first (X)'); return false; }
     const who = this.canUseSeat(this.rv, name);
     if (who) this.toastMsg(`${who} is already using that seat`);
     return !who;
@@ -162,8 +166,9 @@ export class Player {
     const a = this.anim, eq = this.gear && this.gear.inv.equippedItem(), d = this.gear && this.gear.drone;
     const r2 = v => Math.round(v * 100) / 100;
     return { f: this.frame === 'rv' ? 1 : 0, rv: this.rvs.indexOf(this.rv), x: r2(this.pos.x), y: r2(this.visY), z: r2(this.pos.z), yw: r2(this.yaw), pi: r2(this.pitch),
-      a: a.a, sp: r2(a.sp), vy: r2(this.vy), st: r2(a.st), hd: a.hd, it: eq ? eq.type : null, hv: this.char.hand.visible ? 1 : 0, se: this.seat,
-      dr: d && d.active ? [r2(d.pos.x), r2(d.pos.y), r2(d.pos.z), r2(d.yaw)] : 0 };
+      a: a.a, sp: r2(a.sp), vy: r2(this.vy), st: r2(a.st), hd: a.hd, it: this.gear && this.gear.gunOut ? 'shotgun' : eq ? eq.type : null, hv: this.char.hand.visible ? 1 : 0, se: this.seat,
+      dr: d && d.active ? [r2(d.pos.x), r2(d.pos.y), r2(d.pos.z), r2(d.yaw)] : 0,
+      hp: Math.round(this.hp), dn: this.downed ? 1 : 0, cb: this.carried || 0, cr: this.carrying || 0, ap: r2(this.aimPitch), ...(this.netExtra ? this.netExtra() : null) };
   }
   // stand next to the RV's side door, facing it
   spawnBesideRV(k = 0) {
@@ -176,6 +181,7 @@ export class Player {
   placeInside() { this.toRV(); this.pos.set(-0.55, Y.floor, DOOR_Z); this.visY = Y.floor; this.mode = 'inside'; this.grounded = true; }
   enterDriver(fromOutside) {
     if (!this._seatFree('driverSeat')) return;
+    if (!this.canDrive(this.rv)) { this.toastMsg('🔧 The RV is wrecked — repair it with the hammer before you can drive'); return; }
     this.seat = 'driverSeat';            // reserve it right away so teammates can't take it
     this.toRV();
     const seat = ANCHOR.driverSeat, sp = V(seat.pos);
@@ -267,7 +273,14 @@ export class Player {
     const E = input.wasPressed('KeyE');
     let driveCtrl = null;
 
-    if (this.mode === 'foot' || this.mode === 'inside') {
+    if (this.downed && (this.mode === 'foot' || this.mode === 'inside')) {
+      // knocked down: no control, just gravity (or riding on a teammate's shoulders)
+      if (!this.carried) this._move(dt, NO_INPUT, cam);
+      this.vel.set(0, 0);
+      this.pitch = damp(this.pitch, -Math.PI / 2, 9, dt);
+      animMode = 'downed'; this.prompt = null;
+    } else if (this.mode === 'foot' || this.mode === 'inside') {
+      if (this.pitch !== 0) this.pitch = Math.abs(this.pitch) < 0.02 ? 0 : damp(this.pitch, 0, 10, dt);   // getting back up
       const locked = this.gear && this.gear.locked;   // flying the drone / looking through binoculars
       this._move(dt, locked ? NO_INPUT : input, cam);
       const hs = this.vel.length();
@@ -275,7 +288,7 @@ export class Player {
       animSpeed = hs;
       if (locked) this.prompt = this.gear.lockPrompt();
       else {
-        if (input.wasPressed('KeyF') || input.click) {
+        if ((input.wasPressed('KeyF') || input.click) && !(this.gear && this.gear.gunOut) && !this.carrying) {   // the shotgun fires in Combat
           if (this.gear && this.gear.inv.equippedItem()) this.gear.use();
           else if (this.char.punch()) audio.thud(220, 0.06);
         }
@@ -291,11 +304,10 @@ export class Player {
       if (E || input.wasPressed('Space')) this.standUp();
       if (this.frame === 'rv' && input.wasPressed('KeyT')) this.rv.toggleTV();
       if (this.frame === 'rv' && input.wasPressed('KeyL')) this.toastMsg('Interior lights ' + (this.rv.toggleInteriorLights() ? 'on' : 'off'));
-      // lying down at night: sleep until morning
-      if (this.mode === 'lie' && this.world.nightTarget) {
+      // resting heals you (no sleeping through a zombie night)
+      if (this.mode === 'lie') {
         this.lieT += dt;
-        this.prompt = { key: 'E', text: `Get up    (sleeping… ${Math.max(0, Math.ceil(4 - this.lieT))})` };
-        if (this.lieT > 4) { this.world.setNight(0); this.toastMsg('☀ You slept until morning'); }
+        if (this.hp < 100) { this.hp = Math.min(100, this.hp + 5 * dt); this.prompt = { key: 'E', text: `Get up    (resting… ❤ ${Math.round(this.hp)})` }; }
       }
     } else if (this.mode === 'drive') {
       animMode = 'drive';
@@ -318,14 +330,17 @@ export class Player {
     }
     if (this.mode !== 'drive') audio.horn(false);
 
-    // place the character
+    // place the character (a carried player is parented to the carrier's avatar instead)
     const r = this.char.root;
     const onFeet = (this.mode === 'foot' || this.mode === 'inside') && this.grounded;
-    this.visY = onFeet ? damp(this.visY, this.pos.y, 18, dt) : this.pos.y;
-    r.position.set(this.pos.x, this.visY, this.pos.z);
-    r.rotation.set(this.pitch, this.yaw, 0);
-    const hold = (this.mode === 'foot' || this.mode === 'inside') && this.gear ? this.gear.holdPose() : null;
-    this.char.update(dt, { mode: animMode, speed: animSpeed, vy: this.vy, steer, hold });
+    const lift = this.downed ? 0.13 * Math.min(1, -this.pitch / 1.4) : 0;     // lying on your back sits a bit higher
+    this.visY = onFeet ? damp(this.visY, this.pos.y + lift, 18, dt) : this.pos.y + lift;
+    if (!this.carried) {
+      r.position.set(this.pos.x, this.visY, this.pos.z);
+      r.rotation.set(this.pitch, this.yaw, 0);
+    }
+    const hold = (this.mode === 'foot' || this.mode === 'inside') && !this.downed && this.gear ? this.gear.holdPose() : null;
+    this.char.update(dt, { mode: animMode, speed: animSpeed, vy: this.vy, steer, hold, aim: this.aimPitch });
     const A = this.anim; A.a = animMode; A.sp = animSpeed; A.st = steer; A.hd = hold;
     return driveCtrl;
   }
@@ -346,12 +361,12 @@ export class Player {
     if (input.wasPressed('KeyC') && this.grounded) this.crouch = !this.crouch;
     const running = input.isDown('ShiftLeft', 'ShiftRight') && !this.crouch;
     if (running && this.crouch) this.crouch = false;
-    const spd = (this.crouch ? CROUCH : running ? RUN : WALK) * (inside ? 0.8 : 1) * (this.boost ? 1.35 : 1) * (this.swimming ? 0.45 : 1);
+    const spd = (this.crouch ? CROUCH : running ? RUN : WALK) * (inside ? 0.8 : 1) * (this.boost ? 1.35 : 1) * (this.swimming ? 0.45 : 1) * (this.carrying ? 0.72 : 1) * (this.aiming && running ? 0.85 : 1);
     const k = this.grounded ? 12 : 2.5;
     this.vel.x = damp(this.vel.x, mx * spd, k, dt);
     this.vel.y = damp(this.vel.y, mz * spd, k, dt);
     this.pos.x += this.vel.x * dt; this.pos.z += this.vel.y * dt;
-    if (cam.firstPerson) this.yaw = cy + Math.PI - (inside ? this.rv.heading : 0);
+    if (cam.firstPerson || this.aiming) this.yaw = cy + Math.PI - (inside ? this.rv.heading : 0);   // aiming: face where the crosshair is
     else if (Math.hypot(mx, mz) > 0.05) this.yaw = dampAngle(this.yaw, Math.atan2(mx, mz), 12, dt);
 
     if (input.wasPressed('Space') && this.grounded && !this.swimming) {

@@ -62,6 +62,38 @@ export const audio = {
     o.connect(g); g.connect(master); o.start(t); o.stop(t + dur + 0.02);
   },
   click() { this.thud(900, 0.04); },
+  // shotgun: noise blast + low boom, then the pump (vol 0..1 for far-away shots)
+  shot(vol = 1) {
+    if (!ctx || vol <= 0.02) return;
+    const t = ctx.currentTime, src = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+    src.buffer = noise(); f.type = 'lowpass';
+    f.frequency.setValueAtTime(3200, t); f.frequency.exponentialRampToValueAtTime(260, t + 0.28);
+    g.gain.setValueAtTime(0.85 * vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.38);
+    src.connect(f); f.connect(g); g.connect(master); src.start(t); src.stop(t + 0.4);
+    const o = ctx.createOscillator(), og = ctx.createGain();
+    o.type = 'sine'; o.frequency.setValueAtTime(95, t); o.frequency.exponentialRampToValueAtTime(38, t + 0.25);
+    og.gain.setValueAtTime(0.6 * vol, t); og.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+    o.connect(og); og.connect(master); o.start(t); o.stop(t + 0.32);
+    for (const [dt, fr] of [[0.42, 1400], [0.56, 900]]) {           // pump: chk-chk
+      const c = ctx.createOscillator(), cg = ctx.createGain();
+      c.type = 'square'; c.frequency.setValueAtTime(fr, t + dt);
+      cg.gain.setValueAtTime(0.0001, t); cg.gain.setValueAtTime(0.09 * vol, t + dt); cg.gain.exponentialRampToValueAtTime(0.001, t + dt + 0.04);
+      c.connect(cg); cg.connect(master); c.start(t + dt); c.stop(t + dt + 0.05);
+    }
+  },
+  // zombie groan: wobbly low sawtooth through a lowpass
+  groan(vol = 0.6) {
+    if (!ctx || vol <= 0.02) return;
+    const t = ctx.currentTime, d = 0.7 + Math.random() * 0.6, o = ctx.createOscillator(), lfo = ctx.createOscillator(), lg = ctx.createGain(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+    const base = 70 + Math.random() * 45;
+    o.type = 'sawtooth'; o.frequency.setValueAtTime(base, t); o.frequency.linearRampToValueAtTime(base * 0.75, t + d);
+    lfo.frequency.value = 5 + Math.random() * 4; lg.gain.value = 9; lfo.connect(lg); lg.connect(o.frequency);
+    f.type = 'lowpass'; f.frequency.value = 520; f.Q.value = 4;
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.16 * vol, t + 0.12); g.gain.exponentialRampToValueAtTime(0.001, t + d);
+    o.connect(f); f.connect(g); g.connect(master);
+    o.start(t); lfo.start(t); o.stop(t + d + 0.05); lfo.stop(t + d + 0.05);
+  },
+  hurt() { this.thud(170, 0.16); this.thud(95, 0.22); },
   // Named looping tones (drone buzz, chainsaw)
   hum(name, on, type = 'sawtooth', freq = 200, gain = 0.04) {
     if (!ctx) return;
@@ -86,3 +118,11 @@ export const audio = {
   },
 };
 const hums = {};
+let noiseBuf = null;
+function noise() {
+  if (noiseBuf) return noiseBuf;
+  noiseBuf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * 0.4), ctx.sampleRate);
+  const d = noiseBuf.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / d.length);
+  return noiseBuf;
+}
