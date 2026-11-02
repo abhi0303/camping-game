@@ -51,6 +51,7 @@ export class BridgeEditor {
     this.cv = root.querySelector('canvas'); this.ctx = this.cv.getContext('2d');
     this.info = root.querySelector('.binfo');
     root.addEventListener('click', e => {
+      if (e.target === root) { this.close(); return; }          // tap outside = close
       const b = e.target.closest('button'); if (!b) return;
       if (b.dataset.t) { this.tool = b.dataset.t; this._side(); }
       else this._action(b.dataset.a);

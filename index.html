@@ -42,18 +42,13 @@
       <div id="cycle" class="panel"></div>
     </div>
     <div id="team" class="panel hidden"></div>
-    <div id="state" class="panel"></div>
     <div id="objective" class="panel"></div>
     <canvas id="minimap" width="180" height="180"></canvas>
+    <div id="speedBadge" class="hidden"><b id="speed">0</b><span class="u">km/h</span><span id="gear">N</span><svg id="icoLights" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9V16h7v-2.1A6 6 0 0 0 12 3z"/></svg></div>
+    <button id="menuBtn" class="touch-only" title="Menu"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
     <div id="prompt" class="hidden"></div>
     <div id="toast" class="hidden"></div>
 
-    <div id="speedo" class="panel hidden">
-      <div id="speed">0</div>
-      <div class="unit">km/h</div>
-      <div id="gear">N</div>
-      <div id="speedIcons"><span id="icoLights">LIGHTS</span></div>
-    </div>
 
     <div id="help" class="panel">
       <div class="help-head">Controls <span class="dim">(Tab to hide)</span></div>
@@ -97,14 +92,14 @@
     <div class="sbox">
       <div class="shead">
         <span id="sTitle"></span>
-        <span class="sbtns"><button id="sTakeAll">Take all</button><button id="sClose">Close (E)</button></span>
+        <span class="sbtns"><button id="sTakeAll">Take all</button><button id="sClose" title="Close (E)">✕ Close</button></span>
       </div>
       <div class="scols">
         <div class="scol"><div class="slabel" id="sCap"></div><div class="sgrid" id="sGrid"></div></div>
         <div class="sarrow">⇄</div>
         <div class="scol"><div class="slabel" id="bCap"></div><div class="sgrid" id="bGrid"></div></div>
       </div>
-      <div class="sinfo" id="sInfo">Click an item to move it between the storage and your backpack.</div>
+      <div class="sinfo" id="sInfo">Tap an item to move it between the storage and your backpack. Tap outside to close.</div>
     </div>
   </div>
 
@@ -122,6 +117,7 @@
       </div>
       <div id="menuPause" class="hidden">
         <button id="play">Resume</button>
+        <div id="pauseSettings"><button id="sndBtn" class="mbtn">🔊 Sound on</button><span id="qualSlot"></span></div>
         <div id="pauseScore"></div>
         <p id="pauseRoom" class="small"></p>
       </div>

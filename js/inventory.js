@@ -2,6 +2,7 @@ import { ITEMS, itemModel, placeInSlot, STORE_ROT } from './items.js';
 import { audio } from './audio.js';
 
 const BACKPACK_SIZE = 6;
+const TOUCH = () => document.body.classList.contains('touch');
 let uid = 0;
 const newItem = type => ({ uid: ++uid, type });
 const fill = (n, types) => Array.from({ length: n }, (_, i) => (types[i] ? newItem(types[i]) : null));
@@ -135,7 +136,7 @@ export class Inventory {
     st.slots[i] = null; this.backpack[j] = it;
     if (this.equipped < 0) this.equipped = j;
     audio.click(); this.syncVisuals(st); this._changed(); this.hooks.onStorage && this.hooks.onStorage(st);
-    this._info(`Took ${ITEMS[it.type].name}. Press ${j + 1} to hold it, F to use.`);
+    this._info(TOUCH() ? `Took ${ITEMS[it.type].name}. Tap slot ${j + 1} below to hold it.` : `Took ${ITEMS[it.type].name}. Press ${j + 1} to hold it, F to use.`);
   }
   put(j) {
     const st = this.openSt, it = this.backpack[j];
@@ -154,6 +155,7 @@ export class Inventory {
     const $ = id => document.getElementById(id);
     this.ui = { root: $('storageUI'), title: $('sTitle'), sCap: $('sCap'), bCap: $('bCap'), sGrid: $('sGrid'), bGrid: $('bGrid'), info: $('sInfo'), hotbar: $('hotbar'), hbName: $('hbName') };
     $('sClose').addEventListener('click', () => this.closeStorage());
+    this.ui.root.addEventListener('click', e => { if (e.target === this.ui.root) this.closeStorage(); });   // tap outside = close
     this.ui.hotbar.addEventListener('click', e => { const b = e.target.closest('[data-i]'); if (b) this.equip(+b.dataset.i); });
     $('sTakeAll').addEventListener('click', () => this.takeAll());
     this.ui.sGrid.addEventListener('click', e => { const b = e.target.closest('[data-i]'); if (b) this.take(+b.dataset.i); });
@@ -176,8 +178,9 @@ export class Inventory {
     if (!st) return;
     const used = st.slots.filter(Boolean).length;
     u.title.textContent = `${st.icon} ${st.name}`;
-    u.sCap.textContent = `Storage ${used}/${st.slots.length} — click to take`;
-    u.bCap.textContent = `Backpack ${BACKPACK_SIZE - this.freeSlots()}/${BACKPACK_SIZE} — click to put back`;
+    const verb = TOUCH() ? 'tap' : 'click';
+    u.sCap.textContent = `Storage ${used}/${st.slots.length} — ${verb} to take`;
+    u.bCap.textContent = `Backpack ${BACKPACK_SIZE - this.freeSlots()}/${BACKPACK_SIZE} — ${verb} to put back`;
     u.sGrid.innerHTML = this._slotsHTML(st.slots, 'Take');
     u.bGrid.innerHTML = this._slotsHTML(this.backpack, 'Put back');
   }
@@ -186,6 +189,6 @@ export class Inventory {
     u.hotbar.innerHTML = this.backpack.map((it, i) =>
       `<div data-i="${i}" class="hb${i === this.equipped ? ' sel' : ''}${it ? '' : ' empty'}"><span class="n">${i + 1}</span>${it ? ITEMS[it.type].icon : ''}</div>`).join('');
     const eq = this.equippedItem();
-    u.hbName.textContent = eq ? `${ITEMS[eq.type].name} — F to use` : (this.backpack.some(Boolean) ? 'Press 1-6 to hold an item' : '');
+    u.hbName.textContent = eq ? `${ITEMS[eq.type].name}${TOUCH() ? '' : ' — F to use'}` : (this.backpack.some(Boolean) ? (TOUCH() ? 'Tap a slot to hold an item' : 'Press 1-6 to hold an item') : '');
   }
 }

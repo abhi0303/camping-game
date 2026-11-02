@@ -312,3 +312,99 @@ body.dead #hotbarWrap, body.dead #prompt { display: none !important; }
   #bridgeUI .binfo, #buildUI .binfo { font-size: 11.5px; min-height: 0; margin-top: 4px; }
   #bridgeUI .bside h4, #buildUI .bside h4 { margin: 4px 0 2px; }
 }
+
+/* =====================================================================
+   Clean HUD: see-through panels, white icons, smaller map; phone layout
+   ===================================================================== */
+.panel { background: rgba(16, 18, 26, .5); border-color: rgba(255,255,255,.14); }
+#state { display: none !important; }                       /* "Driving / On foot" label: not needed */
+#objective { top: 78px; }
+#minimap { width: 150px; height: 150px; top: 62px; }
+#team { top: 244px; }
+#topright { padding: 4px 8px; font-size: 11px; gap: 8px; }
+#topright select { font-size: 11px; padding: 2px 4px; }
+/* small speed badge under the map (replaces the big speedometer) */
+#speedBadge { position: absolute; top: 216px; right: 16px; width: 150px; display: flex; justify-content: center; align-items: baseline; gap: 5px; font-weight: 800; text-shadow: 0 1px 3px rgba(0,0,0,.8); pointer-events: none; }
+#speedBadge b { font-size: 20px; }
+#speedBadge .u { font-size: 11px; opacity: .75; }
+#speedBadge #gear { font-size: 12px; padding: 0 5px; border: 1.5px solid rgba(255,255,255,.7); border-radius: 5px; }
+#icoLights { width: 15px; height: 15px; fill: none; stroke: #fff; stroke-width: 2; stroke-linecap: round; opacity: .35; align-self: center; }
+#icoLights.on { opacity: 1; filter: drop-shadow(0 0 4px #fff); }
+/* white prompt keys */
+#prompt { background: rgba(16,18,26,.6); border-color: rgba(255,255,255,.25); }
+#prompt .key { background: rgba(255,255,255,.92); color: #111; }
+#prompt .alt .key { background: transparent; color: #fff; border: 1.5px solid rgba(255,255,255,.85); }
+/* hotbar: glassy slots, white selection */
+.hb { background: rgba(255,255,255,.07); border-color: rgba(255,255,255,.28); }
+.hb.sel { border-color: #fff; box-shadow: 0 0 0 2px rgba(255,255,255,.35); }
+#gunSlot { border-color: rgba(255,255,255,.28); }
+#gunSlot.sel { border-color: #fff; box-shadow: 0 0 0 2px rgba(255,255,255,.35); }
+.gunIco, #gunSlot.sel .gunIco { color: #fff; }
+/* pause menu settings row */
+#pauseSettings { display: flex; gap: 8px; justify-content: center; align-items: center; margin: 0 0 10px; flex-wrap: wrap; }
+#pauseSettings select { pointer-events: auto; background: #1d2030; color: #eee; border: 1px solid #444a60; border-radius: 8px; padding: 7px 8px; font-size: 13px; }
+/* storage: tap outside closes; never taller than the screen */
+#storageUI { pointer-events: auto; }
+.sbox { max-height: calc(100vh - 16px); overflow-y: auto; }
+.sbtns #sClose { background: #fff; color: #111; }
+/* ☰ menu button (phones have no Esc key) */
+#menuBtn { position: absolute; top: 8px; left: 8px; width: 38px; height: 38px; border-radius: 10px; background: rgba(255,255,255,.12); border: 1.5px solid rgba(255,255,255,.55); pointer-events: auto; padding: 0; display: none; }
+#menuBtn svg { width: 22px; height: 22px; fill: none; stroke: #fff; stroke-width: 2.2; stroke-linecap: round; }
+body.touch #menuBtn { display: flex; align-items: center; justify-content: center; }
+
+/* touch controls: white line icons on see-through circles */
+.tb { width: 48px; height: 48px; background: rgba(255,255,255,.1); border: 1.5px solid rgba(255,255,255,.6); color: #fff; font-size: 17px; display: flex; align-items: center; justify-content: center; padding: 0; backdrop-filter: blur(2px); }
+.tb.big { width: 60px; height: 60px; background: rgba(255,255,255,.16); color: #fff; border-color: rgba(255,255,255,.8); font-size: 20px; }
+.tb.on { background: rgba(255,255,255,.45); }
+.tb svg { width: 24px; height: 24px; fill: none; stroke: #fff; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.tb.big svg { width: 28px; height: 28px; }
+.tb svg .fill { fill: #fff; stroke: none; }
+.tb .gunIco { width: 34px; height: 13px; color: #fff; }
+#tBtns { width: 180px; gap: 8px; bottom: 12px; }
+#tStick { border-color: rgba(255,255,255,.45); background: rgba(255,255,255,.08); }
+#tKnob { background: rgba(255,255,255,.45); }
+
+body.touch #topright { display: none; }                           /* graphics setting lives in the menu on phones */
+body.touch #minimap { width: 92px; height: 92px; top: 8px; right: 8px; }
+body.touch #speedBadge { top: 102px; right: 8px; width: 92px; }
+body.touch #speedBadge b { font-size: 16px; }
+body.touch #objective { top: 8px; left: 54px; font-size: 11px; max-width: 30vw; padding: 4px 8px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+body.touch #team { top: 62px; left: 8px; right: auto; font-size: 10.5px; min-width: 0; width: 150px; padding: 4px 6px; gap: 2px; }
+body.touch .trow { grid-template-columns: 8px 1fr 34px 14px 26px; gap: 4px; }
+body.touch #topc { max-width: 46vw; }
+body.touch #toast { font-size: 12px; max-width: 58vw; white-space: normal; text-align: center; top: 74px; padding: 6px 12px; }
+body.touch #prompt { bottom: 112px; font-size: 12.5px; padding: 7px 12px; }
+body.touch #prompt .key { padding: 0 6px; margin-right: 6px; }
+body.touch #hotbarWrap { bottom: 6px; left: 50%; gap: 4px; }
+body.touch .hb, body.touch #gunSlot { width: 38px; height: 38px; font-size: 19px; border-radius: 9px; }
+body.touch .hb .n { font-size: 8px; top: 1px; left: 3px; }
+body.touch #hotbar, body.touch #hbRow { gap: 4px; }
+body.touch #hbName { font-size: 11px; min-height: 13px; }
+body.touch #vitals { width: 170px; }
+body.touch #matsBar { font-size: 12px; padding: 2px 8px; gap: 10px; }
+body.touch #cross { width: 24px; height: 24px; }
+/* storage popup on phones / short screens: compact */
+@media (max-height: 560px), (max-width: 700px) {
+  .sbox { padding: 10px 12px; border-radius: 12px; }
+  .shead { margin-bottom: 8px; position: sticky; top: -10px; background: rgba(30,33,46,.98); z-index: 1; padding: 4px 0; }
+  #sTitle { font-size: 15px; }
+  .sbtns button { padding: 6px 10px; }
+  .scols { gap: 8px; }
+  .sgrid { grid-template-columns: repeat(auto-fill, minmax(58px, 1fr)); gap: 5px; }
+  .slot { height: 58px; border-radius: 9px; gap: 2px; padding: 2px; }
+  .slot .ico { font-size: 22px; }
+  .slot .nm { font-size: 9.5px; }
+  .slabel { font-size: 11px; margin-bottom: 4px; }
+  .sinfo { margin-top: 6px; font-size: 11.5px; }
+}
+.qlab { font-size: 13px; display: inline-flex; align-items: center; gap: 6px; }
+body.touch #objective { max-height: calc(2.7em + 8px); line-height: 1.35; }
+@media (max-height: 500px) {
+  #overlay .card { padding: 14px 18px; }
+  #overlay h1 { font-size: 24px; }
+  #overlay .sub { display: none; }
+  #play { padding: 9px 28px; margin-bottom: 8px; }
+  .zinfo { font-size: 11px; padding: 6px 10px; margin-bottom: 8px; }
+}
+#help b { color: #fff; }
+#help { background: rgba(16,18,26,.45); }

@@ -178,7 +178,7 @@ function updateObjective() {
   if (STAGE_OBJ[survival.stage] > objI) { objI = STAGE_OBJ[survival.stage]; changed = true; }
   while (objI < OBJ.length - 1 && OBJ[objI].done()) { objI++; changed = true; }
   if (changed) { toast('✔ Objective complete!'); session.dirty = true; saveNow(); }
-  hud.objective.textContent = '🎯 ' + OBJ[objI].text;
+  hud.objective.textContent = '🎯 ' + touchText(OBJ[objI].text);
 }
 
 /* ---------- map markers ---------- */
@@ -291,11 +291,21 @@ addEventListener('resize', () => {
 
 /* ---------- HUD ---------- */
 const hud = { objective: $('objective'), room: $('room'), droneHud: $('droneHud'), binoHud: $('binoHud'), dAlt: $('dAlt'), dDist: $('dDist'), dSpd: $('dSpd'), dBat: $('dBat'), dWarn: $('dWarn'),
-  prompt: $('prompt'), toast: $('toast'), gunSlot: $('gunSlot'), state: $('state'), speedo: $('speedo'), speed: $('speed'), gear: $('gear'), lights: $('icoLights'), help: $('help'), helpBody: $('helpBody'), fps: $('fps') };
+  prompt: $('prompt'), toast: $('toast'), gunSlot: $('gunSlot'), speedo: $('speedBadge'), speed: $('speed'), gear: $('gear'), lights: $('icoLights'), help: $('help'), helpBody: $('helpBody'), fps: $('fps') };
 const GUN_SVG = $('gunSlot').querySelector('svg').outerHTML, CANNON_SVG = '<svg class="gunIco" viewBox="0 0 64 22" aria-hidden="true"><path d="M16 4.5 L61 1.5 L61 12.5 L16 13.5 Z M10 6 h8 v8 h-8z" fill="currentColor"/><circle cx="20" cy="16" r="5.2" fill="none" stroke="currentColor" stroke-width="2.6"/></svg>';
 let shownWeapon = 'shotgun';
 let scoreT = 0, lastScore = '', pingT = 0, toastT = 0, lastPrompt = '', lastHelp = '', hudT = 0, promptKey = 'E';
-function toast(msg) { hud.toast.textContent = msg; hud.toast.classList.remove('hidden'); toastT = 2.6; }
+function toast(msg) { hud.toast.textContent = touchText(msg); hud.toast.classList.remove('hidden'); toastT = 2.6; }
+// phones have no keyboard: turn key hints into tap wording
+const TOUCH_TEXT = [
+  [/W\/S to drive/g, 'the left stick to drive'], [/click \/ F to (shoot|fire)/g, 'tap ◎ to $1'], [/\(G, then click \/ F\)/g, '(gun button, then ◎)'],
+  [/ · G to put it away/g, ''], [/G to put it away/g, ''], [/Shotgun: G/g, 'Shotgun: gun button'], [/\(G\)/g, ''], [/\(B to mute\)/g, '(tap the mic button to mute)'],
+  [/press B again/g, 'tap the mic button again'], [/\(hold E[^)]*\)/gi, '(tap the prompt)'], [/Hold E — /g, ''], [/hold E next to (them|you)/gi, 'tap the prompt next to $1'],
+  [/\(X\)/g, '(tap “Carry”)'], [/ · X to put down/g, ' · tap the prompt to put down'], [/\(E at the ladder\)/g, '(tap the prompt at the ladder)'], [/climb with E/gi, 'climb by tapping the prompt'],
+  [/press F next to it/g, 'tap the use button next to it'], [/and press F/g, 'and tap the use button'], [/press F/g, 'tap the use button'], [/Press Esc/g, 'Tap ☰'], [/press Esc/g, 'tap ☰'], [/Esc → /g, '☰ → '], [/\(Esc\)/g, '(☰)'],
+  [/click \/ tap \/ → to/g, 'tap to'], [/Press 1-6 to hold an item/g, 'Tap a slot to hold an item'], [/ — F to use/g, ''], [/Press (\d) to hold it, F to use\./g, 'Tap slot $1 to hold it.'],
+];
+function touchText(t) { if (!input.touch || !t) return t; for (const [a, b] of TOUCH_TEXT) t = t.replace(a, b); return t; }
 const HELP = {
   foot: [['WASD', 'move'], ['Shift', 'run'], ['Space', 'jump'], ['G', 'weapon out / away (shotgun · cannon vs giants)'], ['F / Click', 'shoot / use item / punch'], ['1 - 6', 'hold an item'], ['E', 'interact (hold: revive)'], ['X', 'carry a downed teammate'], ['E (ladder)', 'climb towers / castle walls'], ['M', 'map'], ['V', '1st / 3rd person'], ['R', 'RV to last checkpoint'], ['B', 'mic on / off (co-op voice)'], ['I', 'copy invite link (co-op)']],
   drone: [['WASD', 'fly'], ['Space / Shift', 'up / down'], ['Mouse', 'turn + tilt camera'], ['V', 'drone cam / chase'], ['E', 'bring the drone back']],
@@ -408,14 +418,14 @@ function updateHUD(dt) {
     lastPrompt = p;
     if (p) {
       promptKey = /^[A-Z]$/.test(pr.key) ? pr.key : 'E';
-      hud.prompt.innerHTML = `<span class="key">${pr.key}</span>${pr.text}` + (pr.alt ? `<span class="alt"><span class="key">${pr.alt.key}</span>${pr.alt.text}</span>` : '');
+      const tk = k => (input.touch && /^[A-Z]$/.test(k) ? 'TAP' : k);
+      hud.prompt.innerHTML = `<span class="key">${tk(pr.key)}</span>${touchText(pr.text).replace(/\s+\[Q\] Go to the back/, input.touch ? '' : ' [Q] Go to the back')}` + (pr.alt ? `<span class="alt"><span class="key">${tk(pr.alt.key)}</span>${touchText(pr.alt.text)}</span>` : '');
       hud.prompt.classList.remove('hidden');
     } else hud.prompt.classList.add('hidden');
   }
   hudT -= dt;
   if (hudT > 0) return;
   hudT = 0.12; // DOM writes ~8x per second only
-  hud.state.textContent = stateName() + (player.boost ? '  ⚡ boosted' : '') + (player.swimming ? '  🏊 swimming' : '');
   hud.gunSlot.classList.toggle('sel', combat.out);
   if (combat.weapon !== shownWeapon) {   // shotgun <-> cannon (giant stage)
     shownWeapon = combat.weapon;
@@ -520,18 +530,31 @@ M.join.onclick = async () => {
   try { await session.join(code, playerName()); gear.netId = net.id; startGame('Connected! Waiting for the host…'); }
   catch (e) { M.status.textContent = '⚠ ' + (e.message || e); busy(false); }
 };
-$('play').addEventListener('click', () => {
+function resume() {
   overlay.classList.add('hidden'); paused = false; input.muted = false;
   input.requestLock(); lastT = performance.now();
-});
+}
+function openMenu() {
+  if (!started) return;
+  if (!net.online) paused = true;      // solo: the game stops so the GPU idles; co-op keeps running
+  input.muted = true; input.vdown.clear(); input.stick.active = false;
+  overlay.classList.remove('hidden');
+  scoreT = 0; requestRender = true;
+}
+$('play').addEventListener('click', resume);
+// tap outside the menu card = back to the game
+overlay.addEventListener('click', e => { if (e.target === overlay && started) resume(); });
+// phones have no Esc key: the ☰ button opens the same menu
+$('menuBtn').addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); openMenu(); });
 document.addEventListener('pointerlockchange', () => {
-  // Esc frees the mouse -> pause menu (solo: the game stops so the GPU idles; co-op keeps running)
-  if (!document.pointerLockElement && started && !input.dragging && !inv.isOpen && !editor.open) {
-    if (!net.online) paused = true;
-    input.muted = true;
-    overlay.classList.remove('hidden');
-  }
+  // Esc frees the mouse -> pause menu
+  if (!document.pointerLockElement && started && !input.dragging && !inv.isOpen && !editor.open && !designer.open) openMenu();
 });
+// menu settings: sound + graphics (on phones the graphics setting lives here instead of the top-right corner)
+const sndBtn = $('sndBtn');
+const sndLabel = () => { sndBtn.textContent = audio.muted ? '🔇 Sound off' : '🔊 Sound on'; };
+sndBtn.addEventListener('click', e => { e.stopPropagation(); audio.toggleMute(); sndLabel(); });
+if (input.touch) { const l = document.createElement('label'); l.className = 'qlab'; l.textContent = 'Graphics '; l.appendChild(qSel); $('qualSlot').appendChild(l); }
 canvas.addEventListener('click', () => { if (started && !paused && !input.locked) input.requestLock(); });
 
 /* ---------- global keys ---------- */
@@ -539,7 +562,7 @@ function globalKeys() {
   if (input.wasPressed('KeyV')) toast(rig.toggle(player));
   if (input.wasPressed('KeyG')) combat.toggle();
   if (input.wasPressed('KeyB')) voice.toggle();
-  if (input.wasPressed('KeyK')) toast(audio.toggleMute() ? 'Sound off' : 'Sound on');
+  if (input.wasPressed('KeyK')) { toast(audio.toggleMute() ? 'Sound off' : 'Sound on'); sndLabel(); }
   if (input.wasPressed('KeyM')) minimap.toggleBig();
   if (input.wasPressed('Escape') && minimap.bigOpen) minimap.toggleBig(false);
   if (input.wasPressed('KeyR')) {

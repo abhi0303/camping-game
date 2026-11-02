@@ -68,7 +68,10 @@ export class Designer {
         <p class="bhelp"></p></div></div></div>`;
     document.body.appendChild(root);
     this.cv = root.querySelector('canvas'); this.ctx = this.cv.getContext('2d');
-    root.addEventListener('click', e => { const b = e.target.closest('button'); if (b && b.dataset.a) this._action(b.dataset.a, b.dataset.v); });
+    root.addEventListener('click', e => {
+      if (e.target === root) { this.close(); return; }           // tap outside = close
+      const b = e.target.closest('button'); if (b && b.dataset.a) this._action(b.dataset.a, b.dataset.v);
+    });
     root.addEventListener('input', e => {
       const el = e.target;
       if (el.dataset.r === 'spacing') { this.spacing = +el.value; this._arrange(this.t.towers.length >= 3 && this._lastArr === 'square' ? 'square' : 'row'); }
