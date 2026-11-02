@@ -194,6 +194,7 @@ test('heartbeat saves the world and the online list; wrong epoch is told to step
   const snap = { v: 1, obj: 3, mats: { logs: 50 } };
   const hb = await call('POST', `/v1/rooms/${w.code}/heartbeat`, { epoch: h.body.epoch, online: [w.member.id, r.member.id, '00000000-0000-4000-8000-000000000000', 'junk'], world: snap }, w.token);
   assert.equal(hb.status, 200); assert.equal(hb.body.worldRev, 1); assert.equal(hb.body.online, 2);
+  assert.deepEqual(hb.body.gone, ['00000000-0000-4000-8000-000000000000']);      // in the game but not a member
   const info = await call('GET', `/v1/rooms/${w.code}`, undefined, r.token);
   assert.equal(info.body.online, 2); assert.equal(info.body.host.name, 'Abhi');
   assert.deepEqual(info.body.members.map(m => m.online), [true, true]);

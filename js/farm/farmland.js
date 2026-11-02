@@ -71,7 +71,19 @@ export class Farmland {
     this.list = st.animals.filter(a => this.inst[a.type] && plotOf.has(a.shelter)).map(a => ({ ...a, plot: plotOf.get(a.shelter), k: hash(a.id) }));
   }
 
-  // animals walk around their pen (same for every player: shared clock + the animal's id)
+  // where an animal is at a moment of the shared (server) clock: it walks around its pen for a while,
+  // then stops and grazes. Only the clock and the animal's id decide it, so every screen agrees.
+  posOf(a, serverMs) {
+    const t = serverMs / 1000, P = PLOTS[a.plot], k = a.k, sp = SPEED[a.type] || 1;
+    const cx = (PEN.x0 + PEN.x1) / 2, cz = (PEN.z0 + PEN.z1) / 2, hx = (PEN.x1 - PEN.x0) / 2, hz = (PEN.z1 - PEN.z0) / 2;
+    const at = tt => toWorld(P, cx + hx * 0.9 * Math.sin(tt * 0.11 + k * 40) * Math.cos(tt * 0.043 + k * 17), cz + hz * 0.9 * Math.sin(tt * 0.083 + k * 23));
+    // walking speed swings between 0.3 and 1.3 (slow grazing … trotting); tt is its integral over time,
+    // so the animal moves smoothly (multiplying the clock by a changing speed would make it jump)
+    const T = t + k * 1000, ph = 0.05 * T + k * 31, pace = 0.5 + 0.5 * Math.sin(ph);
+    const tt = sp * (0.8 * T - 10 * Math.cos(ph));
+    const w = at(tt), w2 = at(tt + 0.6), walking = pace > 0.35;
+    return { x: w.x, z: w.z, walking, yaw: Math.atan2(w2.x - w.x, w2.z - w.z) + (walking ? 0 : Math.sin(t * 0.7 + k * 5) * 0.3) };
+  }
   update(dt, serverMs) {
     if (!this.on) return;
     const t = serverMs / 1000, n = {};
@@ -79,21 +91,12 @@ export class Farmland {
     for (const a of this.list) {
       const m = this.inst[a.type];
       if (n[a.type] >= MAX_PER_TYPE) continue;
-      const P = PLOTS[a.plot], k = a.k, sp = SPEED[a.type] || 1;
-      const pos = tt => {
-        const cx = (PEN.x0 + PEN.x1) / 2, cz = (PEN.z0 + PEN.z1) / 2, hx = (PEN.x1 - PEN.x0) / 2, hz = (PEN.z1 - PEN.z0) / 2;
-        return [cx + hx * 0.9 * Math.sin(tt * 0.11 + k * 40) * Math.cos(tt * 0.043 + k * 17), cz + hz * 0.9 * Math.sin(tt * 0.083 + k * 23)];
-      };
-      // walk for a while, then stop and graze
-      const pace = 0.5 + 0.5 * Math.sin(t * 0.05 + k * 31), tt = (t + k * 1000) * sp * (0.3 + pace);
-      const [lx, lz] = pos(tt), [nx, nz] = pos(tt + 0.6);
-      const w = toWorld(P, lx, lz), w2 = toWorld(P, nx, nz);
-      const walking = pace > 0.35, bob = walking ? Math.abs(Math.sin(t * 9 * sp + k * 9)) * (a.type === 'chicken' ? 0.05 : 0.04) : 0;
-      const yaw = Math.atan2(w2.x - w.x, w2.z - w.z) + (walking ? 0 : Math.sin(t * 0.7 + k * 5) * 0.3);
+      const p = this.posOf(a, serverMs), sp = SPEED[a.type] || 1;
+      const bob = p.walking ? Math.abs(Math.sin(t * 9 * sp + a.k * 9)) * (a.type === 'chicken' ? 0.05 : 0.04) : 0;
       const sick = a.health < 40 ? 0.06 : 0;
-      this._e.set(walking ? 0 : 0.08 + sick, yaw, sick * 2);
+      this._e.set(p.walking ? 0 : 0.08 + sick, p.yaw, sick * 2);
       this._q.setFromEuler(this._e);
-      this._p.set(w.x, this.H(w.x, w.z) + bob, w.z);
+      this._p.set(p.x, this.H(p.x, p.z) + bob, p.z);
       m.setMatrixAt(n[a.type]++, this._m.compose(this._p, this._q, this._s));
     }
     for (const type in this.inst) { const m = this.inst[type]; m.count = n[type]; m.instanceMatrix.needsUpdate = true; }

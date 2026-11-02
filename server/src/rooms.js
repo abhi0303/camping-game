@@ -306,7 +306,9 @@ export async function heartbeat(req, env, db, code) {
         world_saved_at = CASE WHEN $4::jsonb IS NULL THEN world_saved_at ELSE now() END
         WHERE id = $1 RETURNING world_rev, world_saved_at`, [me.room_id, online, rel, world ? JSON.stringify(world) : null]);
     await c.rows('UPDATE room_members SET last_seen_at = now() WHERE id = ANY($1::uuid[])', [online]);
-    return json({ ok: true, worldRev: w.world_rev, savedAt: w.world_saved_at, online: online.length });
+    // players in the live game who are no longer members (removed by the owner): the host puts them out
+    const gone = ids.filter(id => !online.includes(id));
+    return json({ ok: true, worldRev: w.world_rev, savedAt: w.world_saved_at, online: online.length, gone });
   });
 }
 

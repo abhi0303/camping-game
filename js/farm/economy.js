@@ -11,7 +11,7 @@ const newId = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toStri
 export class FarmEconomy {
   // g: { net, toast, onChange(state), onGone(msg) }
   constructor(g) {
-    this.g = g; this.L = null; this.st = null; this.offset = 0; this.busy = 0;
+    this.g = g; this.L = null; this.st = null; this.offset = 0; this.busy = 0; this.bestRtt = Infinity; this.syncAt = 0;
     g.net.on('farmRev', d => { if (this.L && d && (!this.st || d.rev > this.st.rev)) this._soon(); });
   }
   start(L) {
@@ -25,14 +25,22 @@ export class FarmEconomy {
 
   async load() {
     if (!this.L) return null;
-    try { const st = await api.farm(this.L); this._apply(st); return st; }
+    try { const t0 = Date.now(), st = await api.farm(this.L); this._clock(st.at, t0, Date.now()); this._apply(st); return st; }
     catch (e) { if (LOGIN_GONE.has(e.code) && this.g.onGone) this.g.onGone(e.message); return null; }
   }
   _apply(st) {
     if (!st || (this.st && st.at < this.st.at)) return;          // an older answer that arrived late
     this.st = st;
-    this.offset = Date.parse(st.at) - Date.now();
     this.g.onChange(st);
+  }
+  // The server's clock, seen from here: its time stamp belongs halfway through the request. Quick
+  // answers give the best estimate, so a slower one only replaces it after a few minutes.
+  _clock(at, t0, t1) {
+    const rtt = t1 - t0, now = Date.now();
+    if (rtt <= this.bestRtt * 1.5 || now - this.syncAt > 300000) {
+      this.offset = Date.parse(at) - (t0 + t1) / 2;
+      this.bestRtt = Math.min(rtt, this.bestRtt); this.syncAt = now;
+    }
   }
   // the server's clock (animals move by it, so everyone sees the same thing)
   serverNow() { return Date.now() + this.offset; }
@@ -45,7 +53,8 @@ export class FarmEconomy {
     try {
       for (let i = 0; ; i++) {
         try {
-          const r = await api.farmAct(this.L, { requestId, ...body });
+          const t0 = Date.now(), r = await api.farmAct(this.L, { requestId, ...body });
+          this._clock(r.at, t0, Date.now());
           if (body.action === 'sell') this.sold = true;
           this._apply(r);
           try { this.g.net.send('farmRev', { rev: r.rev }); } catch (e) { /* playing alone */ }
