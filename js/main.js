@@ -110,6 +110,8 @@ Object.assign(session.g, {
   buildState: () => structures.save(),
   applyBuild: d => structures.load(d),
   onBackground: dt => survival.background(dt),
+  // 🔄 Sync (host) / a host's sync reaching a guest: fresh game state + new voice links
+  onResync: () => { survival.dirty = true; voice.restart(); },
   // kicked by the host: back to the start screen with a message
   onKicked: msg => { try { sessionStorage.setItem('rv-flash', msg); sessionStorage.setItem('rv-tab-keep', '1'); } catch (e) { /* ignore */ } location.replace(location.pathname); },
 });
@@ -295,7 +297,7 @@ const hud = { objective: $('objective'), room: $('room'), droneHud: $('droneHud'
   prompt: $('prompt'), toast: $('toast'), gunSlot: $('gunSlot'), speedo: $('speedBadge'), speed: $('speed'), gear: $('gear'), lights: $('icoLights'), help: $('help'), helpBody: $('helpBody'), fps: $('fps') };
 const GUN_SVG = $('gunSlot').querySelector('svg').outerHTML, CANNON_SVG = '<svg class="gunIco" viewBox="0 0 64 22" aria-hidden="true"><path d="M16 4.5 L61 1.5 L61 12.5 L16 13.5 Z M10 6 h8 v8 h-8z" fill="currentColor"/><circle cx="20" cy="16" r="5.2" fill="none" stroke="currentColor" stroke-width="2.6"/></svg>';
 let shownWeapon = 'shotgun';
-let scoreT = 0, lastScore = '', pingT = 0, toastT = 0, lastPrompt = '', lastHelp = '', hudT = 0, promptKey = 'E';
+let scoreT = 0, lastScore = '', pingAt = 0, toastT = 0, lastPrompt = '', lastHelp = '', hudT = 0, promptKey = 'E';
 function toast(msg) { hud.toast.textContent = touchText(msg); hud.toast.classList.remove('hidden'); toastT = 2.6; }
 // phones have no keyboard: turn key hints into tap wording
 const TOUCH_TEXT = [
@@ -345,9 +347,10 @@ function renderRoster() {
   if (session.rejoining) { hud.room.innerHTML = `📡 Reconnecting to room <b>${session.lastCode}</b>…`; $('pauseRoom').innerHTML = '<div class="plist"><div class="phead">📡 Reconnecting to the room…</div></div>'; return; }
   const names = session.roster().map(p => `<span style="color:${session.colorOf(p.id)}">${p.id === net.id ? 'You' : escapeHTML(p.n)}</span>`).join(', ');
   hud.room.innerHTML = `👥 Room <b>${net.code}</b> <span class="dim">(${Math.max(1, session.players.size)}/${MAX_PLAYERS})</span> · ${names || 'connecting…'} <span id="ping" class="dim"></span> <button class="copyBtn mini" data-copy="link" title="Copy invite link">${COPY_ICON}<span>Invite</span></button>`;
-  const plist = session.roster().map(p => `<div class="prow"><i style="background:${session.colorOf(p.id)}"></i><span>${p.id === net.id ? 'You' : escapeHTML(p.n)}${p.c === 0 ? ' <em>host</em>' : ''}<em class="pping" data-ping="${p.id}"></em></span>${net.isHost && p.id !== net.id ? `<button class="kickBtn" data-kick="${p.id}">Kick</button>` : ''}</div>`).join('');
+  const plist = session.roster().map(p => `<div class="prow"><i style="background:${session.colorOf(p.id)}"></i><span>${p.id === net.id ? 'You' : escapeHTML(p.n)}${p.c === 0 ? ' <em>host</em>' : ''}<em class="pping" data-ping="${p.id}"></em></span>${net.isHost && p.id !== net.id ? `<button class="rcBtn" data-rc="${p.id}" title="Ask ${escapeHTML(p.n)} to reconnect">↻ Reconnect</button><button class="kickBtn" data-kick="${p.id}">Kick</button>` : ''}</div>`).join('');
   $('pauseRoom').innerHTML = `<div class="plist"><div class="phead">Players ${Math.max(1, session.players.size)}/${MAX_PLAYERS}${session.isFull ? ' · room full' : ''}</div>${plist}
-    <button class="micBtn wide" data-mic="1"></button></div>
+    <button class="micBtn wide" data-mic="1"></button>
+    <button class="syncBtn wide" data-sync="1">${net.isHost ? '🔄 Sync everyone — fresh copy, voice restart, weak links reconnect' : '🔄 Reconnect &amp; sync — if a teammate is missing or the voice breaks'}</button></div>
     <div class="invite">
       <div class="irow"><span>Room code</span><code>${net.code}</code><button class="copyBtn" data-copy="code" title="Copy room code">${COPY_ICON}<span>Copy</span></button></div>
       <div class="irow"><span>Invite link</span><input class="ilink" readonly value="${inviteLink()}" /><button class="copyBtn" data-copy="link" title="Copy invite link">${COPY_ICON}<span>Copy</span></button></div>
@@ -361,6 +364,16 @@ function renderVoice() {
   btn.classList.toggle('hidden', !net.online || session.rejoining);
   btn.classList.toggle('on', on); btn.classList.toggle('talk', on && voice.meTalking);
   btn.innerHTML = `${txt}<span class="k">B</span>`;
+  // 🔄 next to the mic: guests reconnect, the host syncs everyone
+  const sb = $('syncBtn');
+  sb.classList.toggle('hidden', !net.online || session.rejoining);
+  const lbl = net.isHost ? 'Sync' : 'Reconnect';
+  if (sb.dataset.lbl !== lbl) {
+    sb.dataset.lbl = lbl;
+    sb.innerHTML = `🔄<span class="lbl">${lbl}</span>`;
+    sb.title = net.isHost ? 'Sync everyone: fresh copy of the game for all players, restart voice, reconnect players with a weak link'
+      : 'Reconnect & sync: press it if a teammate is missing or frozen, or the voice breaks';
+  }
   for (const b of document.querySelectorAll('#pauseRoom .micBtn')) { b.classList.toggle('on', on); b.textContent = on ? '🎙 Mic is ON — click to mute (B)' : '🔇 Mic is off — click to talk to your team (B)'; }
 }
 const escapeHTML = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -392,10 +405,31 @@ function onCopyClick(e) {
 }
 hud.room.addEventListener('click', onCopyClick);
 $('micBtn').addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); voice.toggle(); });
+// 🔄 Reconnect (guest) / Sync (host)
+let syncAt = -1e9;
+function syncNow() {
+  const now = performance.now();
+  if (now - syncAt < 3000) { toast('🔄 Syncing… give it a few seconds'); return; }
+  syncAt = now;
+  session.reconnect();
+}
+$('syncBtn').addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); syncNow(); });
+// is the connection in trouble? (lights up the 🔄 button)
+function linkWeak() {
+  if (!net.online || session.rejoining) return false;
+  if (net.isGuest && (net.hostWeak || session.rtt > 800)) return true;
+  if (net.isHost) for (const id of session.players.keys()) if (id !== net.id && net.weak(net.connOf(id))) return true;
+  for (const r of remotes.map.values()) if (r.away && !r.s.dd) return true;   // a teammate stopped moving on our screen
+  return false;
+}
+let weakFor = 0, weakHintAt = -1e9;
 $('pauseRoom').addEventListener('click', e => {
   if (e.target.classList.contains('ilink')) e.target.select();
   if (e.target.closest('.micBtn')) { e.preventDefault(); voice.toggle(); return; }
   if (e.target.closest('.rejoinBtn')) { e.preventDefault(); session.rejoin(); return; }
+  if (e.target.closest('.syncBtn')) { e.preventDefault(); syncNow(); return; }
+  const rc = e.target.closest('.rcBtn');
+  if (rc) { e.preventDefault(); e.stopPropagation(); session.reconnectPlayer(rc.dataset.rc); return; }
   const k = e.target.closest('.kickBtn');
   if (k) {   // two taps: "Kick" -> "Sure?" -> kicked
     e.preventDefault(); e.stopPropagation();
@@ -442,10 +476,22 @@ function updateHUD(dt) {
     if (html !== lastScore) { lastScore = html; $('pauseScore').innerHTML = html; }
   }
   // connection quality
-  if (net.online && (pingT -= 0.12) <= 0) {
-    pingT = 1;
+  if (net.online && performance.now() - pingAt >= 1000) {   // real time: on a slow phone the game clock runs slow
+    pingAt = performance.now();
     const pe = $('ping');
-    if (pe) pe.textContent = net.isGuest ? (session.rtt ? `📶 ${Math.round(session.rtt)} ms` : '') : '';
+    if (pe) {
+      pe.textContent = net.isGuest ? (session.rtt ? `📶 ${Math.round(session.rtt)} ms` : '') : '';
+      pe.className = net.isGuest && session.rtt > 400 ? 'pbad' : net.isGuest && session.rtt > 180 ? 'pmid' : 'dim';
+    }
+    // weak connection: the 🔄 button pulses, and after a few seconds a hint says what to do (at most once a minute)
+    const weak = linkWeak(), now = pingAt;
+    $('syncBtn').classList.toggle('warn', weak);
+    weakFor = weak ? weakFor + 1 : 0;
+    if (weakFor >= 4 && now - weakHintAt > 60000) {
+      weakHintAt = now;
+      toast(net.isHost ? '📡 A teammate has a weak connection — press 🔄 Sync (top) if someone is missing or the voice breaks'
+        : '📡 Weak connection — press 🔄 Reconnect (top) if a teammate is missing or the voice breaks');
+    }
     for (const el of document.querySelectorAll('#pauseRoom [data-ping]')) {
       const r = remotes.map.get(el.dataset.ping), ms = el.dataset.ping === net.id ? Math.round(session.rtt) : r ? r.s.pg : 0;
       el.textContent = ms ? ` · ${ms} ms` : '';
@@ -623,7 +669,7 @@ function step(dt) {
   world.update(dt, focus, camera);
   flags.update(dt);
   minimap.update(dt, whereAmI(), mapMarkers());
-  session.tick(dt);
+  session.tick();
   if (started && (saveT += dt) > 45) { saveT = 0; saveNow(); }
   const tmode = drone.active ? 'drone' : player.mode === 'drive' ? 'drive' : (player.mode === 'seat' || player.mode === 'lie') ? 'seat' : 'foot';
   touch.setMode(tmode, combat.out ? 'gun' : !!inv.equippedItem());
@@ -636,7 +682,7 @@ function frame(now) {
   requestAnimationFrame(frame);
   if (paused || editor.open || designer.open) {   // nothing to animate behind the designers / pause menu: save the GPU
     if (requestRender) { renderer.render(scene, camera); requestRender = false; }
-    if ((editor.open || designer.open) && net.online) { const bdt = Math.min(0.05, (now - lastT) / 1000); session.tick(bdt); survival.background(bdt); }
+    if ((editor.open || designer.open) && net.online) { const bdt = Math.min(0.05, (now - lastT) / 1000); session.tick(); survival.background(bdt); }
     lastT = now; input.endFrame();
     return;
   }

@@ -265,6 +265,17 @@ body.touch #gunSlot .gunIco { width: 34px; }
 body.touch #micBtn { font-size: 11px; padding: 4px 8px; }
 body.touch #micBtn .k { display: none; }
 .trow2 #room { min-width: 0; }
+/* 🔄 reconnect / sync */
+#syncBtn { pointer-events: auto; cursor: pointer; flex: none; color: #eee; font: 700 13px system-ui, sans-serif; padding: 6px 10px; display: inline-flex; gap: 6px; align-items: center; white-space: nowrap; }
+#syncBtn.warn { background: rgba(150, 95, 20, .9); border-color: rgba(255, 200, 120, .7); animation: syncPulse 1.4s ease-in-out infinite; }
+@keyframes syncPulse { 50% { box-shadow: 0 0 0 4px rgba(255, 190, 90, .45); } }
+body.touch #syncBtn { font-size: 13px; padding: 4px 8px; }
+body.touch #syncBtn .lbl { display: none; }
+.syncBtn.wide { pointer-events: auto; cursor: pointer; border: 0; border-radius: 8px; padding: 9px 12px; font-weight: 800; background: #2f5a8a; color: #eee; }
+.syncBtn.wide:hover, .rcBtn:hover { filter: brightness(1.15); }
+.rcBtn { pointer-events: auto; cursor: pointer; border: 0; border-radius: 7px; padding: 5px 10px; font-weight: 800; font-size: 12px; background: #2f4a6a; color: #d7e8ff; }
+#ping.pmid { color: #f2c14e; opacity: 1; }
+#ping.pbad { color: #ff7a6a; opacity: 1; }
 
 /* ---------- build stages / giants / scoreboard ---------- */
 #buildUI .bleft canvas { background: #5f8f3c; cursor: grab; touch-action: none; }

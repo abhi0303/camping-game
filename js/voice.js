@@ -1,15 +1,26 @@
 import { audio } from './audio.js';
 
+const RING_MS = 9000;     // a call that brought no sound after this long is dropped and tried again
+const DEAD_MS = 7000;     // a link whose network path is down this long (or that brings no sound while the
+                          // other player's mic is on) is restarted
+const ASK_MS = 6000;      // the player who doesn't ring asks the other one to ring after this long without a link
+
 // Voice chat for co-op: every player has a direct audio link to every other player
 // (4 players = 6 small links, no server). You always hear your team; your mic stays off
 // until you turn it on (B, or the 🎤 button). While it's off the links carry silence.
+// In each pair only the player with the "smaller" id rings. The other one can't, so when it has no
+// working link it asks over the game connection ('vcall'): before, it waited forever and that
+// player never heard the other one again.
 export class Voice {
   constructor({ net, session, remotes, toast, onChange }) {
     this.net = net; this.session = session; this.remotes = remotes; this.toast = toast; this.onChange = onChange || (() => {});
-    this.peers = new Map();          // peer id -> { call, el, an, buf, until, talking, at }
+    this.peers = new Map();          // peer id -> { call, el, an, buf, until, talking, at, badAt, pkts, pktAt, micAt }
+    this.wait = new Map();           // peer id -> since when we have no link and wait for their call
     this.micOn = false; this.mic = null; this.silent = null; this.busy = false;
     this.me = null; this.meTalking = false;
+    this.mute = new Map();           // peer id -> last time a link was restarted for bringing no sound (max every 20 s)
     net.on('call', call => this._incoming(call));
+    net.on('vcall', (d, from) => this._asked(d, from));
     setInterval(() => this.sync(), 2000);
     setInterval(() => this._levels(), 120);
     // browsers only start playing audio after a tap / key press
@@ -69,19 +80,75 @@ export class Voice {
     }
   }
 
-  // keep one link to every player in the room
+  // keep one working link to every player in the room
   sync() {
     const net = this.net;
-    if (!net.connected || !net.peer || net.peer.destroyed) { if (this.peers.size) this.closeAll(); return; }
+    if (!net.connected || !net.peer || net.peer.destroyed) { if (this.peers.size) this.closeAll(); this.wait.clear(); return; }
     const me = net.id, ids = new Set([...this.session.players.keys()].filter(id => id !== me));
     for (const id of [...this.peers.keys()]) if (!ids.has(id)) this._close(id);
+    for (const id of [...this.wait.keys()]) if (!ids.has(id)) this.wait.delete(id);
     const now = performance.now();
     for (const id of ids) {
-      const p = this.peers.get(id);
-      if (p && (p.el || now - p.at < 9000)) continue;   // connected, or still ringing
-      if (me < id) this._call(id);                       // the "smaller" id rings, so each pair has exactly one link
-      else if (p && now - p.at > 9000) this._close(id, true);
+      let p = this.peers.get(id), broke = false;
+      if (p && this._dead(p, id, now)) { this._close(id); p = null; broke = true; }
+      if (p && (p.el || now - p.at < RING_MS)) { this.wait.delete(id); continue; }   // connected, or still ringing
+      if (p) { this._close(id, true); p = null; broke = true; }   // rang too long without sound
+      if (me < id) { this._call(id); continue; }          // the "smaller" id rings, so each pair has exactly one link
+      const since = this.wait.get(id);                    // the other player rings: ask them if their call doesn't come
+      if (broke || (since !== undefined && now - since > ASK_MS)) { this.wait.set(id, now); this._ask(id); }
+      else if (since === undefined) this.wait.set(id, now);
     }
+    this._stats();
+  }
+  // the 🔄 button: drop every voice link and make new ones right away
+  restart() {
+    this.closeAll(); this.wait.clear();
+    const net = this.net;
+    if (!net.connected || !net.peer || net.peer.destroyed) return;
+    const me = net.id, now = performance.now();
+    for (const id of this.session.players.keys()) {
+      if (id === me) continue;
+      if (me < id) this._call(id);
+      else { this._ask(id); this.wait.set(id, now); }
+    }
+  }
+  // is this link broken even though it never reported closing?
+  _dead(p, id, now) {
+    const pc = p.call && p.call.peerConnection, st = pc ? pc.iceConnectionState : 'closed';
+    if (st === 'failed' || st === 'closed') return true;
+    if (st === 'disconnected') { if (!p.badAt) p.badAt = now; if (now - p.badAt > DEAD_MS) return true; }
+    else p.badAt = 0;
+    // their mic is on, but no sound has arrived for a while: the link only works one way
+    const r = this.remotes.map.get(id), mic = !!(r && r.s && r.s.mc && !r.away);
+    if (!mic) { p.micAt = 0; return false; }
+    if (!p.micAt) p.micAt = now;
+    if (!p.el || now - p.micAt < DEAD_MS || now - (p.pktAt || p.at) < DEAD_MS) return false;
+    if (now - (this.mute.get(id) || -1e9) < 20000) return false;   // their mic may just send nothing: don't restart over and over
+    this.mute.set(id, now);
+    return true;
+  }
+  // count the sound packets that arrive on each link (what _dead looks at)
+  _stats() {
+    for (const p of this.peers.values()) {
+      const pc = p.call && p.call.peerConnection;
+      if (!pc || !p.el || p.statsBusy || !pc.getStats) continue;
+      p.statsBusy = true;
+      pc.getStats().then(rep => {
+        let n = 0;
+        rep.forEach(s => { if (s.type === 'inbound-rtp' && (s.kind || s.mediaType) === 'audio') n += s.packetsReceived || 0; });
+        if (n !== p.pkts) { p.pkts = n; p.pktAt = performance.now(); }
+      }).catch(() => {}).then(() => { p.statsBusy = false; });
+    }
+  }
+  // we can't ring this player (they ring us): ask them to, over the game connection
+  _ask(id) { if (this.net.connected) this.net.send('vcall', { to: id }); }
+  _asked(d, from) {
+    if (!d || d.to !== this.net.id || !from || from === this.net.id) return;
+    if (!this.net.connected || !this.net.peer || this.net.peer.destroyed || !this.session.players.has(from)) return;
+    const p = this.peers.get(from);
+    if (p && performance.now() - p.at < 4000) return;     // a fresh call to them is already on its way
+    this._close(from, true);
+    this._call(from);
   }
   _call(id) {
     const t = this._track();
@@ -99,10 +166,12 @@ export class Voice {
   _wire(id, call) {
     const old = this.peers.get(id);
     if (old && old.call !== call) this._close(id, true);
-    const p = { call, el: null, an: null, buf: null, until: 0, talking: false, at: performance.now() };
+    const p = { call, el: null, an: null, buf: null, until: 0, talking: false, at: performance.now(), badAt: 0, pkts: 0, pktAt: 0, micAt: 0 };
     this.peers.set(id, p);
+    this.wait.delete(id);
     call.on('stream', st => this._play(p, st));
-    const gone = () => { if (this.peers.get(id) === p) this._close(id); };
+    // the link closed: the player who rings does so at the next check; the other one asks for a call about a second later
+    const gone = () => { if (this.peers.get(id) === p) { this._close(id); this.wait.set(id, performance.now() - ASK_MS + 1000); } };
     call.on('close', gone); call.on('error', gone);
   }
   _play(p, st) {

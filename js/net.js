@@ -36,14 +36,24 @@ function tabId() {
 
 const GUEST_SILENT_MS = 20000;   // host drops a guest it hasn't heard from for this long
 const HOST_SILENT_MS = 15000;    // guest reconnects when the host went quiet this long
+const STUCK_MS = 10000;          // a link whose network path is down (or that can't send anything) this long is dead
+const BUSY_BYTES = 64 * 1024;    // a link with this much data waiting to go out is congested
+const BROKER_RETRY_MS = 4000;    // how often to retry the PeerJS server when we lost it
 const PART = 7000;               // PeerJS refuses JSON messages over ~16 KB: bigger ones go in parts
+// Snapshots that the next one replaces a moment later. On a congested link they are skipped instead
+// of queued: PeerJS queues up to 8 MB per link, so on a slow link queued snapshots made everything
+// arrive later and later (one player stopped seeing the others while the other side looked fine).
+const VOLATILE = new Set(['p', 'pp', 'rv', 'zs', 'gs', 'bridgeSnap', 'surv', 'world']);
+// bytes waiting to go out on a link (WebRTC's queue + PeerJS's own queue)
+const backlog = c => ((c.dataChannel && c.dataChannel.bufferedAmount) || 0) + (c.bufferSize || 0) * 4096;
+const iceState = c => (c.peerConnection && c.peerConnection.iceConnectionState) || '';
 
 export class Net {
   constructor() {
     this.mode = 'solo';          // solo | host | guest | rejoin (guest trying to get back in)
     this.peer = null; this.id = 'local'; this.code = '';
     this.conns = []; this.hostConn = null; this.handlers = {};
-    this.cid = tabId(); this.hostSeen = 0; this.partSeq = 0; this.parts = new Map();
+    this.cid = tabId(); this.hostSeen = 0; this.partSeq = 0; this.parts = new Map(); this.brokerTry = 0;
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) return;
       const p = this.peer;
@@ -77,7 +87,7 @@ export class Net {
       });
       peer.on('call', call => this._emit('call', call));
       peer.on('error', e => { if (!opened) reject(e); else this._emit('error', e); });
-      peer.on('disconnected', () => { try { if (!peer.destroyed) peer.reconnect(); } catch (e) { /* ignore */ } });
+      peer.on('disconnected', () => this._brokerLost());
     });
   }
 
@@ -99,7 +109,7 @@ export class Net {
         if (!done) { const gone = e && e.type === 'peer-unavailable'; const err = gone ? new Error('No room with that code (the host may have left).') : e; if (gone) err.fatal = true; fail(err); }
         else this._emit('error', e);
       });
-      peer.on('disconnected', () => { try { if (!peer.destroyed && this.peer === peer) peer.reconnect(); } catch (e) { /* ignore */ } });
+      peer.on('disconnected', () => { if (this.peer === peer) this._brokerLost(); });
     });
   }
 
@@ -111,8 +121,12 @@ export class Net {
         if (c._gone) return;
         c._seen = performance.now();
         if (raw.t === 'bye') { this._drop(c); return; }
+        if (raw.t === 'rc') { this._drop(c, false, 'reconnect'); return; }   // they pressed Reconnect: a fresh link comes next
         if (!c._ok && raw.t !== 'hello') return;               // not let in yet (or refused)
-        if (!raw.h) for (const o of this.conns) if (o !== c && o.open && o._ok && !o._gone) o.send(raw);   // relay to the other guests
+        if (!raw.h) {                                          // relay to the other guests
+          const vol = VOLATILE.has(raw.t);
+          for (const o of this.conns) if (o !== c && o.open && o._ok && !o._gone && !(vol && backlog(o) > BUSY_BYTES)) o.send(raw);
+        }
         if (raw.t === '_p' && !(msg = this._unpart(raw, c.peer))) return;
         this._emit(msg.t, msg.d, c.peer);
       } else {
@@ -154,11 +168,11 @@ export class Net {
   connOf(peerId) { return this.conns.find(x => x.peer === peerId) || null; }
   // host: this guest was let in (only accepted guests get the room's updates)
   accept(peerId) { const c = this.connOf(peerId); if (c) c._ok = true; }
-  dropPeer(peerId, silent = true, delay = 0) {
+  dropPeer(peerId, silent = true, delay = 0, why = 'left') {
     const c = this.connOf(peerId);
     if (!c) return;
-    if (delay) { c._gone = true; setTimeout(() => { c._gone = false; this._drop(c, silent); }, delay); }   // let a last message go out first
-    else this._drop(c, silent);
+    if (delay) { c._gone = true; setTimeout(() => { c._gone = false; this._drop(c, silent, why); }, delay); }   // let a last message go out first
+    else this._drop(c, silent, why);
   }
   // guest: the link to the host is gone ('bye' = host closed the room; otherwise the game tries to reconnect)
   _lost(reason) {
@@ -169,6 +183,21 @@ export class Net {
     try { if (p) p.destroy(); } catch (e) { /* ignore */ }
     this._emit('lost', reason);
   }
+  // guest: the Reconnect button. Tell the host (so it frees our old copy right away), then drop the
+  // link; the session joins the room again and gets a fresh copy of everything.
+  reconnectNow() {
+    if (this.mode !== 'guest') return false;
+    try { if (this.hostConn && this.hostConn.open) this.hostConn.send({ t: 'rc', d: {}, f: this.id, h: 1 }); } catch (e) { /* ignore */ }
+    setTimeout(() => this._lost('manual'), 150);
+    return true;
+  }
+  // is this link in trouble? (nothing heard for a few seconds, network path down, or a send queue piling up)
+  weak(c) {
+    if (!c || !c.open) return true;
+    const st = iceState(c), seen = this.isHost ? c._seen : this.hostSeen;
+    return performance.now() - (seen || 0) > 4000 || st === 'disconnected' || st === 'failed' || backlog(c) > BUSY_BYTES;
+  }
+  get hostWeak() { return this.mode === 'guest' && this.weak(this.hostConn); }
   // leave on purpose (tab closing, kicked, join refused): say bye, then shut everything
   leave() {
     if (!this.online && !this.peer) return;
@@ -183,16 +212,39 @@ export class Net {
   // heartbeat watchdog: silent peers are gone even if WebRTC never reports it
   _watch() {
     const now = performance.now();
-    if (this.isHost) { for (const c of [...this.conns]) if (!c._gone && now - (c._seen || 0) > GUEST_SILENT_MS) this._drop(c, false, 'timeout'); }
-    else if (this.mode === 'guest' && now - this.hostSeen > HOST_SILENT_MS) this._lost('timeout');
+    if (this.isHost) {
+      for (const c of [...this.conns]) if (!c._gone && (now - (c._seen || 0) > GUEST_SILENT_MS || this._stuck(c, now))) this._drop(c, false, 'timeout');
+    } else if (this.mode === 'guest' && (now - this.hostSeen > HOST_SILENT_MS || this._stuck(this.hostConn, now))) this._lost('timeout');
+    // the PeerJS server link is needed to reconnect and to start voice calls: keep retrying it
+    // (PeerJS tries only once, so one failed try used to leave a player unreachable for good)
+    const p = this.peer;
+    if (p && p.disconnected && !p.destroyed && now - this.brokerTry > BROKER_RETRY_MS) {
+      this.brokerTry = now;
+      try { p.reconnect(); } catch (e) { /* ignore */ }
+    }
     for (const [k, e] of this.parts) if (now - e.t > 20000) this.parts.delete(k);
+  }
+  _brokerLost() { this.brokerTry = performance.now() - BROKER_RETRY_MS + 1000; }   // retry in about a second
+  // the link's network path has been down, or its send queue full, for a long time (data still
+  // trickling in or not, nothing useful gets through): treat it as lost so a fresh link is made
+  _stuck(c, now) {
+    if (!c) return false;
+    const st = iceState(c);
+    if (st === 'disconnected' || st === 'failed' || backlog(c) > BUSY_BYTES) { if (!c._badAt) c._badAt = now; }
+    else c._badAt = 0;
+    return !!c._badAt && now - c._badAt > STUCK_MS;
   }
 
   // host: to every guest · guest: to the host (relayed to the others unless hostOnly)
   send(type, data, hostOnly = false) {
-    const out = this._pack({ t: type, d: data, f: this.id, h: hostOnly ? 1 : 0 });
-    if (this.isHost) { for (const c of this.conns) if (c.open && !c._gone && c._ok) for (const m of out) c.send(m); }
-    else if (this.hostConn && this.hostConn.open) for (const m of out) this.hostConn.send(m);
+    const out = this._pack({ t: type, d: data, f: this.id, h: hostOnly ? 1 : 0 }), vol = VOLATILE.has(type);
+    if (this.isHost) { for (const c of this.conns) if (c.open && !c._gone && c._ok) this._out(c, out, vol); }
+    else if (this.hostConn && this.hostConn.open) this._out(this.hostConn, out, vol);
+  }
+  // a snapshot on a congested link is skipped (the next one replaces it); everything else always goes
+  _out(c, msgs, vol) {
+    if (vol && backlog(c) > BUSY_BYTES) return;
+    for (const m of msgs) c.send(m);
   }
   sendTo(peerId, type, data) {
     const c = this.connOf(peerId);

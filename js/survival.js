@@ -132,10 +132,14 @@ export class Survival {
     if (!othersOnly) this.g.toast(text);
     if (this.net.online) this.net.send('msg', text);
   }
-  _net(dt) {
+  _net() {
     if (!this.net.isHost) return;
+    // real time, not the game's capped dt (slow phones would send zombies and state far less often)
+    const now = performance.now(), dt = Math.min(1, Math.max(0, (now - (this.netAt || now)) / 1000));
+    this.netAt = now;
     this.sendT += dt; this.zsT += dt; this.gsT += dt;
-    if (this.dirty || this.sendT > 1) { this.sendT = 0; this.dirty = false; this.net.send('surv', this.state()); }
+    // at most ~7 a second: during a fight every bite and kill marks it dirty, which used to send it every frame
+    if ((this.dirty && this.sendT >= 0.15) || this.sendT > 1) { this.sendT = 0; this.dirty = false; this.net.send('surv', this.state()); }
     if (this.zsT >= 0.1) {
       this.zsT = 0;
       const n = this.g.zombies.count;
@@ -604,7 +608,7 @@ export class Survival {
     g.zombies.render(dt, g.camera.position);
     g.giants.render(dt);
     this._local(dt, input);
-    this._net(dt);
+    this._net();
     this._hud(dt);
   }
   // host with the game loop asleep (background tab / designer open): keep things going for everyone
@@ -618,7 +622,7 @@ export class Survival {
       g.giants.stepBoulders(h, g.structures, (b, W, p) => this._boulderHit(b, W, p));
     }
     this._checkWipe();
-    this._net(dt);
+    this._net();
   }
 
   _local(dt, input) {
