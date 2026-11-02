@@ -22,8 +22,10 @@ export class Session {
     this.recent = new Map();          // host: tab id -> { c: slot, t } of players who dropped (they get their slot back)
     this.pending = null;              // guest: waiting for the host to accept us
     this.myName = 'Player'; this.mySlot = 0; this.lastCode = ''; this.rejoining = false; this.rtt = 0; this.joined = false;
-    this.tP = 0; this.tR = 0; this.tW = 0; this.tB = 0; this.tPing = 0; this.fullT = 0; this.dirty = true;
+    this.myIds = [];                  // guest: the ids this tab had in the room (so the host can drop our old copy)
+    this.tP = 0; this.tR = 0; this.tW = 0; this.tB = 0; this.tPing = 0; this.fullT = 0; this.fullR = 0; this.fullB = 0; this.dirty = true;
     this.sentP = new Map(); this.sentMe = '';     // last avatar states sent (only changes go out, plus a full refresh each second)
+    this.sentR = new Map(); this.sentB = '';      // same for the RVs and the bridge
     this.lastTick = performance.now();
     this._wire();
     // Background tabs stop requestAnimationFrame (the game loop). Keep the connection alive and
@@ -57,6 +59,8 @@ export class Session {
   }
   async _joinOnce(code, timeout) {
     await this.net.join(code, timeout);
+    const re = this.myIds.slice(-4);              // our earlier ids in this room: the host drops those copies
+    this.myIds.push(this.net.id);
     this._roles();
     return new Promise((resolve, reject) => {
       const t = setTimeout(() => done(new Error('The host did not answer. Try again.')), 15000);
@@ -67,16 +71,16 @@ export class Session {
         reject(err);
       };
       this.pending = done;
-      this.net.send('hello', { n: this.myName, cid: this.net.cid }, true);
+      this.net.send('hello', { n: this.myName, cid: this.net.cid, re }, true);
     });
   }
   // the link to the host dropped (phone app switch, Wi-Fi hiccup...): get back into the same room by
   // ourselves. Meanwhile you keep your place; the others see you again within a few seconds.
-  async _reconnect() {
+  async _reconnect(manual = false) {
     if (this.rejoining) return;
     const g = this.g, code = this.lastCode, t0 = performance.now();
     this.rejoining = true; this.net.mode = 'rejoin';
-    g.toast('📡 Connection dropped — reconnecting to the room…');
+    g.toast(manual ? '🔄 Reconnecting to the room and syncing everything…' : '📡 Connection dropped — reconnecting to the room…');
     g.onRoster();
     let tries = 0, why = 'the host did not answer';
     while (performance.now() - t0 < REJOIN_FOR) {
@@ -85,7 +89,7 @@ export class Session {
       try {
         await this._joinOnce(code, 12000);
         this.rejoining = false;
-        g.toast('✅ Reconnected — you are back in the room');
+        g.toast(manual ? '✅ Reconnected — players, world and voice are synced again' : '✅ Reconnected — you are back in the room');
         g.onRoster();
         return;
       } catch (e) {
@@ -103,8 +107,45 @@ export class Session {
     if (this.net.online || !this.lastCode) return;
     this.net.mode = 'rejoin'; this.rejoining = false;
     this._roles();
-    await this._reconnect();
+    await this._reconnect(true);
   }
+  // The 🔄 Reconnect button: use it when a teammate is missing / frozen or the voice breaks.
+  // Guest: drop the link and join the room again (fresh copy of the world and every player, new voice links).
+  // Host: the room can't reconnect to itself, so send everyone a fresh copy, restart the voice links,
+  // and make players with a weak link reconnect.
+  reconnect() {
+    const net = this.net, g = this.g;
+    if (net.isHost) { this.resync(); return; }
+    if (this.rejoining || this.pending) { g.toast('📡 Already reconnecting…'); return; }
+    if (net.mode === 'guest') { net.reconnectNow(); return; }
+    if (this.lastCode && this.joined) this.rejoin();          // playing solo after a failed reconnect
+  }
+  resync() {
+    const net = this.net, g = this.g;
+    if (!net.isHost) return;
+    let weak = 0;
+    for (const id of [...this.players.keys()]) {
+      if (id === net.id) continue;
+      const c = net.connOf(id);
+      if (!c) { weak++; this._drop(id, false, 'timeout'); continue; }
+      if (net.weak(c)) { weak++; this.reconnectPlayer(id, true); }
+    }
+    this._fresh();
+    net.send('resync', {});                 // guests restart their voice links and resend their avatar
+    g.onResync && g.onResync();             // fresh game state + restart the voice links here
+    g.toast(weak ? `🔄 Synced — ${weak} player${weak > 1 ? 's' : ''} with a weak connection will reconnect` : '🔄 Synced — everyone got a fresh copy and the voice links restarted');
+  }
+  // host: ask one guest to reconnect (pause menu). If their link is too broken to get the message,
+  // the host drops it after a moment and their game reconnects by itself.
+  reconnectPlayer(id, quiet = false) {
+    const net = this.net, p = this.players.get(id);
+    if (!net.isHost || !p || id === net.id) return;
+    net.sendTo(id, 'resync', { rc: 1 });
+    setTimeout(() => { if (this.players.has(id) && net.connOf(id)) { net.dropPeer(id, false, 0, 'reconnect'); } }, 2500);
+    if (!quiet) this.g.toast(`🔄 Asked ${p.n} to reconnect`);
+  }
+  // next updates carry everything again (not just what changed)
+  _fresh() { this.sentP.clear(); this.sentR.clear(); this.sentB = ''; this.sentMe = ''; this.fullT = 1; this.dirty = true; }
   _roles() {
     const { net } = this, g = this.g;
     g.materials.net = net; g.obstacles.net = net;
@@ -158,7 +199,7 @@ export class Session {
     for (const r of g.rvs) if (r.owner === id) r.owner = this.net.id;
     g.onPlayerGone && g.onPlayerGone(id);
     this.net.send('roster', this.roster());
-    if (!quiet) g.toast(why === 'timeout' ? `📡 ${p.n} lost connection (they will reconnect automatically)` : `👋 ${p.n} left`);
+    if (!quiet) g.toast(why === 'timeout' ? `📡 ${p.n} lost connection (they will reconnect automatically)` : why === 'reconnect' ? `🔄 ${p.n} is reconnecting…` : `👋 ${p.n} left`);
     g.onRoster();
   }
   kick(id) {
@@ -177,12 +218,13 @@ export class Session {
       if (!net.isHost) return;
       let cid = String(d.cid || from);
       if (this.banned.has(cid)) { net.sendTo(from, 'kick', { r: 'ban' }); net.dropPeer(from, true, 400); return; }
-      // the same tab coming back (refresh / reconnect): throw away its old, silent copy first.
-      // If that copy is still alive it's really another tab with a copied id: let both play.
+      // the same tab coming back (refresh / reconnect): throw away its old copy first. The tab tells us
+      // its old ids (re); otherwise an old copy that's still alive is really another tab with a copied id: let both play.
+      const re = new Set(Array.isArray(d.re) ? d.re.map(String) : []);
       for (const [id, p] of [...this.players]) {
         if (id === from || p.cid !== cid) continue;
         const c = net.connOf(id);
-        if (!c || !c.open || performance.now() - (c._seen || 0) > 2500) { net.dropPeer(id, true); this._drop(id, true); }
+        if (re.has(id) || !c || !c.open || performance.now() - (c._seen || 0) > 2500) { net.dropPeer(id, true); this._drop(id, true); }
         else cid = cid + '~' + from.slice(0, 6);
       }
       let me = this.players.get(from);
@@ -221,7 +263,7 @@ export class Session {
         g.player.spawnBesideRV(d.slot % PER_RV);          // teammates stand side by side, not on top of each other
         g.toast(`✅ Joined! Up to ${PER_RV} players ride together in the RV`);
       } else if (drivingRV) this.claimRV(drivingRV);     // reconnected while driving: keep the wheel
-      this.joined = true; this.sentMe = '';
+      this.joined = true; this._fresh();
       this._send(1, true);
       g.onRoster();
       if (this.pending) this.pending();
@@ -280,7 +322,14 @@ export class Session {
         g.toast('⚠ The host closed the room — you are playing solo now');
         return;
       }
-      this._reconnect();
+      this._reconnect(reason === 'manual');
+    });
+    // host pressed Sync: rc = "please reconnect" (your link looked weak), otherwise just refresh voice + avatar
+    net.on('resync', d => {
+      if (!net.isGuest) return;
+      if (d && d.rc) { g.toast('🔄 The host asked your game to reconnect'); this.reconnect(); return; }
+      this._fresh();
+      g.onResync && g.onResync();
     });
     // connection quality (shown in the room bar)
     net.on('ping', (d, from) => { if (net.isHost) net.sendTo(from, 'pong', d); });
@@ -299,11 +348,17 @@ export class Session {
   colorOf(id) { const p = this.players.get(id); return PLAYER_COLORS[(p ? p.c : 0) % PLAYER_COLORS.length].css; }
   nameOf(id) { const p = this.players.get(id); return p ? p.n : 'Player'; }
 
-  tick(dt) { this.lastTick = performance.now(); this._send(dt, false); }
+  // network timers run on real time: the game loop caps its dt at 0.05 s, so on a slow phone (5 fps)
+  // the game dt would make everything go out 4x less often and teammates would see you freeze
+  tick() {
+    const now = performance.now(), dt = Math.min(1, Math.max(0, (now - this.lastTick) / 1000));
+    this.lastTick = now;
+    this._send(dt, false);
+  }
   _send(dt, force) {
     if (!this.net.connected) return;
     const net = this.net, g = this.g;
-    this.tP += dt; this.tR += dt; this.tW += dt; this.tB += dt; this.fullT += dt; this.tPing += dt;
+    this.tP += dt; this.tR += dt; this.tW += dt; this.tB += dt; this.fullT += dt; this.fullR += dt; this.fullB += dt; this.tPing += dt;
     if (force) this.dirty = true;
     if (this.tP >= 1 / SEND_HZ) {
       this.tP = 0;
@@ -324,10 +379,24 @@ export class Session {
       }
     }
     if (net.isGuest && this.tPing >= 2) { this.tPing = 0; net.send('ping', { t: performance.now() }, true); }
-    if (this.tR >= 1 / 15) { this.tR = 0; for (const r of g.rvs) if (r.isLocal(net)) { if (!r.owner) r.owner = net.id; net.send('rv', r.netState()); } }
+    // RVs and the bridge: only when they moved, plus a refresh every second or two (a parked RV sent 15 updates a second before)
+    if (this.tR >= 1 / 15) {
+      this.tR = 0;
+      const full = this.fullR >= 1;
+      if (full) this.fullR = 0;
+      for (const r of g.rvs) if (r.isLocal(net)) {
+        if (!r.owner) r.owner = net.id;
+        const s = r.netState(), js = JSON.stringify(s);
+        if (full || this.sentR.get(r.index) !== js) { this.sentR.set(r.index, js); net.send('rv', s); }
+      }
+    }
     if (net.isHost) {
-      if (this.dirty || this.tW > 2) { this.tW = 0; this.dirty = false; net.send('world', this.worldState()); }
-      if (g.bridgeWorld.sim && this.tB >= 0.1) { this.tB = 0; net.send('bridgeSnap', g.bridgeWorld.snapshot()); }
+      if ((this.dirty && this.tW >= 0.25) || this.tW > 2) { this.tW = 0; this.dirty = false; net.send('world', this.worldState()); }
+      if (g.bridgeWorld.sim && this.tB >= 0.1) {
+        this.tB = 0;
+        const snap = g.bridgeWorld.snapshot(), js = JSON.stringify(snap);
+        if (js !== this.sentB || this.fullB >= 2) { this.sentB = js; this.fullB = 0; net.send('bridgeSnap', snap); }
+      }
     }
   }
 }
