@@ -447,12 +447,13 @@ export class Survival {
     }
     // team list (co-op)
     if (!this.net.online) { if (this.teamKey) { this.teamKey = ''; u.team.classList.add('hidden'); } return; }
-    const rows = [{ n: 'You', c: g.session.colorOf(this.net.id), hp: p.hp, dn: p.downed, sf: this.safeRV(), a: p.anim.a }];
-    g.remotes.map.forEach(r => rows.push({ n: r.s.n || 'Player', c: r.color, hp: r.s.hp ?? 100, dn: !!r.s.dn, sf: r.s.sf ?? -1, a: r.s.a, away: r.away }));
+    const vc = g.voice;
+    const rows = [{ n: 'You', c: g.session.colorOf(this.net.id), hp: p.hp, dn: p.downed, sf: this.safeRV(), a: p.anim.a, v: vc && vc.micOn ? (vc.meTalking ? '🔊' : '🎙') : '' }];
+    g.remotes.map.forEach(r => rows.push({ n: r.s.n || 'Player', c: r.color, hp: r.s.hp ?? 100, dn: !!r.s.dn, sf: r.s.sf ?? -1, a: r.s.a, away: r.away, v: r.talking ? '🔊' : r.s.mc ? '🎙' : '' }));
     const html = rows.map(r => {
       const k = Math.max(0, Math.min(100, Math.round(r.hp)));
       const st = r.dn ? '⬇' : r.a === 'drive' ? '🚐' : r.sf >= 0 ? '🛡' : '';
-      return `<div class="trow${r.dn ? ' dn' : ''}${r.away ? ' away' : ''}"><i style="background:${r.c}"></i><span>${esc(r.n)}</span><b><u class="${k > 50 ? '' : k > 25 ? 'mid' : 'low'}" style="width:${k}%"></u></b><em>${st}</em></div>`;
+      return `<div class="trow${r.dn ? ' dn' : ''}${r.away ? ' away' : ''}"><i style="background:${r.c}"></i><span>${esc(r.n)}${r.v ? ' <small>' + r.v + '</small>' : ''}</span><b><u class="${k > 50 ? '' : k > 25 ? 'mid' : 'low'}" style="width:${k}%"></u></b><em>${st}</em></div>`;
     }).join('');
     if (html !== this.teamKey) { this.teamKey = html; u.team.innerHTML = html; u.team.classList.remove('hidden'); }
   }

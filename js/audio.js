@@ -3,6 +3,7 @@ let ctx = null, master = null, eng = null, hornNodes = null;
 
 export const audio = {
   muted: false,
+  context() { return ctx; },
   init() {
     if (ctx) { if (ctx.state === 'suspended') ctx.resume(); return; }
     try {

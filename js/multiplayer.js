@@ -5,6 +5,8 @@ export const MAX_PLAYERS = 4;   // a room holds 4 players; the 5th gets "room fu
 export const PER_RV = 4;        // ...and all 4 travel together in one RV
 const MAX_RVS = 1;
 const SEND_HZ = 10;
+const REJOIN_FOR = 90000;        // a dropped guest keeps trying to get back in for this long
+const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // Co-op session glue: who's here, and keeping the shared world in sync.
 // The host is the authority for shared things (road blocks, bridge, materials, crates, zombies, day/night).
@@ -17,9 +19,11 @@ export class Session {
     this.players = new Map();         // id -> { n: name, c: slot, cid: tab id }
     this.states = new Map();          // host: id -> latest avatar state of each guest
     this.banned = new Set();          // host: tab ids kicked from this room
+    this.recent = new Map();          // host: tab id -> { c: slot, t } of players who dropped (they get their slot back)
     this.pending = null;              // guest: waiting for the host to accept us
-    this.myName = 'Player'; this.mySlot = 0;
-    this.tP = 0; this.tR = 0; this.tW = 0; this.tB = 0; this.dirty = true;
+    this.myName = 'Player'; this.mySlot = 0; this.lastCode = ''; this.rejoining = false; this.rtt = 0; this.joined = false;
+    this.tP = 0; this.tR = 0; this.tW = 0; this.tB = 0; this.tPing = 0; this.fullT = 0; this.dirty = true;
+    this.sentP = new Map(); this.sentMe = '';     // last avatar states sent (only changes go out, plus a full refresh each second)
     this.lastTick = performance.now();
     this._wire();
     // Background tabs stop requestAnimationFrame (the game loop). Keep the connection alive and
@@ -47,20 +51,59 @@ export class Session {
   }
   // resolves once the host has let us in; rejects with a readable reason (room full, removed, no answer)
   async join(code, name) {
-    this.myName = name;
-    await this.net.join(code);
+    this.myName = name; this.lastCode = code; this.joined = false;
+    try { await this._joinOnce(code, 20000); }
+    catch (e) { this._toSolo(); throw e; }
+  }
+  async _joinOnce(code, timeout) {
+    await this.net.join(code, timeout);
     this._roles();
     return new Promise((resolve, reject) => {
       const t = setTimeout(() => done(new Error('The host did not answer. Try again.')), 15000);
       const done = err => {
         clearTimeout(t); this.pending = null;
         if (!err) { resolve(); return; }
-        this.net.leave(); this._toSolo();
+        this.net.leave();
         reject(err);
       };
       this.pending = done;
-      this.net.send('hello', { n: name, cid: this.net.cid }, true);
+      this.net.send('hello', { n: this.myName, cid: this.net.cid }, true);
     });
+  }
+  // the link to the host dropped (phone app switch, Wi-Fi hiccup...): get back into the same room by
+  // ourselves. Meanwhile you keep your place; the others see you again within a few seconds.
+  async _reconnect() {
+    if (this.rejoining) return;
+    const g = this.g, code = this.lastCode, t0 = performance.now();
+    this.rejoining = true; this.net.mode = 'rejoin';
+    g.toast('📡 Connection dropped — reconnecting to the room…');
+    g.onRoster();
+    let tries = 0, why = 'the host did not answer';
+    while (performance.now() - t0 < REJOIN_FOR) {
+      tries++;
+      this.net.mode = 'rejoin';
+      try {
+        await this._joinOnce(code, 12000);
+        this.rejoining = false;
+        g.toast('✅ Reconnected — you are back in the room');
+        g.onRoster();
+        return;
+      } catch (e) {
+        why = e.message || String(e);
+        if (e.fatal) break;
+        await sleep(Math.min(5000, 1200 * tries));
+      }
+    }
+    this.rejoining = false; this.net.mode = 'solo';
+    this._toSolo();
+    g.toast(`⚠ Could not get back into room ${code} (${why}). Playing solo — Esc → "Rejoin room" to try again`);
+  }
+  // pause menu button after a failed reconnect
+  async rejoin() {
+    if (this.net.online || !this.lastCode) return;
+    this.net.mode = 'rejoin'; this.rejoining = false;
+    this._roles();
+    await this._reconnect();
   }
   _roles() {
     const { net } = this, g = this.g;
@@ -103,18 +146,19 @@ export class Session {
     for (const [id, s] of this.states) if (this.players.has(id)) all[id] = s;
     return all;
   }
-  myState() { return { ...this.g.player.netState(), n: this.myName, c: this.mySlot }; }
+  myState() { return { ...this.g.player.netState(), n: this.myName, c: this.mySlot, pg: Math.round(this.rtt) }; }
 
   // host: a player is gone (left, refreshed, timed out, kicked)
-  _drop(id, quiet = false) {
+  _drop(id, quiet = false, why = 'left') {
     const g = this.g, p = this.players.get(id);
     if (!p) return;
-    this.players.delete(id); this.states.delete(id);
+    this.players.delete(id); this.states.delete(id); this.sentP.delete(id);
+    if (why !== 'kick') this.recent.set(p.cid, { c: p.c, t: performance.now() });
     g.remotes.remove(id);
     for (const r of g.rvs) if (r.owner === id) r.owner = this.net.id;
     g.onPlayerGone && g.onPlayerGone(id);
     this.net.send('roster', this.roster());
-    if (!quiet) g.toast(`👋 ${p.n} left`);
+    if (!quiet) g.toast(why === 'timeout' ? `📡 ${p.n} lost connection (they will reconnect automatically)` : `👋 ${p.n} left`);
     g.onRoster();
   }
   kick(id) {
@@ -123,7 +167,7 @@ export class Session {
     this.banned.add(p.cid);
     this.net.sendTo(id, 'kick', { r: 'kick' });
     this.net.dropPeer(id, true, 400);
-    this._drop(id, true);
+    this._drop(id, true, 'kick');
     this.g.toast(`🚫 ${p.n} was removed from the room`);
   }
 
@@ -131,18 +175,25 @@ export class Session {
     const net = this.net, g = this.g;
     net.on('hello', (d, from) => {                       // host: someone wants in
       if (!net.isHost) return;
-      const cid = String(d.cid || from);
+      let cid = String(d.cid || from);
       if (this.banned.has(cid)) { net.sendTo(from, 'kick', { r: 'ban' }); net.dropPeer(from, true, 400); return; }
-      // the same tab coming back after a refresh: throw away its old copy first
-      for (const [id, p] of [...this.players]) if (id !== from && p.cid === cid) { net.dropPeer(id, true); this._drop(id, true); }
+      // the same tab coming back (refresh / reconnect): throw away its old, silent copy first.
+      // If that copy is still alive it's really another tab with a copied id: let both play.
+      for (const [id, p] of [...this.players]) {
+        if (id === from || p.cid !== cid) continue;
+        const c = net.connOf(id);
+        if (!c || !c.open || performance.now() - (c._seen || 0) > 2500) { net.dropPeer(id, true); this._drop(id, true); }
+        else cid = cid + '~' + from.slice(0, 6);
+      }
       let me = this.players.get(from);
       if (!me) {
-        const used = new Set([...this.players.values()].map(p => p.c));
-        let slot = 1; while (used.has(slot)) slot++;
+        const used = new Set([...this.players.values()].map(p => p.c)), back = this.recent.get(cid);
+        let slot = back && !used.has(back.c) ? back.c : 1;
+        while (used.has(slot)) slot++;
         if (slot >= MAX_PLAYERS) { net.sendTo(from, 'full', { max: MAX_PLAYERS }); net.dropPeer(from, true, 400); return; }
         me = { n: (d.n || 'Player').slice(0, 16), c: slot, cid };
-        this.players.set(from, me);
-        g.toast(`👋 ${me.n} joined`);
+        this.players.set(from, me); this.recent.delete(cid);
+        g.toast(back ? `🔄 ${me.n} is back` : `👋 ${me.n} joined`);
       }
       this._ensureRVs(this.rvFor(me.c) + 1);
       net.accept(from);
@@ -151,27 +202,34 @@ export class Session {
       net.send('roster', this.roster());
       g.onRoster();
     });
-    net.on('welcome', d => {                             // guest: we're in
+    net.on('welcome', d => {                             // guest: we're in (or back in)
+      const again = this.joined;
       this.mySlot = d.slot;
       g.player.char.setColors(PLAYER_COLORS[d.slot % PLAYER_COLORS.length]);   // you wear your slot's outfit too
       this.applyWorld(d.world);
-      d.rvs.forEach(s => { this._ensureRVs(s.i + 1); g.rvs[s.i].applyNet(s); });
+      const drivingRV = g.player.mode === 'drive' ? g.player.rv : null;
+      d.rvs.forEach(s => { this._ensureRVs(s.i + 1); if (g.rvs[s.i] !== drivingRV) g.rvs[s.i].applyNet(s); });
       d.st.forEach(s => g.inv.applyStorage(s.rv, s.id, s.s));
       (d.dep || []).forEach(x => g.gear.addRemote(x));
       this.players = new Map(d.roster.map(p => [p.id, { n: p.n, c: p.c }]));
+      for (const id of [...g.remotes.map.keys()]) if (!this.players.has(id)) { g.remotes.remove(id); g.onPlayerGone && g.onPlayerGone(id); }
       this._applyStates(d.ps);
       if (d.sv && g.applySurvival) g.applySurvival(d.sv);
-      g.player.rv = g.rvs[this.rvFor(d.slot)];
-      g.player.spawnBesideRV(d.slot % PER_RV);          // teammates stand side by side, not on top of each other
+      if (!again) {
+        g.player.rv = g.rvs[this.rvFor(d.slot)];
+        g.player.spawnBesideRV(d.slot % PER_RV);          // teammates stand side by side, not on top of each other
+        g.toast(`✅ Joined! Up to ${PER_RV} players ride together in the RV`);
+      } else if (drivingRV) this.claimRV(drivingRV);     // reconnected while driving: keep the wheel
+      this.joined = true; this.sentMe = '';
       this._send(1, true);
-      g.toast(`✅ Joined! Up to ${PER_RV} players ride together in the RV`);
       g.onRoster();
       if (this.pending) this.pending();
     });
-    net.on('full', d => { if (this.pending) this.pending(new Error(`That room is full (${(d && d.max) || MAX_PLAYERS} players max).`)); });
+    net.on('full', d => { if (this.pending) { const e = new Error(`That room is full (${(d && d.max) || MAX_PLAYERS} players max).`); e.fatal = true; this.pending(e); } });
     net.on('kick', d => {
       const msg = d && d.r === 'ban' ? 'The host removed you from this room.' : 'You were removed from the room by the host.';
-      if (this.pending) { this.pending(new Error(msg)); return; }
+      if (this.pending && !this.joined) { const e = new Error(msg); e.fatal = true; this.pending(e); return; }
+      if (this.pending) this.pending(Object.assign(new Error(msg), { fatal: true }));
       this.net.leave(); this._toSolo();
       g.onKicked && g.onKicked(msg);
     });
@@ -213,12 +271,19 @@ export class Session {
     net.on('storage', d => g.inv.applyStorage(d.rv, d.id, d.s));
     net.on('dep', d => g.gear.addRemote(d));
     net.on('undep', d => g.gear.removeRemote(d.id));
-    net.on('leave', (d, from) => this._drop(from));
-    net.on('lost', () => {
+    net.on('leave', (why, from) => this._drop(from, false, why));
+    net.on('lost', reason => {
       if (this.pending) { this.pending(new Error('Lost the connection to the room.')); return; }
-      this._toSolo();
-      g.toast('⚠ The host left or the connection dropped — you are playing solo now');
+      if (reason === 'bye' || !this.lastCode) {
+        this._toSolo();
+        g.toast('⚠ The host closed the room — you are playing solo now');
+        return;
+      }
+      this._reconnect();
     });
+    // connection quality (shown in the room bar)
+    net.on('ping', (d, from) => { if (net.isHost) net.sendTo(from, 'pong', d); });
+    net.on('pong', d => { const r = performance.now() - d.t; this.rtt = this.rtt ? this.rtt * 0.7 + r * 0.3 : r; });
   }
   _applyStates(all) {
     const g = this.g;
@@ -235,15 +300,29 @@ export class Session {
 
   tick(dt) { this.lastTick = performance.now(); this._send(dt, false); }
   _send(dt, force) {
-    if (!this.online) return;
+    if (!this.net.connected) return;
     const net = this.net, g = this.g;
-    this.tP += dt; this.tR += dt; this.tW += dt; this.tB += dt;
+    this.tP += dt; this.tR += dt; this.tW += dt; this.tB += dt; this.fullT += dt; this.tPing += dt;
     if (force) this.dirty = true;
     if (this.tP >= 1 / SEND_HZ) {
       this.tP = 0;
-      if (net.isHost) net.send('pp', this.allStates());
-      else net.send('p', this.myState(), true);
+      // only avatars that changed, plus everything once a second (keeps traffic low on phones / slow Wi-Fi)
+      const full = force || this.fullT >= 1;
+      if (full) this.fullT = 0;
+      if (net.isHost) {
+        const all = this.allStates(), out = {};
+        let n = 0;
+        for (const id in all) {
+          const js = JSON.stringify(all[id]);
+          if (full || this.sentP.get(id) !== js) { out[id] = all[id]; this.sentP.set(id, js); n++; }
+        }
+        if (n) net.send('pp', out);
+      } else {
+        const me = this.myState(), js = JSON.stringify(me);
+        if (full || js !== this.sentMe) { this.sentMe = js; net.send('p', me, true); }
+      }
     }
+    if (net.isGuest && this.tPing >= 2) { this.tPing = 0; net.send('ping', { t: performance.now() }, true); }
     if (this.tR >= 1 / 15) { this.tR = 0; for (const r of g.rvs) if (r.isLocal(net)) { if (!r.owner) r.owner = net.id; net.send('rv', r.netState()); } }
     if (net.isHost) {
       if (this.dirty || this.tW > 2) { this.tW = 0; this.dirty = false; net.send('world', this.worldState()); }

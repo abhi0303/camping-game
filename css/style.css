@@ -168,7 +168,7 @@ body.touch #help, body.touch #title { display: none; }
 body.touch #prompt { pointer-events: auto; bottom: 106px; font-size: 14px; padding: 10px 16px; }
 body.touch #minimap { width: 120px; height: 120px; pointer-events: auto; top: 54px; }
 body.touch #bigmap { pointer-events: auto; }
-body.touch #objective { top: 52px; font-size: 12px; max-width: 46vw; }
+body.touch #objective { top: 52px; font-size: 12px; max-width: 33vw; }
 body.touch #state { top: 14px; }
 body.touch #hotbarWrap { bottom: 8px; left: 40%; }
 body.touch .hb { width: 42px; height: 42px; font-size: 22px; pointer-events: auto; }
@@ -252,3 +252,16 @@ body.downed #game { filter: grayscale(.75) brightness(.85); }
 #gunSlot.sel .gunIco { color: #ffd2c0; }
 .tb .gunIco { width: 40px; height: 15px; color: #fff; }
 body.touch #gunSlot .gunIco { width: 34px; }
+/* voice chat */
+.trow2 { display: flex; gap: 8px; align-items: center; max-width: 100%; }
+#micBtn { pointer-events: auto; cursor: pointer; flex: none; color: #eee; font: 700 13px system-ui, sans-serif; padding: 6px 10px; display: inline-flex; gap: 8px; align-items: center; white-space: nowrap; }
+#micBtn .k { font-size: 10px; background: rgba(255,255,255,.14); border-radius: 4px; padding: 1px 5px; }
+#micBtn.on { background: rgba(30, 110, 60, .85); border-color: rgba(120, 230, 150, .6); }
+#micBtn.talk { box-shadow: 0 0 0 3px rgba(120, 230, 150, .55); }
+.micBtn.wide { pointer-events: auto; cursor: pointer; margin-top: 4px; border: 0; border-radius: 8px; padding: 9px 12px; font-weight: 800; background: #3a3f55; color: #eee; }
+.micBtn.wide.on { background: #2f8a4c; color: #fff; }
+.rejoinBtn { width: 100%; }
+.pping { font-style: normal; opacity: .55; font-weight: 600; font-size: 11px; }
+body.touch #micBtn { font-size: 11px; padding: 4px 8px; }
+body.touch #micBtn .k { display: none; }
+.trow2 #room { min-width: 0; }

@@ -23,6 +23,7 @@ import { Save, CheckpointFlags } from './save.js';
 import { Zombies } from './zombies.js';
 import { Survival } from './survival.js';
 import { Combat, Tracers } from './combat.js';
+import { Voice } from './voice.js';
 
 const $ = id => document.getElementById(id);
 
@@ -84,14 +85,16 @@ const survival = new Survival({ net, session, player, rvs, remotes, zombies, com
 remotes.tracers = tracers; remotes.listener = camera.position; remotes.localRoot = player.char.root; remotes.night = () => survival.isNight;
 gear.repair = type => survival.repair(type);
 player.canDrive = rv => survival.canDrive(rv);
-player.netExtra = () => ({ sh: combat.shots, sf: survival.safeRV() });
+const voice = new Voice({ net, session, remotes, toast: m => toast(m), onChange: () => renderVoice() });
+survival.g.voice = voice;
+player.netExtra = () => ({ sh: combat.shots, sf: survival.safeRV(), mc: voice.micOn ? 1 : 0 });
 Object.assign(session.g, {
   onPlayerGone: id => survival.playerGone(id),
   survivalState: () => survival.state(),
   applySurvival: d => survival.applyState(d),
   onBackground: dt => survival.background(dt),
   // kicked by the host: back to the start screen with a message
-  onKicked: msg => { try { sessionStorage.setItem('rv-flash', msg); } catch (e) { /* ignore */ } location.replace(location.pathname); },
+  onKicked: msg => { try { sessionStorage.setItem('rv-flash', msg); sessionStorage.setItem('rv-tab-keep', '1'); } catch (e) { /* ignore */ } location.replace(location.pathname); },
 });
 
 function setupRV(r) { r.onMsg = m => toast(m); r.onCheckpoint = onCheckpoint; }
@@ -257,10 +260,10 @@ addEventListener('resize', () => {
 /* ---------- HUD ---------- */
 const hud = { objective: $('objective'), room: $('room'), droneHud: $('droneHud'), binoHud: $('binoHud'), dAlt: $('dAlt'), dDist: $('dDist'), dSpd: $('dSpd'), dBat: $('dBat'), dWarn: $('dWarn'),
   prompt: $('prompt'), toast: $('toast'), gunSlot: $('gunSlot'), state: $('state'), speedo: $('speedo'), speed: $('speed'), gear: $('gear'), lights: $('icoLights'), help: $('help'), helpBody: $('helpBody'), fps: $('fps') };
-let toastT = 0, lastPrompt = '', lastHelp = '', hudT = 0, promptKey = 'E';
+let pingT = 0, toastT = 0, lastPrompt = '', lastHelp = '', hudT = 0, promptKey = 'E';
 function toast(msg) { hud.toast.textContent = msg; hud.toast.classList.remove('hidden'); toastT = 2.6; }
 const HELP = {
-  foot: [['WASD', 'move'], ['Shift', 'run'], ['Space', 'jump'], ['G', 'shotgun out / away'], ['F / Click', 'shoot / use item / punch'], ['1 - 6', 'hold an item'], ['E', 'interact (hold: revive)'], ['X', 'carry a downed teammate'], ['M', 'map'], ['V', '1st / 3rd person'], ['R', 'RV to last checkpoint'], ['I', 'copy invite link (co-op)']],
+  foot: [['WASD', 'move'], ['Shift', 'run'], ['Space', 'jump'], ['G', 'shotgun out / away'], ['F / Click', 'shoot / use item / punch'], ['1 - 6', 'hold an item'], ['E', 'interact (hold: revive)'], ['X', 'carry a downed teammate'], ['M', 'map'], ['V', '1st / 3rd person'], ['R', 'RV to last checkpoint'], ['B', 'mic on / off (co-op voice)'], ['I', 'copy invite link (co-op)']],
   drone: [['WASD', 'fly'], ['Space / Shift', 'up / down'], ['Mouse', 'turn + tilt camera'], ['V', 'drone cam / chase'], ['E', 'bring the drone back']],
   zoom: [['Mouse', 'look around'], ['F', 'lower binoculars']],
   inside: [['WASD', 'walk (out the side door to leave)'], ['E', 'use / sit / lie / open storage'], ['1 - 6', 'hold an item'], ['L', 'interior lights'], ['Space', 'jump'], ['V', '1st / 3rd person'], ['Mouse', 'look (roof hides)']],
@@ -284,17 +287,35 @@ function stateName() {
 }
 const COPY_ICON = '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M5 15V6a2 2 0 0 1 2-2h9" fill="none" stroke="currentColor" stroke-width="2.2"/></svg>';
 function renderRoster() {
-  if (!net.online) { hud.room.classList.add('hidden'); $('pauseRoom').innerHTML = ''; return; }
-  const names = session.roster().map(p => `<span style="color:${session.colorOf(p.id)}">${p.id === net.id ? 'You' : escapeHTML(p.n)}</span>`).join(', ');
+  voice.sync();
+  renderVoice();
+  if (!net.online) {
+    hud.room.classList.add('hidden');
+    // a guest who couldn't get back in after a connection drop can try again from here
+    $('pauseRoom').innerHTML = session.lastCode && session.joined ? `<div class="plist"><button class="mbig alt rejoinBtn" data-rejoin="1">🔄 Rejoin room ${session.lastCode}</button></div>` : '';
+    return;
+  }
   hud.room.classList.remove('hidden');
-  hud.room.innerHTML = `👥 Room <b>${net.code}</b> <span class="dim">(${Math.max(1, session.players.size)}/${MAX_PLAYERS})</span> · ${names || 'connecting…'} <button class="copyBtn mini" data-copy="link" title="Copy invite link">${COPY_ICON}<span>Invite</span></button>`;
-  const plist = session.roster().map(p => `<div class="prow"><i style="background:${session.colorOf(p.id)}"></i><span>${p.id === net.id ? 'You' : escapeHTML(p.n)}${p.c === 0 ? ' <em>host</em>' : ''}</span>${net.isHost && p.id !== net.id ? `<button class="kickBtn" data-kick="${p.id}">Kick</button>` : ''}</div>`).join('');
-  $('pauseRoom').innerHTML = `<div class="plist"><div class="phead">Players ${Math.max(1, session.players.size)}/${MAX_PLAYERS}${session.isFull ? ' · room full' : ''}</div>${plist}</div>
+  if (session.rejoining) { hud.room.innerHTML = `📡 Reconnecting to room <b>${session.lastCode}</b>…`; $('pauseRoom').innerHTML = '<div class="plist"><div class="phead">📡 Reconnecting to the room…</div></div>'; return; }
+  const names = session.roster().map(p => `<span style="color:${session.colorOf(p.id)}">${p.id === net.id ? 'You' : escapeHTML(p.n)}</span>`).join(', ');
+  hud.room.innerHTML = `👥 Room <b>${net.code}</b> <span class="dim">(${Math.max(1, session.players.size)}/${MAX_PLAYERS})</span> · ${names || 'connecting…'} <span id="ping" class="dim"></span> <button class="copyBtn mini" data-copy="link" title="Copy invite link">${COPY_ICON}<span>Invite</span></button>`;
+  const plist = session.roster().map(p => `<div class="prow"><i style="background:${session.colorOf(p.id)}"></i><span>${p.id === net.id ? 'You' : escapeHTML(p.n)}${p.c === 0 ? ' <em>host</em>' : ''}<em class="pping" data-ping="${p.id}"></em></span>${net.isHost && p.id !== net.id ? `<button class="kickBtn" data-kick="${p.id}">Kick</button>` : ''}</div>`).join('');
+  $('pauseRoom').innerHTML = `<div class="plist"><div class="phead">Players ${Math.max(1, session.players.size)}/${MAX_PLAYERS}${session.isFull ? ' · room full' : ''}</div>${plist}
+    <button class="micBtn wide" data-mic="1"></button></div>
     <div class="invite">
       <div class="irow"><span>Room code</span><code>${net.code}</code><button class="copyBtn" data-copy="code" title="Copy room code">${COPY_ICON}<span>Copy</span></button></div>
       <div class="irow"><span>Invite link</span><input class="ilink" readonly value="${inviteLink()}" /><button class="copyBtn" data-copy="link" title="Copy invite link">${COPY_ICON}<span>Copy</span></button></div>
       <div class="ihint">Send the link (or the code) to friends — up to ${MAX_PLAYERS} players, all in one RV.</div>
     </div>`;
+}
+// mic button (top bar + pause menu) — B toggles it too
+function renderVoice() {
+  const on = voice.micOn, txt = on ? (voice.meTalking ? '🎙 Talking…' : '🎙 Mic on') : '🔇 Mic off';
+  const btn = $('micBtn');
+  btn.classList.toggle('hidden', !net.online || session.rejoining);
+  btn.classList.toggle('on', on); btn.classList.toggle('talk', on && voice.meTalking);
+  btn.innerHTML = `${txt}<span class="k">B</span>`;
+  for (const b of document.querySelectorAll('#pauseRoom .micBtn')) { b.classList.toggle('on', on); b.textContent = on ? '🎙 Mic is ON — click to mute (B)' : '🔇 Mic is off — click to talk to your team (B)'; }
 }
 const escapeHTML = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const inviteLink = () => `${location.origin}${location.pathname}?room=${net.code}`;
@@ -324,8 +345,11 @@ function onCopyClick(e) {
   setTimeout(() => { btn.classList.remove('ok'); label.textContent = old; }, 1800);
 }
 hud.room.addEventListener('click', onCopyClick);
+$('micBtn').addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); voice.toggle(); });
 $('pauseRoom').addEventListener('click', e => {
   if (e.target.classList.contains('ilink')) e.target.select();
+  if (e.target.closest('.micBtn')) { e.preventDefault(); voice.toggle(); return; }
+  if (e.target.closest('.rejoinBtn')) { e.preventDefault(); session.rejoin(); return; }
   const k = e.target.closest('.kickBtn');
   if (k) {   // two taps: "Kick" -> "Sure?" -> kicked
     e.preventDefault(); e.stopPropagation();
@@ -358,6 +382,16 @@ function updateHUD(dt) {
   hudT = 0.12; // DOM writes ~8x per second only
   hud.state.textContent = stateName() + (player.boost ? '  ⚡ boosted' : '') + (player.swimming ? '  🏊 swimming' : '');
   hud.gunSlot.classList.toggle('sel', combat.out);
+  // connection quality
+  if (net.online && (pingT -= 0.12) <= 0) {
+    pingT = 1;
+    const pe = $('ping');
+    if (pe) pe.textContent = net.isGuest ? (session.rtt ? `📶 ${Math.round(session.rtt)} ms` : '') : '';
+    for (const el of document.querySelectorAll('#pauseRoom [data-ping]')) {
+      const r = remotes.map.get(el.dataset.ping), ms = el.dataset.ping === net.id ? Math.round(session.rtt) : r ? r.s.pg : 0;
+      el.textContent = ms ? ` · ${ms} ms` : '';
+    }
+  }
   updateObjective();
   hud.droneHud.classList.toggle('hidden', !(drone.active && rig.droneView === 'cam'));
   hud.binoHud.classList.toggle('hidden', !gear.zooming);
@@ -456,6 +490,7 @@ canvas.addEventListener('click', () => { if (started && !paused && !input.locked
 function globalKeys() {
   if (input.wasPressed('KeyV')) toast(rig.toggle(player));
   if (input.wasPressed('KeyG')) combat.toggle();
+  if (input.wasPressed('KeyB')) voice.toggle();
   if (input.wasPressed('KeyK')) toast(audio.toggleMute() ? 'Sound off' : 'Sound on');
   if (input.wasPressed('KeyM')) minimap.toggleBig();
   if (input.wasPressed('Escape') && minimap.bigOpen) minimap.toggleBig(false);
@@ -537,7 +572,7 @@ addEventListener('beforeunload', () => saveNow());
 step(0.016);
 renderer.render(scene, camera);
 requestAnimationFrame(frame);
-window.__game = { net, session, player, rvs, remotes, obstacles, bridgeWorld, materials, world, inv, gear, editor, input, rig, camera, zombies, survival, combat, applySave, collectSave, saveNow, get objI() { return objI; },
+window.__game = { net, session, voice, player, rvs, remotes, obstacles, bridgeWorld, materials, world, inv, gear, editor, input, rig, camera, zombies, survival, combat, applySave, collectSave, saveNow, get objI() { return objI; },
   // test hooks: advance the game n frames / pin the camera
   run: n => { for (let i = 0; i < n; i++) step(1 / 60); renderer.render(scene, camera); }, setCam: a => { freezeCam = a; } };
 

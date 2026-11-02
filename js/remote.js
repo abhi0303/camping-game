@@ -25,14 +25,14 @@ function nameTag() {
   s.scale.set(1.6, 0.6, 1); s.renderOrder = 5; s.userData = { c, t, key: '' };
   return s;
 }
-function drawTag(s, text, color, hp, down, showHp) {
-  const key = text + '|' + color + '|' + Math.round(hp / 4) + '|' + down + '|' + showHp;
+function drawTag(s, text, color, hp, down, showHp, talking) {
+  const key = text + '|' + color + '|' + Math.round(hp / 4) + '|' + down + '|' + showHp + '|' + talking;
   if (s.userData.key === key) return;
   s.userData.key = key;
   const { c, t } = s.userData, g = c.getContext('2d');
   g.clearRect(0, 0, 256, 96);
   g.font = 'bold 30px system-ui, sans-serif';
-  const label = down ? '⬇ ' + text : text;
+  const label = (talking ? '🔊 ' : '') + (down ? '⬇ ' + text : text);
   const w = Math.min(250, g.measureText(label).width + 30);
   g.fillStyle = down ? 'rgba(120,20,20,.85)' : 'rgba(20,22,30,.78)';
   g.beginPath(); g.roundRect ? g.roundRect((256 - w) / 2, 6, w, 46, 14) : g.rect((256 - w) / 2, 6, w, 46); g.fill();
@@ -114,7 +114,7 @@ export class Remotes {
       r.char.headAnchor.getWorldPosition(this._v);
       r.tag.position.set(this._v.x, this._v.y + (s.dn ? 0.75 : 0.55), this._v.z);
       const hp = s.hp ?? 100;
-      drawTag(r.tag, s.n || 'Player', r.color, hp, !!s.dn, night || hp < 100);
+      drawTag(r.tag, s.n || 'Player', r.color, hp, !!s.dn, night || hp < 100, !!r.talking);
       if (s.dr) {
         if (!r.drone) { const b = new GeoBuilder(); droneBody(b, true); r.drone = b.build(); r.drone.scale.setScalar(1.6); this.scene.add(r.drone); r.drone.position.set(s.dr[0], s.dr[1], s.dr[2]); }
         r.drone.visible = true;

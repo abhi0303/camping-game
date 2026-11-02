@@ -28,7 +28,9 @@ All paths are relative, so the game works from the repo sub-folder. `.nojekyll` 
 - **Host:** on the start screen, enter your name and press **Host co-op**. You get a room code; press **Copy invite link** (top of the screen) and send it to friends.
 - **Join:** open the invite link (or type the code) and press **Join a friend**.
 - **Room size:** a room holds **4 players**, and all 4 share one RV (driver, passenger, and two more at the dinette, sofa or beds). A 5th player who tries to join sees *"That room is full"*.
-- **Leaving:** closing or refreshing the tab removes you from the room right away (no duplicate players when you come back). A player whose connection dies is removed after 15 seconds of silence.
+- **Leaving:** closing or refreshing the tab removes you from the room right away (no duplicate players when you come back).
+- **Connection drops:** if your link to the host drops (Wi-Fi hiccup, phone switched to another app, a frozen tab), the game **reconnects by itself** within a few seconds and puts you back in the same slot, at the same spot, still in your seat. The room bar shows your ping (📶). If it can't get back in after 90 seconds you continue solo, and **Esc → Rejoin room** tries again.
+- **Voice chat:** everyone in the room hears each other. Your mic starts **off**; press **B** (or tap the 🔇 Mic off button at the top) to talk, and again to mute. 🔊 shows who is talking (team list and name tags), 🎙 shows whose mic is on. The browser asks for microphone permission the first time (it works on the https GitHub Pages site).
 - **Kick:** the host can remove a player from the pause menu (**Esc → Kick**, then confirm). Kicked players go back to the start screen and can't rejoin that room.
 - **Seats:** one player drives and the other can take the **passenger seat**, or sit or lie anywhere inside, and rides along. Seats are exclusive, so nobody can take the driver seat while someone is using it.
 - **Shared progress:** road blocks, the bridge (including its physics), materials, supply crates, camping gear, the day/night clock, the zombies and the RV's health are shared. The RV's Gear Locker, fridge and storage bay are shared too.
@@ -77,7 +79,7 @@ All paths are relative, so the game works from the repo sub-folder. `.nojekyll` 
 | E (hold) | interact / revive a teammate | Q | walk to the back |
 | X | carry a teammate / pack up gear | | |
 
-Global: **M** map, **K** sound, **R** RV back to the last checkpoint, **Tab** hide help, **Esc** pause (co-op: player list, kick).
+Global: **M** map, **K** sound, **B** mic on / off (co-op), **R** RV back to the last checkpoint, **Tab** hide help, **Esc** pause (co-op: player list, ping, mic, kick).
 
 ## The trail
 
@@ -93,7 +95,7 @@ Global: **M** map, **K** sound, **R** RV back to the last checkpoint, **Tab** hi
 ## Files
 
 - `js/main.js` – setup, loop, HUD, start menu, saving
-- `js/net.js`, `js/multiplayer.js`, `js/remote.js` – peer-to-peer networking, co-op session, other players' avatars
+- `js/net.js`, `js/multiplayer.js`, `js/remote.js`, `js/voice.js` – peer-to-peer networking (with auto-reconnect), co-op session, other players' avatars, voice chat
 - `js/touch.js`, `js/input.js` – mobile controls, keyboard/mouse/touch input
 - `js/save.js` – save/load + checkpoint flags
 - `js/terrain.js`, `js/world.js`, `js/obstacles.js` – map, jungle, road blocks
@@ -109,5 +111,5 @@ Global: **M** map, **K** sound, **R** RV back to the last checkpoint, **Tab** hi
 - The jungle is drawn with instanced meshes split into chunks (off-screen trees are skipped). A typical frame is about 100 draw calls and 150k triangles.
 - Frame rate is capped (60, or 30 on Low). The game drops to 15 fps after 25 s idle when playing solo, and stops rendering while paused or while the bridge designer is open.
 - All zombies together are drawn with 7 instanced meshes, so 20 zombies cost about the same as one. At most 24 are around at once.
-- Network traffic is small: 10 player snapshots, 10 zombie snapshots and 15 RV updates per second, each a few hundred bytes.
+- Network traffic is small: player snapshots only carry players that changed (plus a full one each second), 10 zombie snapshots and 15 RV updates per second. Voice uses one small audio link per pair of players (Opus), and sends silence while your mic is off.
 - Quality menu (top-right): **Low** (no shadows, shorter view distance, 30 fps), **Medium**, **High**.

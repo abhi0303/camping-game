@@ -17,10 +17,16 @@ export function cleanRoomCode(v) {
 
 export function makeRoomCode() { let s = ''; for (let i = 0; i < 5; i++) s += ALPHA[(Math.random() * ALPHA.length) | 0]; return s; }
 
-// One id per browser tab. It survives a refresh, so the host can replace the stale copy of a player who reloads.
+// One id per browser tab. It survives a refresh (so the host can swap out a stale copy of you after
+// a reload), but a tab that was copied from another one (duplicate tab, link opened in a new tab)
+// gets its own id, so two tabs never knock each other out of the room.
 function tabId() {
-  let id = null;
-  try { id = sessionStorage.getItem('rv-tab-id'); } catch (e) { /* storage blocked */ }
+  let id = null, keep = false;
+  try { const nav = performance.getEntriesByType('navigation')[0]; keep = !!nav && nav.type === 'reload'; } catch (e) { /* old browser */ }
+  try {
+    if (sessionStorage.getItem('rv-tab-keep')) { keep = true; sessionStorage.removeItem('rv-tab-keep'); }
+    if (keep) id = sessionStorage.getItem('rv-tab-id');
+  } catch (e) { /* storage blocked */ }
   if (!id) {
     id = Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
     try { sessionStorage.setItem('rv-tab-id', id); } catch (e) { /* ignore */ }
@@ -28,19 +34,23 @@ function tabId() {
   return id;
 }
 
-const GUEST_SILENT_MS = 15000;   // host drops a guest it hasn't heard from for this long
-const HOST_SILENT_MS = 20000;    // guest gives up on a host that went quiet
+const GUEST_SILENT_MS = 20000;   // host drops a guest it hasn't heard from for this long
+const HOST_SILENT_MS = 15000;    // guest reconnects when the host went quiet this long
+const PART = 7000;               // PeerJS refuses JSON messages over ~16 KB: bigger ones go in parts
 
 export class Net {
   constructor() {
-    this.mode = 'solo';          // solo | host | guest
+    this.mode = 'solo';          // solo | host | guest | rejoin (guest trying to get back in)
     this.peer = null; this.id = 'local'; this.code = '';
     this.conns = []; this.hostConn = null; this.handlers = {};
-    this.cid = tabId(); this.hostSeen = 0;
-    // hidden tabs can lose the broker connection; reconnect when the player comes back
+    this.cid = tabId(); this.hostSeen = 0; this.partSeq = 0; this.parts = new Map();
     document.addEventListener('visibilitychange', () => {
+      if (document.hidden) return;
       const p = this.peer;
-      if (!document.hidden && p && p.disconnected && !p.destroyed) { try { p.reconnect(); } catch (e) { /* ignore */ } }
+      // hidden tabs can lose the broker connection; reconnect when the player comes back
+      if (p && p.disconnected && !p.destroyed) { try { p.reconnect(); } catch (e) { /* ignore */ } }
+      // phone came back from another app and the host has been quiet: reconnect now, don't wait
+      if (this.mode === 'guest' && performance.now() - this.hostSeen > 5000) this._lost('timeout');
     });
     // closing or refreshing the tab = leaving the room right away (no ghost player left behind)
     const bye = () => this.leave();
@@ -50,7 +60,8 @@ export class Net {
   }
   get online() { return this.mode !== 'solo'; }
   get isHost() { return this.mode === 'host'; }
-  get isGuest() { return this.mode === 'guest'; }
+  get isGuest() { return this.mode === 'guest' || this.mode === 'rejoin'; }
+  get connected() { return this.isHost || (this.mode === 'guest' && !!this.hostConn && this.hostConn.open); }
   on(type, fn) { this.handlers[type] = fn; }
   _emit(type, data, from) { const h = this.handlers[type]; if (h) { try { h(data, from); } catch (e) { console.error(e); } } }
 
@@ -62,73 +73,101 @@ export class Net {
       peer.on('open', id => { opened = true; this.mode = 'host'; this.id = id; this.code = code; resolve(code); });
       peer.on('connection', c => {
         c.on('open', () => { c._seen = performance.now(); this.conns.push(c); this._wire(c); });
-        c.on('error', () => this._drop(c));
+        c.on('error', e => console.warn('guest link:', e && (e.type || e.message)));   // only 'close' or silence ends a link
       });
+      peer.on('call', call => this._emit('call', call));
       peer.on('error', e => { if (!opened) reject(e); else this._emit('error', e); });
       peer.on('disconnected', () => { try { if (!peer.destroyed) peer.reconnect(); } catch (e) { /* ignore */ } });
     });
   }
 
-  join(code) {
+  join(code, timeout = 20000) {
     return new Promise((resolve, reject) => {
       if (!window.Peer) { reject(new Error('Multiplayer library could not load (check your internet).')); return; }
       const peer = this.peer = new window.Peer(peerOptions());
-      const fail = e => { clearTimeout(t); try { peer.destroy(); } catch (_) { /* ignore */ } if (this.peer === peer) this.peer = null; reject(e); };
-      const t = setTimeout(() => fail(new Error('Could not reach that room. Check the code and that the host is online.')), 20000);
+      let done = false;
+      const fail = e => { if (done) return; done = true; clearTimeout(t); try { peer.destroy(); } catch (_) { /* ignore */ } if (this.peer === peer) this.peer = null; reject(e); };
+      const t = setTimeout(() => fail(new Error('Could not reach that room. Check the code and that the host is online.')), timeout);
       peer.on('open', id => {
         this.id = id;
         const c = peer.connect(PREFIX + code, { reliable: true, serialization: 'json' });
-        c.on('open', () => { clearTimeout(t); this.mode = 'guest'; this.code = code; this.hostConn = c; this.hostSeen = performance.now(); this._wire(c); resolve(); });
-        c.on('error', fail);
+        c.on('open', () => { if (done) return; done = true; clearTimeout(t); this.mode = 'guest'; this.code = code; this.hostConn = c; this.hostSeen = performance.now(); this._wire(c); resolve(); });
+        c.on('error', e => { if (!done) fail(e); else console.warn('host link:', e && (e.type || e.message)); });
       });
-      peer.on('error', e => { if (this.mode !== 'guest') fail(e.type === 'peer-unavailable' ? new Error('No room with that code.') : e); else this._emit('error', e); });
+      peer.on('call', call => this._emit('call', call));
+      peer.on('error', e => {
+        if (!done) { const gone = e && e.type === 'peer-unavailable'; const err = gone ? new Error('No room with that code (the host may have left).') : e; if (gone) err.fatal = true; fail(err); }
+        else this._emit('error', e);
+      });
+      peer.on('disconnected', () => { try { if (!peer.destroyed && this.peer === peer) peer.reconnect(); } catch (e) { /* ignore */ } });
     });
   }
 
   _wire(c) {
-    c.on('data', msg => {
-      if (!msg || !msg.t) return;
+    c.on('data', raw => {
+      if (!raw || !raw.t) return;
+      let msg = raw;
       if (this.isHost) {
         if (c._gone) return;
         c._seen = performance.now();
-        if (msg.t === 'bye') { this._drop(c); return; }
-        if (!c._ok && msg.t !== 'hello') return;               // not let in yet (or refused)
-        if (!msg.h) for (const o of this.conns) if (o !== c && o.open && o._ok && !o._gone) o.send(msg);   // relay to the other guests
+        if (raw.t === 'bye') { this._drop(c); return; }
+        if (!c._ok && raw.t !== 'hello') return;               // not let in yet (or refused)
+        if (!raw.h) for (const o of this.conns) if (o !== c && o.open && o._ok && !o._gone) o.send(raw);   // relay to the other guests
+        if (raw.t === '_p' && !(msg = this._unpart(raw, c.peer))) return;
         this._emit(msg.t, msg.d, c.peer);
       } else {
+        if (c !== this.hostConn) return;
         this.hostSeen = performance.now();
-        if (msg.t === 'bye') { this._lost(); return; }
+        if (raw.t === 'bye') { this._lost('bye'); return; }
+        if (raw.t === '_p' && !(msg = this._unpart(raw, raw.f || 'h'))) return;
         this._emit(msg.t, msg.d, msg.f || c.peer);
       }
     });
-    c.on('close', () => { if (this.isHost) this._drop(c); else if (c === this.hostConn) this._lost(); });
+    c.on('close', () => { if (this.isHost) this._drop(c); else if (c === this.hostConn) this._lost('closed'); });
+  }
+  // big message -> several parts (and back)
+  _pack(msg) {
+    const s = JSON.stringify(msg);
+    if (s.length <= 12000) return [msg];
+    const id = ++this.partSeq, n = Math.ceil(s.length / PART), out = [];
+    for (let i = 0; i < n; i++) out.push({ t: '_p', d: { id, i, n, s: s.slice(i * PART, (i + 1) * PART) }, f: msg.f, h: msg.h });
+    return out;
+  }
+  _unpart(m, from) {
+    const d = m.d, key = from + ':' + d.id;
+    let e = this.parts.get(key);
+    if (!e) { e = { n: d.n, got: 0, s: [], t: performance.now() }; this.parts.set(key, e); }
+    if (e.s[d.i] === undefined) { e.s[d.i] = d.s; e.got++; }
+    if (e.got < e.n) return null;
+    this.parts.delete(key);
+    try { return JSON.parse(e.s.join('')); } catch (err) { return null; }
   }
 
   // host: forget a guest connection (closed, timed out, said bye, kicked) and tell the game once
-  _drop(c, silent = false) {
+  _drop(c, silent = false, why = 'left') {
     if (c._gone) return;
     c._gone = true;
     this.conns = this.conns.filter(x => x !== c);
     try { c.close(); } catch (e) { /* ignore */ }
-    if (!silent && this.isHost) this._emit('leave', null, c.peer);
+    if (!silent && this.isHost) this._emit('leave', why, c.peer);
   }
+  connOf(peerId) { return this.conns.find(x => x.peer === peerId) || null; }
   // host: this guest was let in (only accepted guests get the room's updates)
-  accept(peerId) { const c = this.conns.find(x => x.peer === peerId); if (c) c._ok = true; }
+  accept(peerId) { const c = this.connOf(peerId); if (c) c._ok = true; }
   dropPeer(peerId, silent = true, delay = 0) {
-    const c = this.conns.find(x => x.peer === peerId);
+    const c = this.connOf(peerId);
     if (!c) return;
     if (delay) { c._gone = true; setTimeout(() => { c._gone = false; this._drop(c, silent); }, delay); }   // let a last message go out first
     else this._drop(c, silent);
   }
-  // guest: the host is gone
-  _lost() {
-    if (!this.isGuest) return;
-    const c = this.hostConn;
-    this.hostConn = null; this.mode = 'solo';
+  // guest: the link to the host is gone ('bye' = host closed the room; otherwise the game tries to reconnect)
+  _lost(reason) {
+    if (this.mode !== 'guest') return;
+    const c = this.hostConn, p = this.peer;
+    this.hostConn = null; this.peer = null; this.mode = 'solo';
     try { if (c) c.close(); } catch (e) { /* ignore */ }
-    try { if (this.peer) this.peer.destroy(); } catch (e) { /* ignore */ }
-    this.peer = null;
-    this._emit('lost');
+    try { if (p) p.destroy(); } catch (e) { /* ignore */ }
+    this._emit('lost', reason);
   }
   // leave on purpose (tab closing, kicked, join refused): say bye, then shut everything
   leave() {
@@ -144,19 +183,20 @@ export class Net {
   // heartbeat watchdog: silent peers are gone even if WebRTC never reports it
   _watch() {
     const now = performance.now();
-    if (this.isHost) { for (const c of [...this.conns]) if (!c._gone && now - (c._seen || 0) > GUEST_SILENT_MS) this._drop(c); }
-    else if (this.isGuest && now - this.hostSeen > HOST_SILENT_MS) this._lost();
+    if (this.isHost) { for (const c of [...this.conns]) if (!c._gone && now - (c._seen || 0) > GUEST_SILENT_MS) this._drop(c, false, 'timeout'); }
+    else if (this.mode === 'guest' && now - this.hostSeen > HOST_SILENT_MS) this._lost('timeout');
+    for (const [k, e] of this.parts) if (now - e.t > 20000) this.parts.delete(k);
   }
 
   // host: to every guest · guest: to the host (relayed to the others unless hostOnly)
   send(type, data, hostOnly = false) {
-    const msg = { t: type, d: data, f: this.id, h: hostOnly ? 1 : 0 };
-    if (this.isHost) { for (const c of this.conns) if (c.open && !c._gone && c._ok) c.send(msg); }
-    else if (this.hostConn && this.hostConn.open) this.hostConn.send(msg);
+    const out = this._pack({ t: type, d: data, f: this.id, h: hostOnly ? 1 : 0 });
+    if (this.isHost) { for (const c of this.conns) if (c.open && !c._gone && c._ok) for (const m of out) c.send(m); }
+    else if (this.hostConn && this.hostConn.open) for (const m of out) this.hostConn.send(m);
   }
   sendTo(peerId, type, data) {
-    const c = this.conns.find(x => x.peer === peerId);
-    if (c && c.open) c.send({ t: type, d: data, f: this.id, h: 1 });
+    const c = this.connOf(peerId);
+    if (c && c.open) for (const m of this._pack({ t: type, d: data, f: this.id, h: 1 })) c.send(m);
   }
   get peerCount() { return this.isHost ? this.conns.length + 1 : 0; }
 }
