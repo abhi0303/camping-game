@@ -1,5 +1,5 @@
-// Address of the Farm World server (the Cloudflare Worker in /server). Filled in when it is deployed.
-const DEPLOYED = '';
+// Address of the Farm World server (the Cloudflare Worker in /server).
+const DEPLOYED = 'https://rv-van-api.abhi0303.workers.dev';
 
 // On a page opened from this computer (testing), ?api=http://127.0.0.1:8787 picks another server.
 // Nowhere else: a shared link must never be able to send your login to someone else's server.
