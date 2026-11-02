@@ -95,6 +95,18 @@ export const audio = {
     o.start(t); lfo.start(t); o.stop(t + d + 0.05); lfo.stop(t + d + 0.05);
   },
   hurt() { this.thud(170, 0.16); this.thud(95, 0.22); },
+  // cannon: deep boom + rumble
+  boom(vol = 1) {
+    if (!ctx || vol <= 0.02) return;
+    const t = ctx.currentTime, src = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+    src.buffer = noise(); f.type = 'lowpass'; f.frequency.setValueAtTime(900, t); f.frequency.exponentialRampToValueAtTime(120, t + 0.5);
+    g.gain.setValueAtTime(0.9 * vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+    src.connect(f); f.connect(g); g.connect(master); src.start(t); src.stop(t + 0.4);
+    const o = ctx.createOscillator(), og = ctx.createGain();
+    o.type = 'sine'; o.frequency.setValueAtTime(70, t); o.frequency.exponentialRampToValueAtTime(28, t + 0.6);
+    og.gain.setValueAtTime(0.8 * vol, t); og.gain.exponentialRampToValueAtTime(0.001, t + 0.7);
+    o.connect(og); og.connect(master); o.start(t); o.stop(t + 0.72);
+  },
   // Named looping tones (drone buzz, chainsaw)
   hum(name, on, type = 'sawtooth', freq = 200, gain = 0.04) {
     if (!ctx) return;

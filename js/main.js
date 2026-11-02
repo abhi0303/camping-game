@@ -13,7 +13,7 @@ import { BridgeEditor } from './bridgeEditor.js';
 import { Obstacles } from './obstacles.js';
 import { Materials, MAT_INFO } from './materials.js';
 import { MiniMap } from './minimap.js';
-import { START, CAMP, BRIDGE } from './terrain.js';
+import { START, CAMP, BRIDGE, VALLEY, GIANT } from './terrain.js';
 import { AXLE_F, AXLE_R } from './rvDims.js';
 import { Net, cleanRoomCode } from './net.js';
 import { Remotes } from './remote.js';
@@ -24,6 +24,10 @@ import { Zombies } from './zombies.js';
 import { Survival } from './survival.js';
 import { Combat, Tracers } from './combat.js';
 import { Voice } from './voice.js';
+import { Structures } from './structures.js';
+import { Designer } from './designer.js';
+import { Giants } from './giants.js';
+import { PLAYER_COLORS } from './remote.js';
 
 const $ = id => document.getElementById(id);
 
@@ -79,19 +83,31 @@ const session = new Session({ net, player, rvs, addRV, remotes, obstacles, bridg
 
 /* ---------- zombie nights: zombies, shotgun, health, revive/carry, RV damage ---------- */
 const zombies = new Zombies(scene, world);
+const giants = new Giants(scene, world);
+const structures = new Structures(scene, world, m => toast(m));
+structures.player = player;
 const tracers = new Tracers(scene);
-const combat = new Combat({ camera, rig, player, gear, zombies, tracers, world, toast: m => toast(m), onHits: (h, x, z) => survival.onHits(h, x, z) });
-const survival = new Survival({ net, session, player, rvs, remotes, zombies, combat, gear, inv, world, camera, toast: m => toast(m), myName: () => session.myName });
-remotes.tracers = tracers; remotes.listener = camera.position; remotes.localRoot = player.char.root; remotes.night = () => survival.isNight;
+const combat = new Combat({ scene, camera, rig, player, gear, zombies, giants, tracers, world, toast: m => toast(m),
+  onHits: (h, x, z) => survival.onHits(h, x, z), onGiantHit: h => survival.onGiantHit(h), weapon: () => survival.weapon });
+const survival = new Survival({ net, session, player, rvs, remotes, zombies, giants, structures, combat, gear, inv, world, materials, rig, camera,
+  toast: m => toast(m), myName: () => session.myName, colorOfSlot: c => PLAYER_COLORS[c % PLAYER_COLORS.length].css,
+  onEnd: () => { if (!net.isGuest) Save.clear(); },
+  onLeave: () => { try { net.leave(); } catch (e) { /* ignore */ } location.replace(location.pathname); },
+  onEndScreen: () => { if (document.pointerLockElement) document.exitPointerLock(); },
+  onStage: () => { session.dirty = true; saveNow(); } });
+remotes.tracers = tracers; remotes.listener = camera.position; remotes.localRoot = player.char.root; remotes.night = () => survival.isNight; remotes.combat = combat;
+const designer = new Designer({ materials, structures, hooks: { ...uiHooks, commit: (kind, d) => survival.commitBuild(kind, d, true), ready: () => survival.ready(), canReady: kind => survival.canReady(kind) } });
 gear.repair = type => survival.repair(type);
 player.canDrive = rv => survival.canDrive(rv);
 const voice = new Voice({ net, session, remotes, toast: m => toast(m), onChange: () => renderVoice() });
 survival.g.voice = voice;
-player.netExtra = () => ({ sh: combat.shots, sf: survival.safeRV(), mc: voice.micOn ? 1 : 0 });
+player.netExtra = () => ({ sh: combat.shots, sf: survival.safeSpot(), mc: voice.micOn ? 1 : 0 });
 Object.assign(session.g, {
   onPlayerGone: id => survival.playerGone(id),
-  survivalState: () => survival.state(),
+  survivalState: cid => survival.state(cid),
   applySurvival: d => survival.applyState(d),
+  buildState: () => structures.save(),
+  applyBuild: d => structures.load(d),
   onBackground: dt => survival.background(dt),
   // kicked by the host: back to the start screen with a message
   onKicked: msg => { try { sessionStorage.setItem('rv-flash', msg); sessionStorage.setItem('rv-tab-keep', '1'); } catch (e) { /* ignore */ } location.replace(location.pathname); },
@@ -123,13 +139,17 @@ const crateActs = world.crates.map((c, i) => ({ c, pos: c.pos, r: 2.2, label: ()
   toast('Got ' + Object.entries(c.give).map(([k, n]) => `+${n} ${MAT_INFO[k].name.toLowerCase()} ${MAT_INFO[k].icon}`).join(', '));
 } }));
 const benchAct = { pos: bridgeWorld.workbenchPos, r: 2.6, label: () => 'Use the workbench (craft planks · design the bridge)', act: () => editor.show() };
+const towerBenchAct = { pos: world.towerBenchPos, r: 2.6, label: () => (survival.at('tbuild') ? (structures.tDesign ? 'Tower workbench (built ✓ · craft planks)' : 'Use the Tower workbench (design + build towers)') : 'Tower workbench — opens when you reach the valley'),
+  act: () => { if (survival.at('tbuild')) designer.show('towers'); else toast('Bring the RV to Watchtower Valley first'); } };
+const castleBenchAct = { pos: world.castleBenchPos, r: 2.6, label: () => (survival.at('cbuild') ? (structures.cDesign ? 'Castle workbench (built ✓ · craft planks)' : 'Use the Castle workbench (design + build the wall)') : 'Castle workbench — opens after the valley siege'),
+  act: () => { if (survival.at('cbuild')) designer.show('castle'); else toast('Survive the valley siege first'); } };
 const boardAct = { pos: world.mapBoardPos, r: 2.6, label: () => 'Look at the trail map', act: () => minimap.toggleBig(true) };
 const flagActs = flags.acts(() => manualSave());
 player.worldActs = () => {
   const l = gear.worldActs(), eq = inv.equippedItem();
   l.push(...obstacles.acts(eq && eq.type));
   for (const a of crateActs) if (!a.c.taken) l.push(a);
-  l.push(benchAct, boardAct, ...flagActs, ...survival.acts());
+  l.push(benchAct, boardAct, towerBenchAct, castleBenchAct, ...flagActs, ...survival.acts(), ...structures.acts());
   return l;
 };
 
@@ -143,11 +163,19 @@ const OBJ = [
   { text: 'Drive the RV across the river', done: () => anyRV(r => r.cp >= 2 && !r.stuck), at: () => ({ x: BRIDGE.bx, z: BRIDGE.bz }) },
   { text: 'Cut the fallen tree on the hill road', done: () => obstacles.list[4].state !== 'blocking', at: () => obstacles.list[4].pos },
   { text: 'Smash the last rockfall', done: () => obstacles.list[5].state !== 'blocking', at: () => obstacles.list[5].pos },
-  { text: 'Drive up to the Hilltop Camp', done: () => anyRV(r => r.root.position.distanceTo(world.campPos) < 30), at: () => world.campPos },
-  { text: '🏕 You made it! Set up camp — tent, chair and a campfire', done: () => false, at: () => world.firePos },
+  { text: 'Drive up to the Hilltop Camp', done: () => anyRV(r => r.root.position.distanceTo(world.campPos) < 30) || survival.at('tbuild'), at: () => world.campPos },
+  { text: 'Drive north over the pass to Watchtower Valley (clear the road on the way)', done: () => survival.at('tbuild'), at: () => world.towerBenchPos },
+  { text: 'Build a tower shelter before the horde: collect logs, planks, rope & stone, then use the Tower workbench', done: () => survival.at('siege'), at: () => world.towerBenchPos },
+  { text: 'Survive the zombie siege — fight from your towers, repair them with the hammer', done: () => survival.at('trail2'), at: () => world.towerBenchPos },
+  { text: 'Drive on to the Giant Plateau', done: () => survival.at('cbuild'), at: () => world.castleBenchPos },
+  { text: 'Build a stone castle wall at the Castle workbench before the giants come (stone: crates, rock piles)', done: () => survival.at('giants'), at: () => world.castleBenchPos },
+  { text: 'Defeat the 10 giants with your cannons (G, then click / F)', done: () => survival.at('won'), at: () => giants.list.find(x => x.st !== 4) || world.castleBenchPos },
+  { text: '🏆 You won! Press Esc for the scoreboard', done: () => false, at: () => world.castleBenchPos },
 ];
+const STAGE_OBJ = { tbuild: 9, siege: 10, trail2: 11, cbuild: 12, giants: 13, won: 14 };
 function updateObjective() {
   let changed = false;
+  if (STAGE_OBJ[survival.stage] > objI) { objI = STAGE_OBJ[survival.stage]; changed = true; }
   while (objI < OBJ.length - 1 && OBJ[objI].done()) { objI++; changed = true; }
   if (changed) { toast('✔ Objective complete!'); session.dirty = true; saveNow(); }
   hud.objective.textContent = '🎯 ' + OBJ[objI].text;
@@ -163,6 +191,9 @@ function mapMarkers() {
   for (const o of obstacles.list) if (o.state === 'blocking') markers.push({ x: o.pos.x, z: o.pos.z, icon: o.type === 'tree' ? '🌲' : '🪨', label: o.type === 'tree' ? 'Fallen tree' : o.type === 'rock' ? 'Rockfall' : '' });
   for (const c of world.crates) if (!c.taken) markers.push({ x: c.pos.x, z: c.pos.z, icon: '📦' });
   markers.push({ x: CAMP.x, z: CAMP.z, icon: '🏕️', label: 'Hilltop Camp' });
+  markers.push({ x: VALLEY.x, z: VALLEY.z, icon: '🗼', label: 'Watchtower Valley' });
+  markers.push({ x: GIANT.x, z: GIANT.z, icon: '🏰', label: 'Giant Plateau' });
+  for (const gi of giants.list) if (gi.st !== 4) markers.push({ x: gi.x, z: gi.z, icon: '🗿', edge: true });
   rvs.forEach((r, i) => { if (!(player.frame === 'rv' && player.rv === r)) markers.push({ x: r.root.position.x, z: r.root.position.z, icon: '🚐', label: rvs.length > 1 ? `RV ${i + 1}` : 'RV', edge: r === player.rv }); });
   remotes.each((r, p) => markers.push({ x: p.x, z: p.z, dot: r.color, label: (r.s.dn ? '⬇ ' : '') + r.s.n, edge: true }));
   for (const z of zombies.list) if (z.st !== 4) markers.push({ x: z.x, z: z.z, dot: '#e0362a' });
@@ -195,7 +226,7 @@ function collectSave() {
   const bw = bridgeWorld;
   return { v: 1, t: Date.now(), obj: objI, obst: obstacles.stateArray(), crates: world.crates.map(c => (c.taken ? 1 : 0)), mats: { ...materials.c },
     br: bw.design && bw.state === 'built' ? { d: bw.design, sp: bw.spent } : null, rvs: rvs.map(r => r.cp),
-    bag: inv.backpack.map(it => (it ? it.type : null)), st: inv.sets.map(set => set.map(st => ({ id: st.id, s: inv.types(st) }))), sv: survival.state() };
+    bag: inv.backpack.map(it => (it ? it.type : null)), st: inv.sets.map(set => set.map(st => ({ id: st.id, s: inv.types(st) }))), sv: survival.state(), bs: structures.save() };
 }
 function applySave(s) {
   if (!s || s.v !== 1) return false;
@@ -207,7 +238,8 @@ function applySave(s) {
   flags.setReached(Math.max(...rvs.map(r => r.cp)));
   inv.setBackpack(s.bag || []);
   (s.st || []).forEach((set, i) => set.forEach(x => inv.applyStorage(i, x.id, x.s)));
-  if (s.sv) survival.applyState(s.sv);
+  if (s.bs) structures.load(s.bs);
+  if (s.sv) { survival.applyState(s.sv); if (s.sv.sc) survival.score = new Map(s.sv.sc.map(r => [r[0] + '#' + r[1], { n: r[0], c: r[1], k: r[2], g: r[3], r: r[4], d: r[5], p: r[6] }])); }
   objI = s.obj || 0;
   player.spawnBesideRV();
   return true;
@@ -260,10 +292,12 @@ addEventListener('resize', () => {
 /* ---------- HUD ---------- */
 const hud = { objective: $('objective'), room: $('room'), droneHud: $('droneHud'), binoHud: $('binoHud'), dAlt: $('dAlt'), dDist: $('dDist'), dSpd: $('dSpd'), dBat: $('dBat'), dWarn: $('dWarn'),
   prompt: $('prompt'), toast: $('toast'), gunSlot: $('gunSlot'), state: $('state'), speedo: $('speedo'), speed: $('speed'), gear: $('gear'), lights: $('icoLights'), help: $('help'), helpBody: $('helpBody'), fps: $('fps') };
-let pingT = 0, toastT = 0, lastPrompt = '', lastHelp = '', hudT = 0, promptKey = 'E';
+const GUN_SVG = $('gunSlot').querySelector('svg').outerHTML, CANNON_SVG = '<svg class="gunIco" viewBox="0 0 64 22" aria-hidden="true"><path d="M16 4.5 L61 1.5 L61 12.5 L16 13.5 Z M10 6 h8 v8 h-8z" fill="currentColor"/><circle cx="20" cy="16" r="5.2" fill="none" stroke="currentColor" stroke-width="2.6"/></svg>';
+let shownWeapon = 'shotgun';
+let scoreT = 0, lastScore = '', pingT = 0, toastT = 0, lastPrompt = '', lastHelp = '', hudT = 0, promptKey = 'E';
 function toast(msg) { hud.toast.textContent = msg; hud.toast.classList.remove('hidden'); toastT = 2.6; }
 const HELP = {
-  foot: [['WASD', 'move'], ['Shift', 'run'], ['Space', 'jump'], ['G', 'shotgun out / away'], ['F / Click', 'shoot / use item / punch'], ['1 - 6', 'hold an item'], ['E', 'interact (hold: revive)'], ['X', 'carry a downed teammate'], ['M', 'map'], ['V', '1st / 3rd person'], ['R', 'RV to last checkpoint'], ['B', 'mic on / off (co-op voice)'], ['I', 'copy invite link (co-op)']],
+  foot: [['WASD', 'move'], ['Shift', 'run'], ['Space', 'jump'], ['G', 'weapon out / away (shotgun · cannon vs giants)'], ['F / Click', 'shoot / use item / punch'], ['1 - 6', 'hold an item'], ['E', 'interact (hold: revive)'], ['X', 'carry a downed teammate'], ['E (ladder)', 'climb towers / castle walls'], ['M', 'map'], ['V', '1st / 3rd person'], ['R', 'RV to last checkpoint'], ['B', 'mic on / off (co-op voice)'], ['I', 'copy invite link (co-op)']],
   drone: [['WASD', 'fly'], ['Space / Shift', 'up / down'], ['Mouse', 'turn + tilt camera'], ['V', 'drone cam / chase'], ['E', 'bring the drone back']],
   zoom: [['Mouse', 'look around'], ['F', 'lower binoculars']],
   inside: [['WASD', 'walk (out the side door to leave)'], ['E', 'use / sit / lie / open storage'], ['1 - 6', 'hold an item'], ['L', 'interior lights'], ['Space', 'jump'], ['V', '1st / 3rd person'], ['Mouse', 'look (roof hides)']],
@@ -272,6 +306,7 @@ const HELP = {
   drive: [['W / S', 'gas / brake + reverse'], ['A / D', 'steer'], ['Space', 'handbrake'], ['H', 'horn'], ['L', 'headlights'], ['V', 'chase / cockpit'], ['E', 'get out (when slow)'], ['Q', 'walk to the back'], ['M', 'map'], ['R', 'back to last checkpoint']],
 };
 function stateName() {
+  if (player.dead) return '☠ Eliminated — spectating';
   if (player.downed) return player.carried ? '⬇ Down — being carried' : '⬇ Down!';
   if (player.carrying) return '🤝 Carrying ' + session.nameOf(player.carrying);
   if (drone.active) return 'Flying the drone';
@@ -382,6 +417,19 @@ function updateHUD(dt) {
   hudT = 0.12; // DOM writes ~8x per second only
   hud.state.textContent = stateName() + (player.boost ? '  ⚡ boosted' : '') + (player.swimming ? '  🏊 swimming' : '');
   hud.gunSlot.classList.toggle('sel', combat.out);
+  if (combat.weapon !== shownWeapon) {   // shotgun <-> cannon (giant stage)
+    shownWeapon = combat.weapon;
+    hud.gunSlot.innerHTML = `<span class="n">G</span>${shownWeapon === 'cannon' ? CANNON_SVG : GUN_SVG}`;
+    hud.gunSlot.title = shownWeapon === 'cannon' ? 'Cannon (G)' : 'Shotgun (G)';
+    touch.weapon = shownWeapon; touch.mode = '';
+  }
+  // scoreboard in the pause menu
+  if (started && !overlay.classList.contains('hidden') && (scoreT -= 0.12) <= 0) {
+    scoreT = 1;
+    const rows = survival.scoreRows();
+    const html = rows.length ? `<div class="phead">🏆 Scoreboard</div><table class="stable"><thead><tr><th>#</th><th>Player</th><th>🧟</th><th>🗿</th><th>💚</th><th>☠</th><th>Points</th></tr></thead><tbody>${rows.map((r, i) => `<tr><td>${i + 1}</td><td><i style="background:${PLAYER_COLORS[r[1] % PLAYER_COLORS.length].css}"></i>${escapeHTML(r[0])}</td><td>${r[2]}</td><td>${r[3]}</td><td>${r[4]}</td><td>${r[5]}</td><td><b>${r[6]}</b></td></tr>`).join('')}</tbody></table>` : '';
+    if (html !== lastScore) { lastScore = html; $('pauseScore').innerHTML = html; }
+  }
   // connection quality
   if (net.online && (pingT -= 0.12) <= 0) {
     pingT = 1;
@@ -453,7 +501,7 @@ M.code.addEventListener('input', () => {
 });
 M.code.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); M.join.click(); } });
 M.name.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); (cleanRoomCode(M.code.value).length >= 4 ? M.join : M.solo).click(); } });
-M.solo.onclick = () => { if (codeTyped()) return; playerName(); loadOrReset(); startGame('Walk up to the side door to go inside'); };
+M.solo.onclick = () => { if (codeTyped()) return; session.myName = playerName(); loadOrReset(); startGame('Walk up to the side door to go inside'); };
 M.host.onclick = async () => {
   if (codeTyped()) return;
   busy(true); M.status.textContent = 'Creating a room…';
@@ -530,6 +578,7 @@ function step(dt) {
   remotes.localId = net.online ? net.id : 'local';
   remotes.tick(dt);
   survival.update(dt, input);
+  structures.update(dt, camera.position);
   tracers.update(dt);
   player.char.root.getWorldPosition(pw);
   focus.copy(drone.active ? drone.pos : player.mode === 'drive' ? player.rv.root.position : pw);
@@ -547,9 +596,9 @@ function step(dt) {
 
 function frame(now) {
   requestAnimationFrame(frame);
-  if (paused || editor.open) {   // nothing to animate behind the designer / pause menu: save the GPU
+  if (paused || editor.open || designer.open) {   // nothing to animate behind the designers / pause menu: save the GPU
     if (requestRender) { renderer.render(scene, camera); requestRender = false; }
-    if (editor.open && net.online) { const bdt = Math.min(0.05, (now - lastT) / 1000); session.tick(bdt); survival.background(bdt); }
+    if ((editor.open || designer.open) && net.online) { const bdt = Math.min(0.05, (now - lastT) / 1000); session.tick(bdt); survival.background(bdt); }
     lastT = now; input.endFrame();
     return;
   }
@@ -572,7 +621,17 @@ addEventListener('beforeunload', () => saveNow());
 step(0.016);
 renderer.render(scene, camera);
 requestAnimationFrame(frame);
-window.__game = { net, session, voice, player, rvs, remotes, obstacles, bridgeWorld, materials, world, inv, gear, editor, input, rig, camera, zombies, survival, combat, applySave, collectSave, saveNow, get objI() { return objI; },
+// test hook: jump to a campaign stage (tbuild | siege | cbuild | giants), optionally building towers / castle
+function debugStage(st, build) {
+  const rv = rvs[0], cp = { tbuild: 4, siege: 4, cbuild: 5, giants: 5 }[st];
+  rv.cp = cp; rv.reset(cp); flags.setReached(cp); player.spawnBesideRV(); obstacles.list.forEach(o => obstacles.clearInstant(o));
+  materials.addAll({ logs: 30, planks: 40, rope: 12, stone: 90 });
+  survival.stage = st === 'tbuild' || st === 'siege' ? 'trail' : 'trail2';
+  survival._toStage(st === 'siege' ? 'tbuild' : st === 'giants' ? 'cbuild' : st);
+  if (build) { designer.show(build); designer._action('build'); designer.close(); }
+  if (st === 'siege' || st === 'giants') survival._toStage(st);
+}
+window.__game = { debugStage, net, session, voice, structures, designer, giants, player, rvs, remotes, obstacles, bridgeWorld, materials, world, inv, gear, editor, input, rig, camera, zombies, survival, combat, applySave, collectSave, saveNow, get objI() { return objI; },
   // test hooks: advance the game n frames / pin the camera
   run: n => { for (let i = 0; i < n; i++) step(1 / 60); renderer.render(scene, camera); }, setCam: a => { freezeCam = a; } };
 
@@ -591,10 +650,12 @@ if (qs.has('shot')) {
   if (s.includes('bridgegood') || s.includes('bridgeweak')) { bridgeWorld.build(sample(s.includes('bridgegood'))); rv.reset(1); player.spawnBesideRV(); obstacles.list.forEach(o => obstacles.clearInstant(o)); }
   if (s.includes('align')) { rv.heading = Math.atan2(BRIDGE.dx, BRIDGE.dz); rv.rear.set(BRIDGE.ax - BRIDGE.dx * 12, 0, BRIDGE.az - BRIDGE.dz * 12); rv.y = 50; rv._place(1, true); player.spawnBesideRV(); }
   if (s.includes('tworv')) { addRV(); player.spawnBesideRV(); }
+  if (qs.get('cp')) { rv.cp = +qs.get('cp'); rv.reset(rv.cp); flags.setReached(rv.cp); player.spawnBesideRV(); obstacles.list.forEach(o => obstacles.clearInstant(o)); }
   if (/inside|sit|sofa|lie|bunk|fridge/.test(s)) { player.placeInside(); run(20); }
   if (s.includes('sit')) { player.sitAt('dinetteA'); run(80); }
   if (s.includes('drive')) { player.enterDriver(true); run(120); }
   if (s.includes('night')) { world.setNight(1, true); rv.headlights = true; rv.interiorLights = true; }
+  if (qs.get('stage')) debugStage(qs.get('stage'), qs.get('build'));
   if (s.includes('zombies')) {   // a zombie night around the player (debug screenshots)
     survival._setPhase('night', 300, 1); world.night = 0.999;
     for (let i = 0; i < 8; i++) { const a = i * 0.8 - 1.5, d = 5 + (i % 3) * 3; const z = zombies.spawn(player.pos.x + Math.sin(a) * d, player.pos.z + Math.cos(a) * d, 1.6); z.st = 1; z.t = 2; }

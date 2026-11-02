@@ -76,7 +76,7 @@ export class TouchUI {
       const def = BUTTONS[i], show = def[2].split(' ').includes(mode);
       b.style.display = show ? '' : 'none';
       const lab = (holding === 'gun' && def[1].gun) || (holding === true && def[1].item) || def[1][mode] || def[1].foot || '';
-      if (lab === 'GUN') b.innerHTML = GUN_SVG; else b.textContent = lab;
+      if (lab === 'GUN') b.innerHTML = this.weapon === 'cannon' ? '💣' : GUN_SVG; else b.textContent = lab;
     });
   }
 }

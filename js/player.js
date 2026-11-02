@@ -39,7 +39,7 @@ export class Player {
     this.rvs = [rv]; this.canUseSeat = () => null; this.onDrive = null; this.anim = { a: 'idle', sp: 0, st: 0, hd: null };
     this.gear = null; this.extraActs = []; this.worldActs = null; this.boost = false; this.seatExit = null; this.lieT = 0; this.swimming = false;
     // survival: health, knocked down, carried by / carrying a teammate (peer ids), shotgun aim
-    this.hp = 100; this.downed = false; this.carried = null; this.carrying = null; this.aiming = false; this.aimPitch = 0;
+    this.hp = 100; this.downed = false; this.dead = false; this.carried = null; this.carrying = null; this.aiming = false; this.aimPitch = 0;
     this.canDrive = () => true; this.netExtra = null;
     this._buildInteractions();
   }
@@ -166,9 +166,9 @@ export class Player {
     const a = this.anim, eq = this.gear && this.gear.inv.equippedItem(), d = this.gear && this.gear.drone;
     const r2 = v => Math.round(v * 100) / 100;
     return { f: this.frame === 'rv' ? 1 : 0, rv: this.rvs.indexOf(this.rv), x: r2(this.pos.x), y: r2(this.visY), z: r2(this.pos.z), yw: r2(this.yaw), pi: r2(this.pitch),
-      a: a.a, sp: r2(a.sp), vy: r2(this.vy), st: r2(a.st), hd: a.hd, it: this.gear && this.gear.gunOut ? 'shotgun' : eq ? eq.type : null, hv: this.char.hand.visible ? 1 : 0, se: this.seat,
+      a: a.a, sp: r2(a.sp), vy: r2(this.vy), st: r2(a.st), hd: a.hd, it: this.gear && this.gear.gunOut ? this.gear.gunType : eq ? eq.type : null, hv: this.char.hand.visible ? 1 : 0, se: this.seat,
       dr: d && d.active ? [r2(d.pos.x), r2(d.pos.y), r2(d.pos.z), r2(d.yaw)] : 0,
-      hp: Math.round(this.hp), dn: this.downed ? 1 : 0, cb: this.carried || 0, cr: this.carrying || 0, ap: r2(this.aimPitch), ...(this.netExtra ? this.netExtra() : null) };
+      hp: Math.round(this.hp), dn: this.downed ? 1 : 0, dd: this.dead ? 1 : 0, cb: this.carried || 0, cr: this.carrying || 0, ap: r2(this.aimPitch), ...(this.netExtra ? this.netExtra() : null) };
   }
   // stand next to the RV's side door, facing it
   spawnBesideRV(k = 0) {
@@ -181,7 +181,7 @@ export class Player {
   placeInside() { this.toRV(); this.pos.set(-0.55, Y.floor, DOOR_Z); this.visY = Y.floor; this.mode = 'inside'; this.grounded = true; }
   enterDriver(fromOutside) {
     if (!this._seatFree('driverSeat')) return;
-    if (!this.canDrive(this.rv)) { this.toastMsg('🔧 The RV is wrecked — repair it with the hammer before you can drive'); return; }
+    if (!this.canDrive(this.rv)) { this.toastMsg('🔧 The RV only drives when it is 100% repaired — use the hammer (Gear Locker) next to it'); return; }
     this.seat = 'driverSeat';            // reserve it right away so teammates can't take it
     this.toRV();
     const seat = ANCHOR.driverSeat, sp = V(seat.pos);
@@ -261,6 +261,8 @@ export class Player {
 
   /* ---------------- per-frame ---------------- */
   update(dt, input, cam) {
+    // eliminated: no body, no control (the camera spectates a teammate)
+    if (this.dead) { this.prompt = null; this.aiming = false; this.anim.a = 'downed'; audio.horn(false); return null; }
     // safety net: never let a bad frame leave the player at NaN
     if (!Number.isFinite(this.pos.x + this.pos.y + this.pos.z + this.yaw)) {
       this.vel.set(0, 0); this.vy = 0; this.yaw = Number.isFinite(this.yaw) ? this.yaw : 0;
@@ -398,6 +400,7 @@ export class Player {
       } else this.grounded = false;
       this.world.collide(this.pos, R);
       for (const r of this.rvs) r.pushOut(this.pos, R);
+      if (this.world.constrain) this.world.constrain(this.pos);       // stay on tower tops / wall walkways
       this._doorApproach(dt);
     }
   }

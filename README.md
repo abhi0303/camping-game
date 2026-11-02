@@ -1,6 +1,6 @@
 # RV Van – Jungle Trail
 
-A low-poly RV adventure in plain HTML/CSS/JS + Three.js. Start at the trailhead, drive through a hilly jungle, clear the road, rebuild the broken bridge over the river and reach the hilltop camp — and survive the zombie nights. Play alone or with up to 3 friends (4 players, one RV), on desktop or mobile.
+A low-poly RV adventure in plain HTML/CSS/JS + Three.js. Start at the trailhead, drive through a hilly jungle, clear the road, rebuild the broken bridge over the river, reach the hilltop camp, then cross the pass into the highlands. Build towers to survive a zombie siege and a stone castle to face 10 stone-throwing giants, surviving the zombie nights along the way. Play alone or with up to 3 friends (4 players, one RV), on desktop or mobile.
 
 ## Play locally
 
@@ -39,15 +39,51 @@ All paths are relative, so the game works from the repo sub-folder. `.nojekyll` 
 
 **Limits:** connections go peer-to-peer, with PeerJS's free relay as a fallback. Very strict networks (some offices or schools) can still block WebRTC. The public PeerJS service has no uptime guarantee; for a big audience, run your own PeerJS server.
 
-## Zombie nights
+## Survival rules
 
-- The day lasts **3 minutes**; then night falls for **5 minutes** and **zombies** rise out of the jungle and come for the players. The timer is at the top of the screen.
-- Everyone has a **pump shotgun with unlimited ammo**: press **G** (or tap the shotgun) to take it out, **click / F** to shoot. It hits hardest up close. It's drawn automatically when night falls.
-- Each player has **health** (bar at the bottom; teammates' health shows in the team list and above their heads). Health comes back during the day, slowly at night when you're safe, and faster lying in a bed. Food and drinks from the fridge give +25.
-- At 0 health you're **down**. A teammate can **revive** you (hold **E** next to you) or **carry** you (**X**) to a safe spot and put you down (**X** again). If nobody helps in time, you wake up inside the RV. Solo, you wake up there after a few seconds.
-- **The RV is safe:** zombies can't climb onto the roof (ladder at the back) or get inside. Instead they **attack the RV**. Shoot them off before it's wrecked. A wrecked RV can't be driven, and the zombies can reach the people in and on it.
-- Driving into zombies kills them (and dents the RV a little).
-- **Morning:** the zombies collapse. **Repair the RV** with the hammer (or sledgehammer) from the Gear Locker: stand next to it and press **F**. **The next night only comes once the RV is back to 100%.**
+- **Nights:** the first night falls after **3 minutes**, the next one **6 minutes** after that, then every **10 minutes**. A night lasts **5 minutes** and brings **zombies**. The timer is at the top of the screen.
+- **Stronger zombies:** every checkpoint you pass makes them tougher (more health, harder bites, faster). The level (⚔ Lv) shows next to the timer.
+- **Weapon:** everyone has a **pump shotgun with unlimited ammo**. Press **G** (or tap the gun slot) to take it out and **click / F** to shoot. In the giant stage it becomes a **cannon**.
+- **Health:** your bar is at the bottom; teammates' health is in the team list (with their points) and above their heads. Health comes back in daylight, slowly at night when you're safe, and faster lying in a bed. Food and drinks give +25.
+- **Down = last chance:** at 0 health you're down. A teammate can **revive** you (hold **E** next to you, +50 points for them) or **carry** you (**X**) to a safe spot. Zombies keep attacking downed players; if nobody saves you in time, you are **eliminated for good**. No respawns: you can only **spectate** your teammates (click / tap / → to switch) or **leave the game**. When everyone is eliminated it's game over.
+- **Safe spots:** inside the RV, on the RV roof (ladder at the back) and on top of a standing tower. Zombies can't reach you there, so they smash the RV or the tower instead.
+- **The RV only drives at 100%.** Repair it with the hammer (or sledgehammer) from the Gear Locker: stand next to it and press **F**.
+- Driving into zombies kills them (and counts for the driver).
+
+## Watchtower Valley (tower shelter)
+
+North of the hilltop camp the road crosses a pass into the pine highlands. When you reach **Watchtower Valley** you get **10 minutes** to prepare, then a **5-minute zombie siege**.
+
+1. Collect materials: open the supply crates, chop trees for **logs** (saw them into **planks** at the workbench), smash rocks for **stone**, bring **rope**. Everything goes into one shared team pool.
+2. At the **Tower workbench**, design your shelter:
+   - **4 small**, **2 medium** or **1 big** tower, or a mix (4 slots: small 1, medium 2, big 4);
+   - each tower gets 1–4 floors (more floors = tougher) and an optional **stone base** (+60% strength);
+   - drag the towers anywhere inside the roped **building zone**, or use the spacing slider to line them up.
+3. Press **Build**: the towers rise. Climb with **E** at the ladder; shoot from the top. Zombies can't climb but will smash the towers. Repair them with the hammer. A tower at 0% collapses and everyone on it falls.
+4. Done early? Press **"We're ready — start now"**.
+
+## Giant Plateau (the final stand)
+
+The road ends at the **Giant Plateau**. It's daytime, with no zombies: you get **10 minutes** to build a **stone castle wall**, then **10 giants** come (2 first, then one more every 30 seconds).
+
+- At the **Castle workbench**:
+  - pick a shape (square, hexagon, octagon) and a size;
+  - **drag the corners** anywhere inside the plateau boundary, and add or remove corners;
+  - choose the wall height and thickness, and optional corner turrets;
+  - choose which wall gets the **gate**.
+
+  Stone comes from crates, rock piles and rocks.
+- Giants throw **boulders** at you. Walls block them (and take the damage); some giants walk up and punch the walls. Climb onto the walls with **E** and repair them with the hammer.
+- Your weapon is now a **cannon** (G, then click / F). The ball drops a little over distance; aim at the giants. "Giants remaining" shows at the top.
+- Beat all 10 giants to win.
+
+## Scoreboard
+
+- Zombie kill: **10** points, more at higher zombie levels.
+- Giant kill: **150**.
+- Revive: **50**.
+- Deaths are counted too.
+- The scoreboard is in the pause menu (**Esc**) and shows at the end (victory or game over), with badges for the top zombie killer, giant slayer and medic.
 
 ## Saving
 
@@ -74,9 +110,9 @@ All paths are relative, so the game works from the repo sub-folder. `.nojekyll` 
 | Space | jump | Space | handbrake |
 | C | crouch | H | horn |
 | 1–6 | hold an item | L | headlights |
-| G | shotgun out / away | V | chase / cockpit view |
+| G | weapon out / away (shotgun / cannon) | V | chase / cockpit view |
 | F / click | shoot / use item / punch | E | get out (when slow) |
-| E (hold) | interact / revive a teammate | Q | walk to the back |
+| E (hold) | interact / climb towers & walls / revive a teammate | Q | walk to the back |
 | X | carry a teammate / pack up gear | | |
 
 Global: **M** map, **K** sound, **B** mic on / off (co-op), **R** RV back to the last checkpoint, **Tab** hide help, **Esc** pause (co-op: player list, ping, mic, kick).
@@ -91,6 +127,8 @@ Global: **M** map, **K** sound, **B** mic on / off (co-op), **R** RV back to the
    - test it with a virtual RV, then build it.
 4. Drive across. The bridge is a real spring simulation, so weak designs snap and drop the RV into the river (**R** recovers it).
 5. Clear the hill road and reach the **Hilltop Camp**.
+6. Cross the pass north (more road blocks) to **Watchtower Valley**: build towers and survive the siege.
+7. Drive on to the **Giant Plateau**: build the castle and defeat the giants.
 
 ## Files
 
@@ -103,7 +141,10 @@ Global: **M** map, **K** sound, **B** mic on / off (co-op), **R** RV back to the
 - `js/rv.js`, `js/rvModel.js`, `js/rvInterior.js`, `js/rvDims.js` – the RV
 - `js/player.js`, `js/character.js`, `js/camera.js` – player, animation, cameras
 - `js/items.js`, `js/inventory.js`, `js/gear.js`, `js/drone.js` – items, storages, item use, drone
-- `js/survival.js`, `js/zombies.js`, `js/combat.js` – day/night clock, health, revive/carry, RV damage + repair; zombie AI and drawing; the shotgun
+- `js/survival.js` – the campaign: day/night schedule, stages (siege, giants), health, down / revive / carry / elimination, scores, RV damage + repair
+- `js/zombies.js`, `js/giants.js` – zombie and giant AI + instanced drawing, boulders
+- `js/structures.js`, `js/designer.js` – towers and castle walls (build, climb, damage, repair) and their workbench designer
+- `js/combat.js` – shotgun and cannon
 - `js/minimap.js` – minimap and full map
 
 ## Performance

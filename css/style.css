@@ -109,7 +109,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #2a2d3a; f
 #matsBar { display: flex; gap: 14px; padding: 4px 12px; font-size: 14px; font-weight: 700; }
 
 /* ---------- bridge designer ---------- */
-#bridgeUI { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(10,12,20,.5); z-index: 6; }
+#bridgeUI, #buildUI { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(10,12,20,.5); z-index: 6; }
 .bbox { width: min(1240px, calc(100vw - 24px)); background: rgba(30,33,46,.97); border: 1px solid rgba(255,255,255,.12); border-radius: 16px; padding: 14px 16px; box-shadow: 0 20px 60px rgba(0,0,0,.45); }
 .bhead { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; font-size: 18px; }
 .bmain { display: flex; gap: 14px; }
@@ -265,3 +265,50 @@ body.touch #gunSlot .gunIco { width: 34px; }
 body.touch #micBtn { font-size: 11px; padding: 4px 8px; }
 body.touch #micBtn .k { display: none; }
 .trow2 #room { min-width: 0; }
+
+/* ---------- build stages / giants / scoreboard ---------- */
+#buildUI .bleft canvas { background: #5f8f3c; cursor: grab; touch-action: none; }
+.brange { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; pointer-events: auto; }
+.brange input { width: 90px; }
+.bbtn:disabled { opacity: .45; cursor: not-allowed; }
+.bstat div { display: flex; justify-content: space-between; padding: 2px 0; font-size: 12.5px; }
+#cycle.build { background: rgba(110, 80, 20, .88); border-color: rgba(242,193,78,.65); color: #ffe7a8; }
+#cycle.giants { background: rgba(90, 40, 20, .9); border-color: rgba(255,140,90,.6); color: #ffd7c4; font-size: 14px; }
+#cycle.won { background: rgba(40, 110, 60, .9); border-color: rgba(140,240,160,.6); color: #e2ffe8; }
+.trow { grid-template-columns: 10px 1fr 56px 16px 30px; }
+.trow .pts { text-align: right; opacity: .8; font-weight: 700; }
+.trow.dd span { text-decoration: line-through; opacity: .6; }
+#spectate { position: fixed; left: 50%; bottom: 120px; transform: translateX(-50%); z-index: 3; display: flex; flex-direction: column; align-items: center; gap: 6px; background: rgba(20,14,18,.82); border: 1px solid rgba(255,255,255,.12); border-radius: 14px; padding: 14px 22px; pointer-events: auto; }
+#spectate .stitle { font-size: 22px; font-weight: 900; color: #ffb3a8; }
+#specName { font-size: 15px; font-weight: 700; }
+#spectate .shint { font-size: 12px; opacity: .7; }
+body.dead #hotbarWrap, body.dead #prompt { display: none !important; }
+#endScreen { position: fixed; inset: 0; z-index: 9; display: flex; align-items: center; justify-content: center; background: rgba(10,12,20,.6); pointer-events: auto; }
+.ecard { width: min(760px, calc(100vw - 24px)); max-height: calc(100vh - 24px); overflow: auto; background: rgba(30,33,46,.97); border: 1px solid rgba(255,255,255,.12); border-radius: 18px; padding: 24px; text-align: center; box-shadow: 0 20px 60px rgba(0,0,0,.5); }
+.etitle { font-size: 30px; font-weight: 900; }
+.esub { opacity: .75; margin: 6px 0 12px; }
+.ebadges { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-bottom: 14px; }
+.ebadges span { background: #23273a; border-radius: 999px; padding: 6px 12px; font-size: 13px; }
+.etable, .stable { width: 100%; border-collapse: collapse; font-size: 14px; }
+.etable th, .stable th { font-size: 12px; opacity: .7; font-weight: 700; padding: 6px; border-bottom: 1px solid rgba(255,255,255,.12); }
+.etable td, .stable td { padding: 8px 6px; border-bottom: 1px solid rgba(255,255,255,.06); }
+.etable td:nth-child(2), .stable td:nth-child(2) { text-align: left; font-weight: 700; }
+.etable td i, .stable td i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 8px; }
+.etable tr.top td { color: #ffd34d; }
+.ebtns { display: flex; gap: 10px; justify-content: center; margin-top: 18px; flex-wrap: wrap; }
+#pauseScore { max-width: 540px; margin: 0 auto 10px; }
+#pauseScore .phead { font-size: 12px; opacity: .75; margin-bottom: 4px; }
+/* designers on short (phone landscape) screens: canvas left, panel right, everything scrolls */
+#bridgeUI .bbox, #buildUI .bbox { max-height: calc(100vh - 12px); overflow-y: auto; }
+@media (max-height: 560px) {
+  #bridgeUI .bmain, #buildUI .bmain { flex-direction: row; }
+  #bridgeUI .bside, #buildUI .bside { width: 220px; flex: none; max-height: calc(100vh - 70px); overflow-y: auto; font-size: 12px; }
+  #bridgeUI .bleft canvas, #buildUI .bleft canvas { width: auto; max-width: 100%; max-height: calc(100vh - 150px); }
+  #bridgeUI .bbox, #buildUI .bbox { padding: 8px 10px; }
+  #bridgeUI .bhead, #buildUI .bhead { margin-bottom: 4px; font-size: 14px; }
+  #bridgeUI .btools, #buildUI .btools { gap: 4px; margin-bottom: 4px; }
+  #bridgeUI .bbtn, #buildUI .bbtn { padding: 4px 7px; font-size: 11px; }
+  #bridgeUI .bhelp, #buildUI .bhelp { display: none; }
+  #bridgeUI .binfo, #buildUI .binfo { font-size: 11.5px; min-height: 0; margin-top: 4px; }
+  #bridgeUI .bside h4, #buildUI .bside h4 { margin: 4px 0 2px; }
+}

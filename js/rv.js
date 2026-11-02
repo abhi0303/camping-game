@@ -26,7 +26,8 @@ export class RV {
     this.throttle = 0; this.mwTimer = 0; this.onMsg = null;
     this.inv = new THREE.Matrix4();
     const r = world.T.road;
-    this.checkpoints = [12, r.sA - 16, r.sB + 14, r.length - 16];
+    // trailhead, before the bridge, after the bridge, hilltop camp, Watchtower Valley, Giant Plateau
+    this.checkpoints = [12, r.sA - 16, r.sB + 14, r.sCamp - 16, r.sValley - 26, r.sGiant - 16];
     this.cp = 0; this.cpT = 0; this.roadS = 0;
 
     const P = this.m.pivots;

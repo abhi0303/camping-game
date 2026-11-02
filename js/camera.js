@@ -14,6 +14,7 @@ export class CameraRig {
     this.lookYaw = 0; this.lookPitch = 0.22;   // cockpit look offsets
     this.target = new THREE.Vector3(); this.has = false;
     this.drone = null; this.gear = null; this.droneView = 'cam'; this._wasZoom = false;
+    this.follow = null;            // spectating: orbit this object (a teammate) instead of the player
     this.idle = 0;
     this._v = new THREE.Vector3(); this._d = new THREE.Vector3(); this._l = new THREE.Vector3();
   }
@@ -33,7 +34,7 @@ export class CameraRig {
     const cam = this.cam;
     const driving = player.mode === 'drive';
     const cockpit = driving && this.driveView === 'cockpit';
-    const fp = !driving && this.firstPerson;
+    const fp = !driving && this.firstPerson && !this.follow;
     const mouse = input.dx !== 0 || input.dy !== 0;
     this.idle = mouse ? 0 : this.idle + dt;
 
@@ -124,6 +125,10 @@ export class CameraRig {
         this.pitch = damp(this.pitch, 0.26, 1.5, dt);
       }
       this.dist = damp(this.dist, this.driveDist, 4, dt);
+    } else if (this.follow) {
+      this.follow.updateWorldMatrix(true, false);
+      goal = this.follow.localToWorld(this._v.set(0, 1.45, 0));
+      this.dist = damp(this.dist, Math.max(5, this.distTarget), 6, dt);
     } else {
       goal = player.focusWorld(this._v);
       let maxD = this.distTarget, minP = -0.25;

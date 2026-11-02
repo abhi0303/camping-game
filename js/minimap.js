@@ -1,7 +1,7 @@
 import * as THREE from 'three';
-import { HALF, SIZE, START, CAMP, BRIDGE, RIVER_HALF } from './terrain.js';
+import { X0, X1, Z1, SX, SZ, START, CAMP, BRIDGE, RIVER_HALF, NORTH, VALLEY, TOWER_ZONE, GIANT } from './terrain.js';
 
-const RES = 512, VIEW = 110;   // base map pixels, minimap radius in metres
+const RES = 512, RESZ = Math.round(RES * SZ / SX), VIEW = 110;   // base map pixels (width x height), minimap radius in metres
 
 // Map image is painted once from the terrain; the minimap/big map just crop + draw markers.
 export class MiniMap {
@@ -13,13 +13,13 @@ export class MiniMap {
     this.bigOpen = false; this.t = 0; this.tBig = 0;
     this._board();
   }
-  toPx(x, z) { return [((x + HALF) / SIZE) * RES, ((HALF - z) / SIZE) * RES]; }
+  toPx(x, z) { return [((x - X0) / SX) * RES, ((Z1 - z) / SX) * RES]; }
 
   // the trailhead map board shows the same map
   _board() {
     const c = document.createElement('canvas'); c.width = RES; c.height = Math.round(RES * 0.7);
     const g = c.getContext('2d');
-    g.drawImage(this.base, 0, RES * 0.12, RES, RES * 0.7, 0, 0, c.width, c.height);
+    g.drawImage(this.base, 0, RESZ - RES * 0.88, RES, RES * 0.7, 0, 0, c.width, c.height);
     g.fillStyle = 'rgba(40,25,10,.85)'; g.fillRect(0, 0, c.width, 34);
     g.fillStyle = '#f2e3b6'; g.font = 'bold 24px Georgia'; g.textAlign = 'center'; g.fillText('JUNGLE TRAIL MAP', c.width / 2, 25);
     const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
@@ -35,7 +35,7 @@ export class MiniMap {
   }
 
   _drawMini(me, markers) {
-    const c = this.mctx, S = this.mini.width, R = S / 2, k = (R / VIEW) / (RES / SIZE);
+    const c = this.mctx, S = this.mini.width, R = S / 2, k = (R / VIEW) / (RES / SX);
     const [bx, by] = this.toPx(me.x, me.z);
     c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, S, S);
     c.save(); c.beginPath(); c.arc(R, R, R - 3, 0, Math.PI * 2); c.clip();
@@ -58,10 +58,12 @@ export class MiniMap {
   _drawBig(me, markers) {
     const c = this.bctx, S = this.bcv.width, k = S / RES;
     c.setTransform(1, 0, 0, 1, 0, 0);
-    c.drawImage(this.base, 0, 0, S, S);
-    for (const m of markers) { const [px, py] = this.toPx(m.x, m.z); this._icon(c, px * k, py * k, m, 22, true); }
+    c.fillStyle = '#1d2a1c'; c.fillRect(0, 0, S, S);
+    const kk = S / RESZ, ox = (S - RES * kk) / 2;          // the map is taller than wide: fit the height
+    c.drawImage(this.base, ox, 0, RES * kk, S);
+    for (const m of markers) { const [px, py] = this.toPx(m.x, m.z); this._icon(c, ox + px * kk, py * kk, m, 22, true); }
     const [px, py] = this.toPx(me.x, me.z);
-    this._arrow(c, px * k, py * k, me.yaw, 12);
+    this._arrow(c, ox + px * kk, py * kk, me.yaw, 12);
     c.fillStyle = 'rgba(20,22,30,.75)'; c.fillRect(10, S - 34, 250, 24);
     c.fillStyle = '#fff'; c.font = '13px system-ui'; c.textAlign = 'left'; c.fillText('M or Esc to close · ▲ you are here', 18, S - 17);
   }
@@ -92,11 +94,11 @@ export class MiniMap {
 }
 
 function paintBase(world) {
-  const T = world.T, cv = document.createElement('canvas'); cv.width = cv.height = RES;
-  const g = cv.getContext('2d'), img = g.createImageData(RES, RES), d = img.data, step = SIZE / RES;
+  const T = world.T, cv = document.createElement('canvas'); cv.width = RES; cv.height = RESZ;
+  const g = cv.getContext('2d'), img = g.createImageData(RES, RESZ), d = img.data, step = SX / RES;
   const lo = [42, 92, 40], hi = [120, 160, 80];
-  for (let py = 0; py < RES; py++) for (let px = 0; px < RES; px++) {
-    const x = -HALF + (px + 0.5) * step, z = HALF - (py + 0.5) * step, h = T.heightAt(x, z);
+  for (let py = 0; py < RESZ; py++) for (let px = 0; px < RES; px++) {
+    const x = X0 + (px + 0.5) * step, z = Z1 - (py + 0.5) * step, h = T.heightAt(x, z);
     let r, gg, b;
     const rd = T.riverDistAt(x, z), od = T.roadDistAt(x, z);
     if (rd < RIVER_HALF + 0.8 && h < T.W + 0.4) { r = 61; gg = 127; b = 166; }
@@ -104,7 +106,8 @@ function paintBase(world) {
     else {
       const t = Math.max(0, Math.min(1, (h + 5) / 45));
       r = lo[0] + (hi[0] - lo[0]) * t; gg = lo[1] + (hi[1] - lo[1]) * t; b = lo[2] + (hi[2] - lo[2]) * t;
-      if (Math.hypot(x - START.x, z - START.z) < 34 || Math.hypot(x - CAMP.x, z - CAMP.z) < 28) { r += 30; gg += 25; b += 10; }
+      if (Math.hypot(x - START.x, z - START.z) < 34 || Math.hypot(x - CAMP.x, z - CAMP.z) < 28 || Math.hypot(x - GIANT.x, z - GIANT.z) < 40
+        || (Math.abs(x - TOWER_ZONE.x) < TOWER_ZONE.hw + 4 && Math.abs(z - TOWER_ZONE.z) < TOWER_ZONE.hd + 4)) { r += 30; gg += 25; b += 10; }
       if (h > 40) { const m = Math.min(1, (h - 40) / 30); r += (130 - r) * m; gg += (125 - gg) * m; b += (115 - b) * m; }
       const shade = 1 + (T.heightAt(x - 2, z + 2) - T.heightAt(x + 2, z - 2)) * 0.05;
       r *= shade; gg *= shade; b *= shade;
@@ -113,7 +116,7 @@ function paintBase(world) {
   }
   g.putImageData(img, 0, 0);
   // bridge site marker line
-  const p = (x, z) => [((x + HALF) / SIZE) * RES, ((HALF - z) / SIZE) * RES];
+  const p = (x, z) => [((x - X0) / SX) * RES, ((Z1 - z) / SX) * RES];
   const [ax, ay] = p(BRIDGE.ax, BRIDGE.az), [bx, by] = p(BRIDGE.bx, BRIDGE.bz);
   g.strokeStyle = '#6e4a2a'; g.lineWidth = 3; g.setLineDash([3, 3]); g.beginPath(); g.moveTo(ax, ay); g.lineTo(bx, by); g.stroke(); g.setLineDash([]);
   return cv;

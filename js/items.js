@@ -82,6 +82,17 @@ const BUILD = {
     b.box(0.06, 0.02, 0.05, 0, 0, 0.04, 0x3a3c40);
   },
   drone: b => droneBody(b, true),
+  // hand cannon (giant stage): fat bronze barrel on a wooden stock, along the forearm (-y)
+  cannon: b => {
+    b.cyl(0.1, 0.12, 0.78, 9, 0, -0.42, 0.08, 0xb0803a);                     // barrel
+    b.cyl(0.13, 0.13, 0.08, 9, 0, -0.8, 0.08, 0x8a6228);                     // muzzle ring
+    b.cyl(0.125, 0.125, 0.06, 9, 0, -0.5, 0.08, 0x8a6228);
+    b.cyl(0.125, 0.125, 0.06, 9, 0, -0.16, 0.08, 0x8a6228);
+    b.add(new THREE.SphereGeometry(0.12, 8, 6), 0x9a7030, 0, -0.02, 0.08);   // breech
+    b.box(0.07, 0.42, 0.09, 0, 0.12, -0.03, 0x6e4a2a, 'solid', 0.25, 0, 0);  // stock
+    b.box(0.05, 0.05, 0.12, 0, -0.05, -0.04, 0x2a2b2e);                     // trigger
+    b.cyl(0.01, 0.01, 0.1, 4, 0, -0.02, 0.21, 0xd8c08a);                     // fuse
+  },
   // pump shotgun: barrel runs along the forearm (-y), top of the gun = +z
   shotgun: b => {
     b.box(0.05, 0.2, 0.075, 0, -0.03, 0.035, 0x2c2e33);                      // receiver

@@ -82,6 +82,12 @@
 
   <div id="hurt"></div>
   <div id="downed" class="hidden"><div class="dtitle">💀 You're down!</div><div id="downedText"></div></div>
+  <div id="spectate" class="hidden"><div class="stitle">☠ You were eliminated</div><div id="specName"></div><div class="shint">click / tap / → to watch another teammate</div><button id="specLeave" class="mbig alt">Leave the game</button></div>
+  <div id="endScreen" class="hidden"><div class="ecard">
+    <div class="etitle"></div><div class="esub"></div><div class="ebadges"></div>
+    <table class="etable"><thead><tr><th>#</th><th>Player</th><th>🧟 Zombies</th><th>🗿 Giants</th><th>💚 Revives</th><th>☠ Deaths</th><th>Points</th></tr></thead><tbody></tbody></table>
+    <div class="ebtns"><button id="endStay" class="mbig alt">Keep watching</button><button id="endMenu" class="mbig">Back to the menu</button></div>
+  </div></div>
 
   <!-- full map -->
   <div id="bigmap" class="hidden"><canvas id="bigmapCanvas" width="720" height="720"></canvas></div>
@@ -116,6 +122,7 @@
       </div>
       <div id="menuPause" class="hidden">
         <button id="play">Resume</button>
+        <div id="pauseScore"></div>
         <p id="pauseRoom" class="small"></p>
       </div>
       <div class="grid desk-only">
@@ -125,7 +132,7 @@
         <div><b>L</b> lights</div><div><b>G</b> shotgun</div><div><b>R</b> RV to checkpoint</div>
         <div><b>Hold E</b> revive friend</div><div><b>X</b> carry friend</div><div><b>B</b> mic on / off</div>
       </div>
-      <p class="small zinfo">🧟 Every 3 minutes night falls for 5 minutes and zombies come. Shoot them, or climb onto the RV roof — but then they attack the RV. Repair it with the hammer in the morning: the next night only comes once it's fixed.</p>
+      <p class="small zinfo">🧟 Nights fall after 3, 6, then every 10 minutes — zombies come, tougher at every checkpoint. Go down and nobody revives you? You're out for good (spectate). The RV only drives at 100%. Build towers at Watchtower Valley to survive the siege, then a stone castle against 10 giants at the Giant Plateau. Most zombie kills + revives wins the scoreboard!</p>
       <p class="dim small desk-only">Esc frees the mouse. Choose "Low" quality (top-right) if your laptop gets warm.</p>
       <p class="dim small touch-only">Left thumb: move · right thumb: look · tap the prompt to interact. Landscape works best.</p>
       <p id="loadErr" class="err hidden"></p>

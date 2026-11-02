@@ -4,7 +4,8 @@ import { clamp } from './utils.js';
 
 // Pump shotgun with unlimited ammo. Every player has one (G to take it out).
 const PELLETS = 8, SPREAD = 0.065, RANGE = 36, DMG = 15, COOLDOWN = 0.85;
-export const MUZZLE = new THREE.Vector3(0, -0.66, 0.062);
+const CANNON_CD = 2.0, BALL_V = 58, BALL_DMG = 260, SPLASH_DMG = 110;
+const MUZZLES = { shotgun: new THREE.Vector3(0, -0.66, 0.062), cannon: new THREE.Vector3(0, -0.88, 0.08) };
 
 /* ---------- muzzle flash (shared geometry/material, one small mesh per gun) ---------- */
 const flashGeo = (() => {
@@ -20,10 +21,10 @@ const flashGeo = (() => {
 })();
 const flashMat = new THREE.MeshBasicMaterial({ color: 0xffcf73, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
 // the muzzle point of a shotgun model (adds the flash mesh the first time)
-export function muzzleOf(model) {
+export function muzzleOf(model, type = 'shotgun') {
   let m = model.getObjectByName('muzzle');
   if (!m) {
-    m = new THREE.Object3D(); m.name = 'muzzle'; m.position.copy(MUZZLE); model.add(m);
+    m = new THREE.Object3D(); m.name = 'muzzle'; m.position.copy(MUZZLES[type] || MUZZLES.shotgun); model.add(m);
     const f = new THREE.Mesh(flashGeo, flashMat); f.name = 'flash'; f.visible = false; f.frustumCulled = false; m.add(f);
   }
   return m;
@@ -91,11 +92,18 @@ export function terrainT(world, o, d, maxT) {
 }
 
 export class Combat {
-  constructor(g) {   // { camera, rig, player, gear, zombies, tracers, world, toast, onHits }
+  constructor(g) {   // { scene, camera, rig, player, gear, zombies, giants, tracers, world, toast, onHits, onGiantHit, weapon() }
     this.g = g; this.cd = 0; this.shots = 0; this.flashT = 0; this.hitT = 0; this.warnT = 0;
     this.cross = document.getElementById('cross');
+    // cannonballs + explosions
+    const bg = new THREE.SphereGeometry(0.22, 8, 6), bm = new THREE.MeshLambertMaterial({ color: 0x2a2b2e });
+    this.balls = []; this.ballPool = Array.from({ length: 12 }, () => { const m = new THREE.Mesh(bg, bm); m.visible = false; g.scene.add(m); return m; });
+    const eg = new THREE.IcosahedronGeometry(1, 1);
+    this.booms = Array.from({ length: 6 }, () => { const m = new THREE.Mesh(eg, new THREE.MeshBasicMaterial({ color: 0xffa040, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false })); m.visible = false; g.scene.add(m); return { m, t: 1 }; });
   }
   get out() { return this.g.gear.gunOut; }
+  get weapon() { return this.g.weapon ? this.g.weapon() : 'shotgun'; }
+  get label() { return this.weapon === 'cannon' ? 'Cannon' : 'Shotgun'; }
   canDraw() {
     const p = this.g.player;
     return (p.mode === 'foot' || p.mode === 'inside' || p.mode === 'tween') && !p.downed && !p.carrying && !this.g.gear.drone.active;
@@ -111,15 +119,16 @@ export class Combat {
     audio.click();
   }
   toggle() {
-    if (!this.out && !this.canDraw()) { this.g.toast(this.g.player.downed ? 'You are down!' : 'Take the shotgun out on foot'); return; }
+    if (!this.out && !this.canDraw()) { this.g.toast(this.g.player.downed ? 'You are down!' : `Take the ${this.label.toLowerCase()} out on foot`); return; }
     this.setOut(!this.out);
-    this.g.toast(this.out ? '🔫 Shotgun ready — click / F to shoot (unlimited ammo) · G to put it away' : 'Shotgun put away');
+    this.g.toast(this.out ? (this.weapon === 'cannon' ? '💣 Cannon ready — aim at a giant, click / F to fire (it drops a little over distance) · G to put it away' : '🔫 Shotgun ready — click / F to shoot (unlimited ammo) · G to put it away') : `${this.label} put away`);
   }
 
   update(dt, input) {
     const g = this.g, p = g.player;
     this.cd -= dt; this.hitT -= dt;
-    if (this.out && (p.downed || p.carrying || g.gear.drone.active)) this.setOut(false);
+    if (this.out && (p.downed || p.carrying || p.dead || g.gear.drone.active)) this.setOut(false);
+    if (g.gear.gunType !== this.weapon) { g.gear.gunType = this.weapon; if (this.out) g.gear.refreshHeld(); }
     p.aiming = this.out && p.mode === 'foot' && !p.downed;
     if (p.aiming) { g.camera.getWorldDirection(_d); p.aimPitch = Math.asin(clamp(_d.y, -1, 1)); } else p.aimPitch = 0;
     if (this.cross) {
@@ -129,10 +138,11 @@ export class Combat {
       if (hit !== this._hitOn) { this._hitOn = hit; this.cross.classList.toggle('hit', hit); }
     }
     const trigger = input.click || input.isDown('KeyF');
-    if (p.aiming && trigger && this.cd <= 0) this.fire();
+    if (p.aiming && trigger && this.cd <= 0) { if (this.weapon === 'cannon') this.fireCannon(); else this.fire(); }
     else if (this.out && p.mode === 'inside' && (input.click || input.wasPressed('KeyF')) && performance.now() - this.warnT > 3000) { this.warnT = performance.now(); g.toast('No shooting inside the RV — go outside or up on the roof'); }
     // muzzle flash
     if (this.flashT > 0) { this.flashT -= dt; if (this.flashT <= 0 && this.flash) this.flash.visible = false; }
+    this._balls(dt);
   }
 
   fire() {
@@ -173,6 +183,97 @@ export class Combat {
     audio.shot(1);
   }
 }
+
+Combat.prototype.fireCannon = function () {
+  const g = this.g, p = g.player, cam = g.camera;
+  this.cd = CANNON_CD; this.shots++;
+  p.char.root.updateMatrixWorld(true);
+  const gun = g.gear.held; if (!gun) return;
+  const mz = muzzleOf(gun, 'cannon');
+  mz.getWorldPosition(_m);
+  cam.getWorldDirection(_d); _o.copy(cam.position);
+  p.char.root.getWorldPosition(_w);
+  const t0 = Math.max(0, _w.sub(_o).dot(_d));
+  // aim point: first thing under the crosshair (a giant, or the ground / far away)
+  let t = terrainT(g.world, _o, _d, 120);
+  if (g.giants) for (const gi of g.giants.list) {
+    if (gi.st === 4) continue;
+    const ox = gi.x - _o.x, oz = gi.z - _o.z, along = ox * _d.x + oz * _d.z, hl = Math.hypot(_d.x, _d.z) || 1;
+    if (along < t0) continue;
+    const tt = along / (hl * hl), px = _o.x + _d.x * tt, pz = _o.z + _d.z * tt, py = _o.y + _d.y * tt;
+    if (Math.hypot(px - gi.x, pz - gi.z) < 2 && py > gi.y && py < gi.y + 9 && tt < t) t = tt;
+  }
+  _aim.copy(_o).addScaledVector(_d, Math.max(t, t0 + 2));
+  // aim help: a giant close to the crosshair (they are big; this mostly helps on phones)
+  if (g.giants && t === terrainT(g.world, _o, _d, 120)) {
+    let best = null, bc = Math.cos(0.1);
+    for (const gi of g.giants.list) {
+      if (gi.st === 4) continue;
+      _end.set(gi.x - _o.x, gi.y + 5 - _o.y, gi.z - _o.z);
+      const len = _end.length(); if (len > 130) continue;
+      const c = _end.dot(_d) / len; if (c > bc) { bc = c; best = gi; }
+    }
+    if (best) _aim.set(best.x, best.y + 5, best.z);
+  }
+  _aim.sub(_m); const dist = _aim.length(); _aim.normalize();
+  t = dist;
+  // the ball drops a little: lift the shot to land on the aim point
+  _aim.y += Math.min(0.2, 9.8 * (t / BALL_V) / (2 * BALL_V) * 1.0 + 0.0);
+  _aim.normalize();
+  this.launchBall(_m, _aim, true);
+  this.flash = mz.getObjectByName('flash'); this.flash.visible = true; this.flashT = 0.1; this.flash.scale.setScalar(2.2);
+  p.char.recoil();
+  g.rig.pitch += 0.09;
+  audio.boom(1);
+};
+Combat.prototype.launchBall = function (from, dir, mine) {
+  const m = this.ballPool.find(x => !x.visible) || this.ballPool[0];
+  m.visible = true; m.position.copy(from);
+  this.balls.push({ p: from.clone(), v: dir.clone().multiplyScalar(BALL_V), t: 0, m, mine });
+};
+Combat.prototype._balls = function (dt) {
+  const g = this.g;
+  for (let i = this.balls.length - 1; i >= 0; i--) {
+    const b = this.balls[i];
+    _o.copy(b.p);
+    b.t += dt; b.v.y -= 9.8 * dt; b.p.addScaledVector(b.v, dt); b.m.position.copy(b.p);
+    const hit = g.giants ? g.giants.ballHit(_o, b.p, 0.3) : null;
+    const ground = g.world.heightAt(b.p.x, b.p.z);
+    if (hit || b.p.y < ground || b.t > 4) {
+      if (b.p.y < ground) b.p.y = ground + 0.2;
+      this.explode(b.p);
+      if (b.mine && g.giants) {
+        const hits = new Map();
+        if (hit) hits.set(hit.id, BALL_DMG);
+        for (const gi of g.giants.list) if (gi.st !== 4 && gi !== hit && Math.hypot(gi.x - b.p.x, gi.z - b.p.z) < 4.5 && b.p.y < gi.y + 9) hits.set(gi.id, SPLASH_DMG);
+        if (hits.size) { this.hitT = 0.25; g.onGiantHit(hits); }
+      }
+      b.m.visible = false; this.balls.splice(i, 1);
+    }
+  }
+  for (const e of this.booms) {
+    if (e.t >= 1) continue;
+    e.t = Math.min(1, e.t + dt / 0.45);
+    e.m.scale.setScalar(0.5 + e.t * 3.2); e.m.material.opacity = 0.9 * (1 - e.t);
+    if (e.t >= 1) e.m.visible = false;
+  }
+};
+Combat.prototype.explode = function (p) {
+  const e = this.booms.find(x => x.t >= 1) || this.booms[0];
+  e.t = 0; e.m.visible = true; e.m.position.copy(p);
+  if (this.g.giants) this.g.giants.puff(p, 1.6);
+  const d = this.g.camera.position.distanceTo(p);
+  audio.thud(55, 0.3 * clamp(1 - d / 80, 0.1, 1));
+};
+// a teammate fired a cannon: same ball and boom on our screen (they send the damage)
+Combat.prototype.remoteCannon = function (model, yaw, pitch, listener) {
+  const mz = muzzleOf(model, 'cannon');
+  mz.getWorldPosition(_m);
+  const dir = new THREE.Vector3(Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch) + 0.05, Math.cos(yaw) * Math.cos(pitch)).normalize();
+  this.launchBall(_m, dir, false);
+  const d = listener ? _m.distanceTo(listener) : 10;
+  audio.boom(clamp(1 - d / 120, 0.05, 0.8));
+};
 
 // a teammate fired: same flash, streaks and sound on our screen (damage is theirs to send)
 const _rd = new THREE.Vector3();

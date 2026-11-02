@@ -198,7 +198,7 @@ export class Session {
       this._ensureRVs(this.rvFor(me.c) + 1);
       net.accept(from);
       net.sendTo(from, 'welcome', { slot: me.c, world: this.worldState(), rvs: g.rvs.map(r => r.netState()), st: this.storages(),
-        roster: this.roster(), ps: this.allStates(), dep: this.deployedList(), sv: g.survivalState ? g.survivalState() : null });
+        roster: this.roster(), ps: this.allStates(), dep: this.deployedList(), bs: g.buildState ? g.buildState() : null, sv: g.survivalState ? g.survivalState(cid) : null });
       net.send('roster', this.roster());
       g.onRoster();
     });
@@ -214,6 +214,7 @@ export class Session {
       this.players = new Map(d.roster.map(p => [p.id, { n: p.n, c: p.c }]));
       for (const id of [...g.remotes.map.keys()]) if (!this.players.has(id)) { g.remotes.remove(id); g.onPlayerGone && g.onPlayerGone(id); }
       this._applyStates(d.ps);
+      if (d.bs && g.applyBuild) g.applyBuild(d.bs);
       if (d.sv && g.applySurvival) g.applySurvival(d.sv);
       if (!again) {
         g.player.rv = g.rvs[this.rvFor(d.slot)];

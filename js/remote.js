@@ -99,6 +99,9 @@ export class Remotes {
         r.char.root.position.copy(r.pos);
         r.char.root.rotation.set(s.pi || 0, r.yaw, 0);
       }
+      // eliminated players: the body lies there a moment, then is gone (they only spectate)
+      if (s.dd) { r.deadT = (r.deadT || 0) + dt; r.char.root.visible = r.deadT < 2.5; r.tag.visible = false; continue; }
+      r.deadT = 0; r.char.root.visible = true; r.tag.visible = true;
       r.char.update(dt, { mode: s.a || 'idle', speed: s.sp || 0, vy: s.vy || 0, steer: s.st || 0, hold: s.hd || null, aim: s.ap || 0 });
       if (s.it !== r.itemType) {
         if (r.item) r.char.hand.remove(r.item);
@@ -109,7 +112,12 @@ export class Remotes {
       // they fired: flash + pellet streaks + sound here too
       if ((s.sh || 0) !== r.shots) {
         const fired = (s.sh || 0) > r.shots; r.shots = s.sh || 0;
-        if (fired && r.item && s.it === 'shotgun' && this.tracers) { r.char.root.updateMatrixWorld(true); remoteShot(r.item, r.yaw, s.ap || 0, this.tracers, this.listener); r.char.recoil(); }
+        if (fired && r.item && (s.it === 'shotgun' || s.it === 'cannon') && this.tracers) {
+          r.char.root.updateMatrixWorld(true);
+          if (s.it === 'cannon') { if (this.combat) this.combat.remoteCannon(r.item, r.yaw, s.ap || 0, this.listener); }
+          else remoteShot(r.item, r.yaw, s.ap || 0, this.tracers, this.listener);
+          r.char.recoil();
+        }
       }
       r.char.headAnchor.getWorldPosition(this._v);
       r.tag.position.set(this._v.x, this._v.y + (s.dn ? 0.75 : 0.55), this._v.z);

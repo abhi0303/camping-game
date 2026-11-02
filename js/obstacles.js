@@ -13,14 +13,21 @@ export class Obstacles {
   constructor(scene, world, materials, toast) {
     this.scene = scene; this.world = world; this.materials = materials; this.toast = toast;
     this.list = []; this.fx = []; this.net = null; this.onChange = null;
-    const r = world.T.road, L = r.length, sA = r.sA, sB = r.sB;
+    const r = world.T.road, sA = r.sA, sB = r.sB;
     const at = (s, off = 0) => { const p = r.pointAt(s); return { x: p.x + p.tz * off, z: p.z - p.tx * off, tx: p.tx, tz: p.tz }; };
     this._add('tree', at(95), 0.25);
     this._add('rock', at(sA * 0.66));
     this._add('pile', at(sA - 34, 10));
     this._add('pile', at(sA - 60, -11));
     this._add('tree', at(sB + 62), -0.3);
-    this._add('rock', at(sB + (L - sB) * 0.62));
+    this._add('rock', at(sB + (r.sCamp - sB) * 0.62));
+    // highlands: road blocks on the way north + stone piles at the plateau (stone for the castle)
+    const sC = r.sCamp, sV = r.sValley, sG = r.sGiant;
+    this._add('tree', at(sC + 70), 0.2);
+    this._add('rock', at(sC + (sV - sC) * 0.62));
+    this._add('tree', at(sV + 60), -0.25);
+    this._add('rock', at(sV + (sG - sV) * 0.55));
+    for (const [ds, off] of [[30, 15], [30, -15], [58, 13], [58, -13], [12, 22], [12, -22]]) this._add('pile', at(sG - ds, off));
   }
 
   _add(type, p, skew = 0) {

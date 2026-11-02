@@ -1,11 +1,18 @@
 import * as THREE from 'three';
 import { clamp, lerp, smoothstep } from './utils.js';
 
-// Jungle map: hilly heightfield with a dirt road from the trailhead (south-west),
-// across a river (broken bridge) and up to the hilltop camp (north-east).
-export const HALF = 260, SIZE = HALF * 2, SEG = 130, CELL = SIZE / SEG, N = SEG + 1;
+// Map: a jungle in the south (trailhead -> river/broken bridge -> hilltop camp), then a mountain
+// pass into the pine highlands in the north (Watchtower Valley -> Giant Plateau, the final stand).
+// The heightfield is a rectangle X0..X1 x Z0..Z1 with 4 m cells.
+export const HALF = 260, X0 = -260, X1 = 260, Z0 = -260, Z1 = 740;
+export const SX = X1 - X0, SZ = Z1 - Z0, CELL = 4, SEGX = SX / CELL, SEGZ = SZ / CELL, NX = SEGX + 1, NZ = SEGZ + 1;
+export const SIZE = SX;      // (width; kept for older code)
+export const NORTH = 250;    // the ridge between the jungle and the highlands
 export const START = { x: -160, z: -192 };
 export const CAMP = { x: 150, z: 166 };
+export const VALLEY = { x: 70, z: 368 };                                  // Watchtower Valley (tower shelter)
+export const TOWER_ZONE = { x: 70, z: 368, hw: 17, hd: 13 };              // where towers may stand (half sizes)
+export const GIANT = { x: -80, z: 592, r: 26 };                           // Giant Plateau: castle ring (max radius)
 export const RIVER_HALF = 6.5;
 export const BRIDGE = (() => {
   const mx = 0, mz = 10, l = Math.hypot(0.25, 1), dx = 0.25 / l, dz = 1 / l, span = 16;
@@ -35,7 +42,13 @@ function baseHeight(x, z) {
   h += 26 * Math.exp(-(dc * dc) / (2 * 80 * 80));                 // the camp hill
   const ds = Math.hypot(x - START.x, z - START.z);
   h = lerp(h, 2, Math.exp(-(ds * ds) / (2 * 50 * 50)));             // low, flat trailhead
-  const e = Math.max(Math.abs(x), Math.abs(z)) - 208;
+  // rocky ridge between the jungle and the highlands, with a pass for the road
+  const rz = z - NORTH, pass = 1 - Math.exp(-((x - 128) ** 2) / (2 * 20 * 20));
+  h += (34 + fbm(x * 0.03, 7) * 18) * Math.exp(-(rz * rz) / (2 * 16 * 16)) * pass;
+  if (z > NORTH) { const dv = Math.hypot(x - VALLEY.x, z - VALLEY.z); h = lerp(h, 12, Math.exp(-(dv * dv) / (2 * 60 * 60))); }
+  const dg = Math.hypot(x - GIANT.x, z - GIANT.z);
+  h = lerp(h, 22, Math.exp(-(dg * dg) / (2 * 70 * 70)));            // the plateau
+  const e = Math.max(Math.abs(x) - 208, z - 708, -z - 208);
   if (e > 0) h += e * e * 0.012 + e * 0.3;                          // mountains frame the map
   return h;
 }
@@ -46,6 +59,9 @@ const ROAD_PTS = [
   [-162, -212], [-160, -192], [-156, -172], [-146, -156], [-128, -146], [-96, -134], [-70, -114],
   [-58, -84], [-44, -56], [-24, -34], [B.ax - B.dx * 12, B.az - B.dz * 12], [B.ax, B.az], [B.bx, B.bz],
   [B.bx + B.dx * 12, B.bz + B.dz * 12], [20, 52], [38, 74], [62, 92], [90, 104], [116, 122], [136, 142], [148, 158], [151, 168],
+  // north: over the pass into the highlands
+  [149, 186], [142, 206], [134, 228], [128, 250], [124, 272], [118, 296], [110, 320], [101, 344], [97, 368], [94, 392],
+  [82, 418], [62, 444], [36, 470], [8, 498], [-22, 526], [-48, 552], [-66, 572], [-78, 588], [-80, 596],
 ];
 const RIVER_PTS = [[-275, 70], [-200, 52], [-140, 60], [-80, 38], [-40, 22], [-19.4, 14.8], [0, 10], [19.4, 5.2], [50, -4], [100, -24], [150, -18], [200, -40], [275, -30]];
 function sampleCurve(pts, step) {
@@ -66,20 +82,20 @@ function rasterDist(curve, R, dist, param) {
   for (let i = 0; i < curve.n; i++) {
     const x0 = curve.x[i], z0 = curve.z[i], x1 = curve.x[i + 1], z1 = curve.z[i + 1];
     const ex = x1 - x0, ez = z1 - z0, el = ex * ex + ez * ez || 1;
-    const i0 = Math.max(0, Math.floor((Math.min(x0, x1) - R + HALF) / CELL)), i1 = Math.min(SEG, Math.ceil((Math.max(x0, x1) + R + HALF) / CELL));
-    const j0 = Math.max(0, Math.floor((Math.min(z0, z1) - R + HALF) / CELL)), j1 = Math.min(SEG, Math.ceil((Math.max(z0, z1) + R + HALF) / CELL));
+    const i0 = Math.max(0, Math.floor((Math.min(x0, x1) - R - X0) / CELL)), i1 = Math.min(SEGX, Math.ceil((Math.max(x0, x1) + R - X0) / CELL));
+    const j0 = Math.max(0, Math.floor((Math.min(z0, z1) - R - Z0) / CELL)), j1 = Math.min(SEGZ, Math.ceil((Math.max(z0, z1) + R - Z0) / CELL));
     for (let j = j0; j <= j1; j++) for (let k = i0; k <= i1; k++) {
-      const px = -HALF + k * CELL, pz = -HALF + j * CELL;
+      const px = X0 + k * CELL, pz = Z0 + j * CELL;
       const t = clamp(((px - x0) * ex + (pz - z0) * ez) / el, 0, 1);
-      const d = Math.hypot(px - x0 - ex * t, pz - z0 - ez * t), idx = j * N + k;
+      const d = Math.hypot(px - x0 - ex * t, pz - z0 - ez * t), idx = j * NX + k;
       if (d < dist[idx]) { dist[idx] = d; if (param) param[idx] = curve.s[i] + (curve.s[i + 1] - curve.s[i]) * t; }
     }
   }
 }
 
 export function buildTerrain() {
-  const H = new Float32Array(N * N), riverD = new Float32Array(N * N).fill(1e4), roadD = new Float32Array(N * N).fill(1e4), roadS = new Float32Array(N * N);
-  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) H[j * N + i] = baseHeight(-HALF + i * CELL, -HALF + j * CELL);
+  const NN = NX * NZ, H = new Float32Array(NN), riverD = new Float32Array(NN).fill(1e4), roadD = new Float32Array(NN).fill(1e4), roadS = new Float32Array(NN);
+  for (let j = 0; j < NZ; j++) for (let i = 0; i < NX; i++) H[j * NX + i] = baseHeight(X0 + i * CELL, Z0 + j * CELL);
   const road = sampleCurve(ROAD_PTS, 2), river = sampleCurve(RIVER_PTS, 3);
   rasterDist(river, 30, riverD, null);
   rasterDist(road, 22, roadD, roadS);
@@ -97,45 +113,54 @@ export function buildTerrain() {
   for (let i = iA - 8; i <= iB + 8; i++) D = Math.max(D, hr[i]);
   D = Math.max(D + 0.3, 3);
   for (let i = iA - 5; i <= iB + 5; i++) hr[i] = D;
+  // the clearings (camp, valley, plateau) are flat: pull the road there to one height first
+  const iC = nearest(CAMP.x, CAMP.z), iV = nearest(VALLEY.x + 28, VALLEY.z), iG = road.n;
+  for (const [cx, cz, ic, r0, r1] of [[CAMP.x, CAMP.z, iC, 20, 34], [VALLEY.x, VALLEY.z, iV, 30, 46], [GIANT.x, GIANT.z, iG, 34, 50]]) {
+    const fh = hr[ic];
+    for (let i = 0; i <= road.n; i++) { const d = Math.hypot(road.x[i] - cx, road.z[i] - cz); if (d < r1) hr[i] = lerp(hr[i], fh, 1 - smoothstep(r0, r1, d)); }
+  }
   const G = 2 * 0.14;                                                  // max 14% grade
   for (let i = iB + 6; i <= road.n; i++) hr[i] = clamp(hr[i], hr[i - 1] - G, hr[i - 1] + G);
   for (let i = iA - 6; i >= 0; i--) hr[i] = clamp(hr[i], hr[i + 1] - G, hr[i + 1] + G);
-  const W = D - 3.4, BED = W - 2.4, campH = hr[road.n], startH = hr[8];
+  const W = D - 3.4, BED = W - 2.4, campH = hr[iC], startH = hr[8], valleyH = hr[iV], giantH = hr[iG];
   const sA = road.s[iA], sB = road.s[iB];
   const roadH = s => { const f = clamp(s / road.length, 0, 1) * road.n, i = Math.min(road.n - 1, Math.floor(f)); return lerp(hr[i], hr[i + 1], f - i); };
 
   // final terrain
-  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
-    const idx = j * N + i, x = -HALF + i * CELL, z = -HALF + j * CELL, rd = riverD[idx];
+  for (let j = 0; j < NZ; j++) for (let i = 0; i < NX; i++) {
+    const idx = j * NX + i, x = X0 + i * CELL, z = Z0 + j * CELL, rd = riverD[idx];
     let h = H[idx];
     if (rd < RIVER_HALF + 1) h = lerp(BED, W + 0.7, smoothstep(RIVER_HALF - 2.5, RIVER_HALF + 1, rd));
     else if (rd < RIVER_HALF + 12) h = lerp(W + 0.7, Math.max(h, W + 0.7), smoothstep(RIVER_HALF + 1, RIVER_HALF + 12, rd));
-    const s = roadS[idx], inSpan = s > sA + 1.5 && s < sB - 1.5;
-    if (!inSpan && rd > RIVER_HALF + 1) { const w = 1 - smoothstep(6.5, 15, roadD[idx]); h = lerp(h, roadH(s) - 0.02, w); }
     const dc = Math.hypot(x - CAMP.x, z - CAMP.z); h = lerp(h, campH, 1 - smoothstep(20, 34, dc));
     const ds = Math.hypot(x - START.x, z - START.z); h = lerp(h, startH, 1 - smoothstep(26, 42, ds));
+    const dv = Math.hypot(x - VALLEY.x, z - VALLEY.z); h = lerp(h, valleyH, 1 - smoothstep(30, 46, dv));
+    const dg = Math.hypot(x - GIANT.x, z - GIANT.z); h = lerp(h, giantH, 1 - smoothstep(34, 50, dg));
+    const s = roadS[idx], inSpan = s > sA + 1.5 && s < sB - 1.5;
+    if (!inSpan && rd > RIVER_HALF + 1) { const w = 1 - smoothstep(6.5, 15, roadD[idx]); h = lerp(h, roadH(s) - 0.02, w); }
     H[idx] = h;
   }
 
   const heightAt = (x, z) => {
-    const fi = clamp((x + HALF) / CELL, 0, SEG - 1e-4), fj = clamp((z + HALF) / CELL, 0, SEG - 1e-4);
-    const i = Math.floor(fi), j = Math.floor(fj), fx = fi - i, fz = fj - j, k = j * N + i;
-    const a = H[k], b = H[k + 1], c = H[k + N], d = H[k + N + 1];
+    const fi = clamp((x - X0) / CELL, 0, SEGX - 1e-4), fj = clamp((z - Z0) / CELL, 0, SEGZ - 1e-4);
+    const i = Math.floor(fi), j = Math.floor(fj), fx = fi - i, fz = fj - j, k = j * NX + i;
+    const a = H[k], b = H[k + 1], c = H[k + NX], d = H[k + NX + 1];
     return fx + fz <= 1 ? a + (b - a) * fx + (c - a) * fz : d + (c - d) * (1 - fx) + (b - d) * (1 - fz);
   };
   const bilin = arr => (x, z) => {
-    const fi = clamp((x + HALF) / CELL, 0, SEG - 1e-4), fj = clamp((z + HALF) / CELL, 0, SEG - 1e-4);
-    const i = Math.floor(fi), j = Math.floor(fj), fx = fi - i, fz = fj - j, k = j * N + i;
-    return lerp(lerp(arr[k], arr[k + 1], fx), lerp(arr[k + N], arr[k + N + 1], fx), fz);
+    const fi = clamp((x - X0) / CELL, 0, SEGX - 1e-4), fj = clamp((z - Z0) / CELL, 0, SEGZ - 1e-4);
+    const i = Math.floor(fi), j = Math.floor(fj), fx = fi - i, fz = fj - j, k = j * NX + i;
+    return lerp(lerp(arr[k], arr[k + 1], fx), lerp(arr[k + NX], arr[k + NX + 1], fx), fz);
   };
 
   road.h = hr; road.iA = iA; road.iB = iB; road.sA = sA; road.sB = sB;
+  road.sCamp = road.s[iC]; road.sValley = road.s[iV]; road.sGiant = road.length;
   road.heightAt = roadH;
   road.nearest = nearest;
   road.pointAt = s => { const f = clamp(s / road.length, 0, 1) * road.n, i = Math.min(road.n - 1, Math.floor(f)), t = f - i;
     return { x: lerp(road.x[i], road.x[i + 1], t), z: lerp(road.z[i], road.z[i + 1], t), tx: road.tx[i], tz: road.tz[i], y: roadH(s) }; };
 
-  const T = { H, heightAt, riverDistAt: bilin(riverD), roadDistAt: bilin(roadD), road, river, D, W, BED, campH, startH };
+  const T = { H, heightAt, riverDistAt: bilin(riverD), roadDistAt: bilin(roadD), road, river, D, W, BED, campH, startH, valleyH, giantH };
   T.mesh = terrainMesh(T, riverD, roadD);
   T.roadMesh = roadMesh(T);
   T.waterMesh = waterMesh(T);
@@ -145,12 +170,13 @@ export function buildTerrain() {
 /* ---------- meshes ---------- */
 const _c = new THREE.Color();
 const GRASS = [0x3f7a35, 0x46833a, 0x4d8c3e, 0x3a7032, 0x427d36];
+const GRASS_N = [0x5c9a3a, 0x67a442, 0x70ab47, 0x568f37, 0x62a03f];     // brighter highland grass
 function terrainMesh(T, riverD, roadD) {
   const { H, W } = T, pos = [], col = [];
   let seed = 7;
   const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
   const face = (ia, ib, ic) => {
-    const P = k => [-HALF + (k % N) * CELL, H[k], -HALF + Math.floor(k / N) * CELL];
+    const P = k => [X0 + (k % NX) * CELL, H[k], Z0 + Math.floor(k / NX) * CELL];
     const a = P(ia), b = P(ib), c = P(ic);
     pos.push(...a, ...b, ...c);
     const ux = b[0] - a[0], uy = b[1] - a[1], uz = b[2] - a[2], vx = c[0] - a[0], vy = c[1] - a[1], vz = c[2] - a[2];
@@ -159,13 +185,15 @@ function terrainMesh(T, riverD, roadD) {
     const cx = (a[0] + b[0] + c[0]) / 3, cz = (a[2] + b[2] + c[2]) / 3;
     if (h < W + 0.9 && rd < RIVER_HALF + 3) _c.set(h < W - 0.2 ? 0x6b5d42 : 0x9a8a62);
     else if (od < 7.5) _c.set(0x7a6446).lerp(_c.clone().set(GRASS[0]), smoothstep(5.5, 7.5, od));
-    else if (ny1 < 0.78) _c.set(rnd() > 0.5 ? 0x7d7a70 : 0x6e6b62);
+    else if (ny1 < 0.78) _c.set(cz > NORTH - 20 ? (rnd() > 0.5 ? 0x8f887a : 0x7e786c) : rnd() > 0.5 ? 0x7d7a70 : 0x6e6b62);
     else if (Math.hypot(cx - START.x, cz - START.z) < 34 || Math.hypot(cx - CAMP.x, cz - CAMP.z) < 28) _c.set(rnd() > 0.5 ? 0x7fa652 : 0x77a04c);
+    else if (Math.hypot(cx - GIANT.x, cz - GIANT.z) < 40 || (Math.abs(cx - TOWER_ZONE.x) < TOWER_ZONE.hw + 4 && Math.abs(cz - TOWER_ZONE.z) < TOWER_ZONE.hd + 4)) _c.set(rnd() > 0.5 ? 0xa39463 : 0x9a8b5c);
+    else if (cz > NORTH) { _c.set(GRASS_N[(rnd() * GRASS_N.length) | 0]); if (h > 40) _c.lerp(_c.clone().set(0x7b8a5a), Math.min(1, (h - 40) / 25)); }
     else { _c.set(GRASS[(rnd() * GRASS.length) | 0]); if (h > T.campH - 8) _c.lerp(_c.clone().set(0x6f9c48), 0.5); }
     for (let k = 0; k < 3; k++) col.push(_c.r, _c.g, _c.b);
   };
-  for (let j = 0; j < SEG; j++) for (let i = 0; i < SEG; i++) {
-    const a = j * N + i, b = a + 1, c = a + N, d = c + 1;
+  for (let j = 0; j < SEGZ; j++) for (let i = 0; i < SEGX; i++) {
+    const a = j * NX + i, b = a + 1, c = a + NX, d = c + 1;
     face(a, c, b); face(b, c, d);
   }
   const g = new THREE.BufferGeometry();

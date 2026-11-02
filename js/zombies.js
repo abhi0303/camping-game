@@ -97,7 +97,7 @@ export class Zombies {
   _set(z, st) { z.st = st; z.t = 0; }
 
   /* ---------------- host / solo: spawning + AI ---------------- */
-  spawn(x, z, spd) { if (this.list.length >= ZMAX) return null; return this._make(++this.seq, x, z, spd); }
+  spawn(x, z, spd, hp = 100) { if (this.list.length >= ZMAX) return null; const zb = this._make(++this.seq, x, z, spd); zb.hp = hp; return zb; }
   kill(z, dx = 0, dz = 0, fling = false) {
     if (z.st === ZS.dead) return;
     z.hp = 0; this._set(z, ZS.dead);
@@ -115,23 +115,24 @@ export class Zombies {
   // morning: every zombie collapses within a couple of seconds
   burnAll() { for (const z of this.list) if (z.st !== ZS.dead && z.burn < 0) z.burn = Math.random() * 2.5; }
 
-  // which player (or which RV, if that player hides in / on it) a zombie goes for
+  // which player a zombie goes for — or the RV / tower that player hides in or on (then they smash that).
+  // Downed players are still prey (zombies finish them off), just a bit less attractive.
   _pick(z, ctx) {
     let best = null, bd = 1e9;
     for (const p of ctx.players) {
-      if (p.down) continue;
+      if (p.dead) continue;
       if (p.safe >= 0) {
-        const r = ctx.rvs[p.safe]; if (!r) continue;
-        const d = Math.hypot(r.root.position.x - z.x, r.root.position.z - z.z) - 2;
-        if (d < bd) { bd = d; best = { rv: p.safe }; }
+        const c = ctx.structPos(p.safe); if (!c) continue;
+        const d = Math.hypot(c.x - z.x, c.z - z.z) - 2;
+        if (d < bd) { bd = d; best = { st: p.safe }; }
       } else {
-        const d = Math.hypot(p.x - z.x, p.z - z.z);
+        const d = Math.hypot(p.x - z.x, p.z - z.z) + (p.down ? 6 : 0);
         if (d < bd) { bd = d; best = { id: p.id }; }
       }
     }
     return best;
   }
-  _hullDist(r, z) {
+  hullDist(r, z) {
     const l = r.toLocal(this._p.set(z.x, r.root.position.y + 0.6, z.z), this._l);
     const ex = Math.max(Math.abs(l.x) - HX, 0), ez = Math.max(l.z - ZB1, ZB0 - l.z, 0);
     return Math.hypot(ex, ez);
@@ -156,9 +157,9 @@ export class Zombies {
       if ((z.retT -= dt) <= 0) { z.retT = 0.35 + Math.random() * 0.3; z.tgt = this._pick(z, ctx); }
       const tg = z.tgt;
       let gx, gz, near = false, tp = null;
-      if (tg && tg.rv !== undefined && ctx.rvs[tg.rv]) {
-        const r = ctx.rvs[tg.rv];
-        gx = r.root.position.x; gz = r.root.position.z; near = this._hullDist(r, z) < REACH_RV;
+      const sp = tg && tg.st !== undefined ? ctx.structPos(tg.st) : null;
+      if (sp) {
+        gx = sp.x; gz = sp.z; near = ctx.structDist(tg.st, z) < REACH_RV;
       } else if (tg && tg.id !== undefined && (tp = ctx.players.find(p => p.id === tg.id))) {
         gx = tp.x; gz = tp.z;
         near = Math.hypot(gx - z.x, gz - z.z) < REACH_P && Math.abs(tp.y - z.y) < 1.3;

@@ -23,7 +23,7 @@ export class Gear {
     this.controller = itemModel('controller');
     this.obstacles = null; this.materials = null;   // set by main
     this.netId = 'l'; this.depSeq = 0; this.onDeploy = null; this.onPack = null;
-    this.gunOut = false;          // the shotgun everyone carries (G)
+    this.gunOut = false; this.gunType = 'shotgun';   // the weapon everyone carries (G): shotgun, or a cannon vs the giants
     this.repair = null;           // (toolType) => true if that swing repaired an RV (set by main)
     this._fireAct = { pos: world.firePos, r: 2.8, label: () => 'Throw a log on the campfire', act: () => this._feedFire() };
   }
@@ -45,7 +45,7 @@ export class Gear {
   refreshHeld() {
     const it = this.inv.equippedItem();
     if (it && this.gunOut) this.gunOut = false;          // picked an item from the hotbar: shotgun goes away
-    const type = this.drone.active ? 'controller' : this.player.carrying ? null : this.gunOut ? 'shotgun' : (it ? it.type : null);
+    const type = this.drone.active ? 'controller' : this.player.carrying ? null : this.gunOut ? (this.gunType || 'shotgun') : (it ? it.type : null);
     if (!it || it.type !== 'flashlight') this.flashOn = false;
     if (this.zooming && (!it || it.type !== 'binoculars')) this.zooming = false;
     if (type === this.heldType) return;
