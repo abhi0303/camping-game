@@ -75,10 +75,11 @@ export class Net {
   on(type, fn) { this.handlers[type] = fn; }
   _emit(type, data, from) { const h = this.handlers[type]; if (h) { try { h(data, from); } catch (e) { console.error(e); } } }
 
-  host(code) {
+  // peerId: Farm World hosts use the id the server gave them (a new one for every host)
+  host(code, peerId = PREFIX + code) {
     return new Promise((resolve, reject) => {
       if (!window.Peer) { reject(new Error('Multiplayer library could not load (check your internet).')); return; }
-      const peer = this.peer = new window.Peer(PREFIX + code, peerOptions());
+      const peer = this.peer = new window.Peer(peerId, peerOptions());
       let opened = false;
       peer.on('open', id => { opened = true; this.mode = 'host'; this.id = id; this.code = code; resolve(code); });
       peer.on('connection', c => {
@@ -86,12 +87,17 @@ export class Net {
         c.on('error', e => console.warn('guest link:', e && (e.type || e.message)));   // only 'close' or silence ends a link
       });
       peer.on('call', call => this._emit('call', call));
-      peer.on('error', e => { if (!opened) reject(e); else this._emit('error', e); });
+      peer.on('error', e => {
+        if (opened) { this._emit('error', e); return; }
+        try { peer.destroy(); } catch (_) { /* ignore */ }
+        if (this.peer === peer) this.peer = null;
+        reject(e);
+      });
       peer.on('disconnected', () => this._brokerLost());
     });
   }
 
-  join(code, timeout = 20000) {
+  join(code, timeout = 20000, peerId = PREFIX + code) {
     return new Promise((resolve, reject) => {
       if (!window.Peer) { reject(new Error('Multiplayer library could not load (check your internet).')); return; }
       const peer = this.peer = new window.Peer(peerOptions());
@@ -100,13 +106,14 @@ export class Net {
       const t = setTimeout(() => fail(new Error('Could not reach that room. Check the code and that the host is online.')), timeout);
       peer.on('open', id => {
         this.id = id;
-        const c = peer.connect(PREFIX + code, { reliable: true, serialization: 'json' });
+        const c = peer.connect(peerId, { reliable: true, serialization: 'json' });
         c.on('open', () => { if (done) return; done = true; clearTimeout(t); this.mode = 'guest'; this.code = code; this.hostConn = c; this.hostSeen = performance.now(); this._wire(c); resolve(); });
         c.on('error', e => { if (!done) fail(e); else console.warn('host link:', e && (e.type || e.message)); });
       });
       peer.on('call', call => this._emit('call', call));
       peer.on('error', e => {
-        if (!done) { const gone = e && e.type === 'peer-unavailable'; const err = gone ? new Error('No room with that code (the host may have left).') : e; if (gone) err.fatal = true; fail(err); }
+        // peer-unavailable: nobody is registered under that id on the PeerJS server (the host is gone)
+        if (!done) { const gone = e && e.type === 'peer-unavailable'; const err = gone ? new Error('No room with that code (the host may have left).') : e; if (gone) { err.fatal = true; err.unavailable = true; } fail(err); }
         else this._emit('error', e);
       });
       peer.on('disconnected', () => { if (this.peer === peer) this._brokerLost(); });

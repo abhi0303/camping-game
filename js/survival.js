@@ -89,6 +89,12 @@ export class Survival {
     this.score.clear(); this.sc = []; this.deadCids.clear();
     this.g.zombies.clear(); this.g.giants.reset(); this.g.world.setNight(0, true); this.dirty = true;
   }
+  // Farm World: peaceful and endless — no nights, no zombies, no siege or giants
+  setFarm() {
+    this.reset();
+    this.stage = 'farm'; this.t = 0;
+  }
+  get farm() { return this.stage === 'farm'; }
 
   /* ---------------- network ---------------- */
   _wire() {
@@ -701,7 +707,8 @@ export class Survival {
     const S = g.structures, towers = S.towers.length ? ` · 🗼 ${S.towers.filter(t => t.alive).length}/${S.towers.length}` : '', walls = S.walls.length ? ` · 🏰 ${Math.round(100 * S.walls.reduce((a, w) => a + w.hp, 0) / Math.max(1, S.walls.reduce((a, w) => a + w.max, 0)))}%` : '';
     const L = this.level, lv = L ? ` · ⚔ Lv ${L}` : '';
     let txt, cls = '';
-    if (this.over === 'won') { txt = `🏆 Victory! All ${GTOTAL} giants defeated`; cls = 'won'; }
+    if (this.stage === 'farm') { txt = this.g.farmHud ? this.g.farmHud() : '🌾 Farm World'; cls = 'farm'; }
+    else if (this.over === 'won') { txt = `🏆 Victory! All ${GTOTAL} giants defeated`; cls = 'won'; }
     else if (this.over === 'lost') { txt = '💀 Game over'; cls = 'night'; }
     else if (this.stage === 'tbuild') { txt = `🛠 Build your towers! The horde comes in ${fmt(this.t)}${towers}`; cls = 'build'; }
     else if (this.stage === 'siege') { txt = `🧟 SIEGE · hold on ${fmt(this.t)} · 🧟 ${g.zombies.aliveCount()}${towers}${lv}`; cls = 'night'; }

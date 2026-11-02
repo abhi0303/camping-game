@@ -117,7 +117,8 @@
   <div id="overlay">
     <div class="card">
       <h1>RV Van</h1>
-      <p class="sub">Drive through the jungle, clear the trail, rebuild the bridge and reach the hilltop camp — alone or with friends.</p>
+      <div id="modeTabs" class="mtabs"><button data-mode="zombie" class="on">🧟 Zombie Trail</button><button data-mode="farm">🌾 Farm World</button></div>
+      <p class="sub" id="mSub">Drive through the jungle, clear the trail, rebuild the bridge and reach the hilltop camp — alone or with friends.</p>
       <div id="menuStart">
         <label class="mrow"><span>Your name</span><input id="mName" maxlength="16" autocomplete="off" /></label>
         <div id="mSaveRow" class="mrow hidden"><span>Saved progress</span><button id="mContinue" class="mbtn">Continue</button><button id="mNew" class="mbtn">New game</button></div>
@@ -125,6 +126,35 @@
         <div class="mrow"><input id="mCode" placeholder="ROOM CODE or invite link" autocomplete="off" autocapitalize="characters" spellcheck="false" /><button id="mJoin" class="mbig alt">Join a friend</button></div>
         <p id="mStatus" class="small"></p>
         <div id="appRow" class="mrow hidden"><button id="installBtn" class="mbtn hidden">📲 Install the app</button><span id="iosHint" class="small hidden">📲 Install: tap <b>Share</b> <span class="shareIco">⬆︎</span> then <b>Add to Home Screen</b></span></div>
+      </div>
+      <!-- Farm World: permanent worlds saved online, for up to 4 members -->
+      <div id="menuFarm" class="hidden">
+        <div id="fSaved" class="fsaved"></div>
+        <div id="fInvite" class="fbox finvite hidden">
+          <div class="fhead">💌 You're invited to <b id="fiWorld">a world</b></div>
+          <div class="fsub" id="fiInfo"></div>
+          <input id="fiName" maxlength="16" placeholder="Your name" autocomplete="off" />
+          <input id="fiPin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="Choose a PIN (4–6 digits)" autocomplete="new-password" />
+          <button id="fiGo" class="mbig">🌾 Join this world</button>
+        </div>
+        <div class="fgrid">
+          <div class="fbox">
+            <div class="fhead">➕ Create a new world</div>
+            <input id="fcName" maxlength="16" placeholder="Your name" autocomplete="off" />
+            <input id="fcWorld" maxlength="32" placeholder="World name (optional)" autocomplete="off" />
+            <input id="fcPin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="Choose a PIN (4–6 digits)" autocomplete="new-password" />
+            <button id="fcGo" class="mbig">Create world</button>
+          </div>
+          <div class="fbox">
+            <div class="fhead">🔑 Open a world you belong to</div>
+            <input id="fjCode" maxlength="6" placeholder="WORLD CODE" autocomplete="off" autocapitalize="characters" spellcheck="false" />
+            <input id="fjName" maxlength="16" placeholder="Your name in that world" autocomplete="off" />
+            <input id="fjPin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="Your PIN" autocomplete="current-password" />
+            <button id="fjGo" class="mbig alt">Log in &amp; play</button>
+          </div>
+        </div>
+        <p id="fStatus" class="small"></p>
+        <p class="small dim">New friend? The world's owner sends them an invite link (Esc menu → Invite a friend). Remember your PIN — you need it on other devices.</p>
       </div>
       <div id="menuPause" class="hidden">
         <button id="play">Resume</button>
@@ -139,6 +169,7 @@
         <div><b>L</b> lights</div><div><b>G</b> shotgun</div><div><b>R</b> RV to checkpoint</div>
         <div><b>Hold E</b> revive friend</div><div><b>X</b> carry friend</div><div><b>B</b> mic on / off</div>
       </div>
+      <p class="small finfo">🌾 A world that never ends and is saved online. Up to 4 members; any of them can open it, alone or together — it remembers everything when nobody is playing. No zombies here.</p>
       <p class="small zinfo">🧟 Nights fall after 3, 6, then every 10 minutes — zombies come, tougher at every checkpoint. Go down and nobody revives you? You're out for good (spectate). The RV only drives at 100%. Build towers at Watchtower Valley to survive the siege, then a stone castle against 10 giants at the Giant Plateau. Most zombie kills + revives wins the scoreboard!</p>
       <p class="dim small desk-only">Esc frees the mouse. Choose "Low" quality (top-right) if your laptop gets warm.</p>
       <p class="dim small touch-only">Left thumb: move · right thumb: look · tap the prompt to interact. Landscape works best.</p>

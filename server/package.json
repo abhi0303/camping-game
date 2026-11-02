@@ -1,0 +1,20 @@
+{
+  "name": "rv-van-api",
+  "private": true,
+  "type": "module",
+  "description": "Farm World backend for RV Van: rooms, members and saved worlds (Cloudflare Worker + NeonDB)",
+  "scripts": {
+    "dev": "node scripts/dev-server.mjs",
+    "migrate": "node scripts/migrate.mjs",
+    "test": "node --test test/*.test.mjs",
+    "check": "wrangler deploy --dry-run --outdir dist",
+    "deploy": "wrangler deploy"
+  },
+  "dependencies": {
+    "@neondatabase/serverless": "1.2.0"
+  },
+  "devDependencies": {
+    "pg": "8.23.1",
+    "wrangler": "4.151.1"
+  }
+}

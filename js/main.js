@@ -29,6 +29,9 @@ import { Designer } from './designer.js';
 import { Giants } from './giants.js';
 import { PLAYER_COLORS } from './remote.js';
 import { app } from './app.js';
+import { Farm } from './farm/farm.js';
+import { FarmMenu } from './farm/menu.js';
+import { FarmPanel } from './farm/panel.js';
 
 const $ = id => document.getElementById(id);
 
@@ -92,7 +95,7 @@ const combat = new Combat({ scene, camera, rig, player, gear, zombies, giants, t
   onHits: (h, x, z) => survival.onHits(h, x, z), onGiantHit: h => survival.onGiantHit(h), weapon: () => survival.weapon });
 const survival = new Survival({ net, session, player, rvs, remotes, zombies, giants, structures, combat, gear, inv, world, materials, rig, camera,
   toast: m => toast(m), myName: () => session.myName, colorOfSlot: c => PLAYER_COLORS[c % PLAYER_COLORS.length].css,
-  onEnd: () => { if (!net.isGuest) Save.clear(); },
+  onEnd: () => { if (!net.isGuest && !farm.active) Save.clear(); },
   onLeave: () => { try { net.leave(); } catch (e) { /* ignore */ } location.replace(location.pathname); },
   onEndScreen: () => { if (document.pointerLockElement) document.exitPointerLock(); },
   onStage: () => { session.dirty = true; saveNow(); } });
@@ -113,8 +116,21 @@ Object.assign(session.g, {
   // 🔄 Sync (host) / a host's sync reaching a guest: fresh game state + new voice links
   onResync: () => { survival.dirty = true; voice.restart(); },
   // kicked by the host: back to the start screen with a message
-  onKicked: msg => { try { sessionStorage.setItem('rv-flash', msg); sessionStorage.setItem('rv-tab-keep', '1'); } catch (e) { /* ignore */ } location.replace(location.pathname); },
+  onKicked: (msg, why) => { if (farm.active) farm.gone(msg, why === 'removed'); else backToMenu(msg); },
 });
+// back to the start screen with a message (keeps ?api= when testing on this computer)
+function backToMenu(msg, mode) {
+  try { sessionStorage.setItem('rv-flash', msg); sessionStorage.setItem('rv-tab-keep', '1'); if (mode) sessionStorage.setItem('rv-mode-next', mode); } catch (e) { /* ignore */ }
+  const api = new URLSearchParams(location.search).get('api');
+  location.replace(location.pathname + (api && /^(localhost|127\.0\.0\.1)$/.test(location.hostname) ? '?api=' + encodeURIComponent(api) : ''));
+}
+
+/* ---------- Farm World: a permanent world saved online, for up to 4 members (js/farm) ---------- */
+const farm = new Farm({ net, session, toast: m => toast(m),
+  collectWorld: () => collectWorld(), applyWorld: w => applyWorld(w), freshWorld: () => survival.setFarm(),
+  onGone: msg => backToMenu(msg, 'farm'), onRoster: () => renderRoster(), onHosting: () => renderRoster() });
+session.farm = farm;
+survival.g.farmHud = () => farmHud();
 
 function setupRV(r) { r.onMsg = m => toast(m); r.onCheckpoint = onCheckpoint; }
 setupRV(rv0);
@@ -176,12 +192,21 @@ const OBJ = [
   { text: '🏆 You won! Press Esc for the scoreboard', done: () => false, at: () => world.castleBenchPos },
 ];
 const STAGE_OBJ = { tbuild: 9, siege: 10, trail2: 11, cbuild: 12, giants: 13, won: 14 };
+// Farm World: the same trail to clear, then the north is yours to explore (no siege, no giants)
+const nearValley = () => anyRV(r => Math.hypot(r.root.position.x - VALLEY.x, r.root.position.z - VALLEY.z) < 70) || Math.hypot(player.pos.x - VALLEY.x, player.pos.z - VALLEY.z) < 70;
+const FARM_OBJ = [...OBJ.slice(0, 8),
+  { text: 'Explore north over the pass to Watchtower Valley (clear the road on the way)', done: nearValley, at: () => world.towerBenchPos },
+  { text: '🌾 Your world is saved online — any member can open it, together or alone', done: () => false, at: () => world.campPos },
+];
+const objList = () => (survival.farm ? FARM_OBJ : OBJ);
 function updateObjective() {
+  const list = objList();
   let changed = false;
-  if (STAGE_OBJ[survival.stage] > objI) { objI = STAGE_OBJ[survival.stage]; changed = true; }
-  while (objI < OBJ.length - 1 && OBJ[objI].done()) { objI++; changed = true; }
+  if (!survival.farm && STAGE_OBJ[survival.stage] > objI) { objI = STAGE_OBJ[survival.stage]; changed = true; }
+  objI = Math.min(objI, list.length - 1);
+  while (objI < list.length - 1 && list[objI].done()) { objI++; changed = true; }
   if (changed) { toast('✔ Objective complete!'); session.dirty = true; saveNow(); }
-  hud.objective.textContent = '🎯 ' + touchText(OBJ[objI].text);
+  hud.objective.textContent = '🎯 ' + touchText(list[objI].text);
 }
 
 /* ---------- map markers ---------- */
@@ -201,7 +226,7 @@ function mapMarkers() {
   remotes.each((r, p) => markers.push({ x: p.x, z: p.z, dot: r.color, label: (r.s.dn ? '⬇ ' : '') + r.s.n, edge: true }));
   for (const z of zombies.list) if (z.st !== 4) markers.push({ x: z.x, z: z.z, dot: '#e0362a' });
   if (drone.active) markers.push({ x: drone.pos.x, z: drone.pos.z, icon: '🚁' });
-  const t = OBJ[objI].at(); markers.push({ x: t.x, z: t.z, ring: true, edge: true });
+  const ol = objList(), t = ol[Math.min(objI, ol.length - 1)].at(); markers.push({ x: t.x, z: t.z, ring: true, edge: true });
   return markers;
 }
 const me = { x: 0, z: 0, yaw: 0 };
@@ -247,8 +272,19 @@ function applySave(s) {
   player.spawnBesideRV();
   return true;
 }
-function saveNow() { if (!net.isGuest && started) return Save.write(collectSave()); return false; }
+function saveNow() {
+  if (farm.active) return farm.saveSoon();            // Farm World saves online (the host sends it)
+  if (!net.isGuest && started) return Save.write(collectSave()); return false;
+}
+// Farm World snapshot: the shared world only (no personal backpack, no zombie campaign)
+function collectWorld() {
+  const s = collectSave();
+  delete s.t; delete s.bag; delete s.sv; delete s.bs;
+  return s;
+}
+function applyWorld(w) { if (w && w.v === 1) applySave({ bag: [], ...w }); survival.setFarm(); }
 function manualSave() {
+  if (farm.active) { toast(farm.saveSoon() ? '💾 Saving the world online…' : '💾 The player hosting the world saves it online'); return; }
   if (net.isGuest) { toast('In co-op the host saves the shared game'); return; }
   toast(saveNow() ? '💾 Progress saved' : 'Could not save (private browsing?)');
 }
@@ -337,6 +373,7 @@ const COPY_ICON = '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="
 function renderRoster() {
   voice.sync();
   renderVoice();
+  if (farm.active) { renderFarmRoster(); return; }
   if (!net.online) {
     hud.room.classList.add('hidden');
     // a guest who couldn't get back in after a connection drop can try again from here
@@ -356,6 +393,34 @@ function renderRoster() {
       <div class="irow"><span>Invite link</span><input class="ilink" readonly value="${inviteLink()}" /><button class="copyBtn" data-copy="link" title="Copy invite link">${COPY_ICON}<span>Copy</span></button></div>
       <div class="ihint">Send the link (or the code) to friends — up to ${MAX_PLAYERS} players, all in one RV.</div>
     </div>`;
+}
+// Farm World: room bar + the members panel in the pause menu
+const farmPanel = new FarmPanel($('pauseRoom'), { farm, session, net, toast: m => toast(m), copy: t => copyText(t),
+  syncLabel: () => (net.isHost ? '🔄 Sync everyone — fresh copy, voice restart, weak links reconnect' : net.online ? '🔄 Reconnect & sync — if a teammate is missing or the voice breaks' : '🔄 Rejoin the world'),
+  after: () => renderVoice() });
+function renderFarmRoster() {
+  const L = farm.L;
+  hud.room.classList.remove('hidden');
+  if (session.rejoining || !net.online) hud.room.innerHTML = `📡 ${session.rejoining ? 'Reconnecting to' : 'Not connected to'} <b>${escapeHTML(L.roomName)}</b>…`;
+  else {
+    const names = session.roster().map(p => `<span style="color:${session.colorOf(p.id)}">${p.id === net.id ? 'You' : escapeHTML(p.n)}</span>`).join(', ');
+    hud.room.innerHTML = `🌾 <b>${escapeHTML(L.roomName)}</b> <span class="dim">${L.code} · ${Math.max(1, session.players.size)}/4 online</span> · ${names} <span id="ping" class="dim"></span>${L.isOwner ? ` <button class="copyBtn mini" data-copy="farminvite" title="Invite a friend (one-time link)">${COPY_ICON}<span>Invite</span></button>` : ''}`;
+  }
+  farmPanel.render();                  // (also fills the mic button inside the panel)
+  clearTimeout(farmInfoT);             // players came or went: refresh the member list in a moment
+  farmInfoT = setTimeout(() => farm.refreshInfo(true).then(() => farmPanel.render(), () => {}), 2000);
+}
+let farmInfoT = 0;
+function farmHud() {
+  const L = farm.L;
+  if (!L) return '🌾 Farm World';
+  const on = net.online && !session.rejoining ? Math.max(1, session.players.size) : 1, mem = farm.info ? farm.info.members.length : 0;
+  return `🌾 ${L.roomName} · 🟢 ${on}/4 online${mem ? ` · 👥 ${mem}/4 members` : ''}`;
+}
+async function farmInvite() {
+  if (!farm.isOwner) { toast('Only the owner of this world can invite new members'); return; }
+  try { const r = await farm.createInvite(); await copyText(r.link); toast('📋 Invite link copied — send it to your friend (works once, 72 h)'); }
+  catch (e) { toast('⚠ ' + (e.message || e)); }
 }
 // mic button (top bar + pause menu) — B toggles it too
 function renderVoice() {
@@ -393,6 +458,7 @@ function onCopyClick(e) {
   const btn = e.target.closest('.copyBtn');
   if (!btn) return;
   e.preventDefault(); e.stopPropagation();
+  if (btn.dataset.copy === 'farminvite') { farmInvite(); return; }
   const what = btn.dataset.copy, text = what === 'code' ? net.code : inviteLink(), label = btn.querySelector('span'), old = label.textContent;
   copyText(text).then(() => {
     btn.classList.add('ok'); label.textContent = 'Copied!';
@@ -471,7 +537,7 @@ function updateHUD(dt) {
   // scoreboard in the pause menu
   if (started && !overlay.classList.contains('hidden') && (scoreT -= 0.12) <= 0) {
     scoreT = 1;
-    const rows = survival.scoreRows();
+    const rows = farm.active ? [] : survival.scoreRows();      // no zombie scoreboard in Farm World
     const html = rows.length ? `<div class="phead">🏆 Scoreboard</div><table class="stable"><thead><tr><th>#</th><th>Player</th><th>🧟</th><th>🗿</th><th>💚</th><th>☠</th><th>Points</th></tr></thead><tbody>${rows.map((r, i) => `<tr><td>${i + 1}</td><td><i style="background:${PLAYER_COLORS[r[1] % PLAYER_COLORS.length].css}"></i>${escapeHTML(r[0])}</td><td>${r[2]}</td><td>${r[3]}</td><td>${r[4]}</td><td>${r[5]}</td><td><b>${r[6]}</b></td></tr>`).join('')}</tbody></table>` : '';
     if (html !== lastScore) { lastScore = html; $('pauseScore').innerHTML = html; }
   }
@@ -529,7 +595,20 @@ const setUseSave = v => { useSave = v; M.cont.classList.toggle('on', v); M.fresh
 setUseSave(useSave);
 M.cont.onclick = () => setUseSave(true); M.fresh.onclick = () => setUseSave(false);
 const roomParam = new URLSearchParams(location.search).get('room');
-try { const f = sessionStorage.getItem('rv-flash'); if (f) { sessionStorage.removeItem('rv-flash'); M.status.textContent = '⚠ ' + f; } } catch (e) { /* ignore */ }
+let flash = '';
+try { flash = sessionStorage.getItem('rv-flash') || ''; sessionStorage.removeItem('rv-flash'); } catch (e) { /* ignore */ }
+// Farm World screens (tabs: Zombie Trail / Farm World)
+const farmMenu = new FarmMenu({ enter: enterFarm, defaultName: () => { try { return localStorage.getItem('rv-name') || ''; } catch (e) { return ''; } } });
+if (flash) { if (farmMenu.mode === 'farm') farmMenu.status('⚠ ' + flash, true); else M.status.textContent = '⚠ ' + flash; }
+async function enterFarm(L, status, isNew) {
+  const r = await farm.enter(L, status);
+  gear.netId = String(L.memberId || 'f').slice(0, 8) + Date.now().toString(36);   // ids of gear you set down
+  startGame(r.role === 'host'
+    ? (isNew || r.fresh ? `🌾 Welcome to ${L.roomName}! World code ${L.code} — invite friends from the menu (Esc)` : `🌾 Welcome back to ${L.roomName}`)
+    : `🌾 You joined ${r.hostName || 'your friend'} in ${L.roomName}`);
+  renderRoster();
+  farm.refreshInfo(true).then(() => renderRoster(), () => {});
+}
 if (roomParam) { M.code.value = cleanRoomCode(roomParam); M.status.textContent = 'You were invited! Pick a name and press Join.'; M.join.classList.add('pulse'); }
 const playerName = () => { const n = (M.name.value || 'Camper').trim().slice(0, 16) || 'Camper'; try { localStorage.setItem('rv-name', n); } catch (e) { /* ignore */ } return n; };
 const busy = b => [M.solo, M.host, M.join].forEach(x => { x.disabled = b; });
@@ -537,7 +616,7 @@ function loadOrReset() { if (useSave) applySave(Save.load()); else { Save.clear(
 function startGame(msg) {
   audio.init();
   app.enterGame(input.touch);     // phones: full screen + landscape, keep the screen on
-  overlay.classList.add('hidden'); $('menuStart').classList.add('hidden'); $('menuPause').classList.remove('hidden');
+  overlay.classList.add('hidden'); $('menuStart').classList.add('hidden'); farmMenu.hide(); $('menuPause').classList.remove('hidden');
   paused = false; started = true; input.muted = false;
   input.requestLock();
   lastT = performance.now();
@@ -588,6 +667,7 @@ function openMenu() {
   input.muted = true; input.vdown.clear(); input.stick.active = false;
   overlay.classList.remove('hidden');
   scoreT = 0; requestRender = true;
+  if (farm.active) farm.refreshInfo(true).then(() => farmPanel.render(), () => {});
 }
 $('play').addEventListener('click', resume);
 // tap outside the menu card = back to the game
@@ -632,7 +712,8 @@ function globalKeys() {
     else toast('Only the driver can reset this RV');
   }
   if (input.wasPressed('Tab')) hud.help.classList.toggle('hidden');
-  if (input.wasPressed('KeyI') && net.online) copyText(inviteLink()).then(() => toast('📋 Invite link copied — send it to a friend'), () => toast('Press Esc to see the invite link'));
+  if (input.wasPressed('KeyI') && farm.active) farmInvite();
+  else if (input.wasPressed('KeyI') && net.online) copyText(inviteLink()).then(() => toast('📋 Invite link copied — send it to a friend'), () => toast('Press Esc to see the invite link'));
   if (!drone.active && (player.mode === 'foot' || player.mode === 'inside')) for (let i = 1; i <= 6; i++) if (input.wasPressed('Digit' + i)) inv.equip(i - 1);
 }
 
