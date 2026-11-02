@@ -28,6 +28,7 @@ import { Structures } from './structures.js';
 import { Designer } from './designer.js';
 import { Giants } from './giants.js';
 import { PLAYER_COLORS } from './remote.js';
+import { app } from './app.js';
 
 const $ = id => document.getElementById(id);
 
@@ -307,7 +308,7 @@ const TOUCH_TEXT = [
 ];
 function touchText(t) { if (!input.touch || !t) return t; for (const [a, b] of TOUCH_TEXT) t = t.replace(a, b); return t; }
 const HELP = {
-  foot: [['WASD', 'move'], ['Shift', 'run'], ['Space', 'jump'], ['G', 'weapon out / away (shotgun · cannon vs giants)'], ['F / Click', 'shoot / use item / punch'], ['1 - 6', 'hold an item'], ['E', 'interact (hold: revive)'], ['X', 'carry a downed teammate'], ['E (ladder)', 'climb towers / castle walls'], ['M', 'map'], ['V', '1st / 3rd person'], ['R', 'RV to last checkpoint'], ['B', 'mic on / off (co-op voice)'], ['I', 'copy invite link (co-op)']],
+  foot: [['WASD', 'move'], ['Shift', 'run'], ['Space', 'jump'], ['G', 'shotgun / cannon'], ['F / Click', 'shoot / use item / punch'], ['1 - 6', 'hold an item'], ['E', 'interact (hold: revive)'], ['X', 'carry a downed teammate'], ['E', 'climb towers / walls'], ['M', 'map'], ['V', '1st / 3rd person'], ['R', 'RV to last checkpoint'], ['B', 'mic on / off (co-op voice)'], ['I', 'copy invite link (co-op)']],
   drone: [['WASD', 'fly'], ['Space / Shift', 'up / down'], ['Mouse', 'turn + tilt camera'], ['V', 'drone cam / chase'], ['E', 'bring the drone back']],
   zoom: [['Mouse', 'look around'], ['F', 'lower binoculars']],
   inside: [['WASD', 'walk (out the side door to leave)'], ['E', 'use / sit / lie / open storage'], ['1 - 6', 'hold an item'], ['L', 'interior lights'], ['Space', 'jump'], ['V', '1st / 3rd person'], ['Mouse', 'look (roof hides)']],
@@ -489,6 +490,7 @@ const busy = b => [M.solo, M.host, M.join].forEach(x => { x.disabled = b; });
 function loadOrReset() { if (useSave) applySave(Save.load()); else { Save.clear(); survival.reset(); } }
 function startGame(msg) {
   audio.init();
+  app.enterGame(input.touch);     // phones: full screen + landscape, keep the screen on
   overlay.classList.add('hidden'); $('menuStart').classList.add('hidden'); $('menuPause').classList.remove('hidden');
   paused = false; started = true; input.muted = false;
   input.requestLock();
@@ -550,6 +552,19 @@ document.addEventListener('pointerlockchange', () => {
   // Esc frees the mouse -> pause menu
   if (!document.pointerLockElement && started && !input.dragging && !inv.isOpen && !editor.open && !designer.open) openMenu();
 });
+// installable app: back button (Android) closes the open popup or shows the menu
+app.init({
+  toast: m => toast(m),
+  onBack: () => {
+    if (inv.isOpen) inv.closeStorage();
+    else if (designer.open) designer.close();
+    else if (editor.open) editor.close();
+    else if (minimap.bigOpen) minimap.toggleBig(false);
+    else if (!overlay.classList.contains('hidden')) resume();
+    else openMenu();
+  },
+});
+survival.g.haptic = ms => app.haptic(ms);
 // menu settings: sound + graphics (on phones the graphics setting lives here instead of the top-right corner)
 const sndBtn = $('sndBtn');
 const sndLabel = () => { sndBtn.textContent = audio.muted ? '🔇 Sound off' : '🔊 Sound on'; };

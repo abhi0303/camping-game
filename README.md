@@ -2,6 +2,24 @@
 
 A low-poly RV adventure in plain HTML/CSS/JS + Three.js. Start at the trailhead, drive through a hilly jungle, clear the road, rebuild the broken bridge over the river, reach the hilltop camp, then cross the pass into the highlands. Build towers to survive a zombie siege and a stone castle to face 10 stone-throwing giants, surviving the zombie nights along the way. Play alone or with up to 3 friends (4 players, one RV), on desktop or mobile.
 
+## Install it as an app
+
+RV Van is a PWA (installable web app). Installed, it opens full screen in landscape, starts faster, and solo play works without internet. Co-op still needs a connection.
+
+- **Android (Chrome):** open the game, then tap **📲 Install the app** on the start screen (or Chrome menu → *Install app* / *Add to Home screen*).
+- **iPhone / iPad (Safari):** tap **Share** ⬆︎ → **Add to Home Screen**. The start screen shows this hint too.
+- **Desktop (Chrome / Edge):** use the install icon in the address bar, or the **Install the app** button.
+
+On phones the game also:
+- goes full screen and locks to landscape when you start (Android; on iPhone, install it to get full screen);
+- keeps the screen awake while you play;
+- vibrates when you're hurt (Android);
+- opens the game menu with the Android **back button** (or closes the open popup) instead of leaving the game.
+
+The ☰ button opens the same menu on any phone.
+
+Updates arrive automatically: the game loads the newest version whenever you're online.
+
 ## Play locally
 
 The game uses ES modules, so it has to be served (opening `index.html` directly won't work):
@@ -146,6 +164,7 @@ Global: **M** map, **K** sound, **B** mic on / off (co-op), **R** RV back to the
 - `js/structures.js`, `js/designer.js` – towers and castle walls (build, climb, damage, repair) and their workbench designer
 - `js/combat.js` – shotgun and cannon
 - `js/minimap.js` – minimap and full map
+- `js/app.js`, `sw.js`, `manifest.webmanifest`, `icons/` – installable app: service worker (offline cache), install button / iOS hint, full screen, wake lock, back button
 
 ## Performance
 

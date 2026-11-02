@@ -411,7 +411,7 @@ export class Survival {
   damage(d, kind = 'z') {
     const g = this.g, p = g.player;
     if (p.dead || this.over === 'won') return;
-    const flash = () => { this.hurtT = 0; audio.hurt(); const h = this.ui.hurt; if (h) { h.classList.remove('on'); void h.offsetWidth; h.classList.add('on'); } };
+    const flash = () => { this.hurtT = 0; audio.hurt(); if (g.haptic) g.haptic(p.downed ? 120 : 45); const h = this.ui.hurt; if (h) { h.classList.remove('on'); void h.offsetWidth; h.classList.add('on'); } };
     if (p.downed) { this.bleed -= d * 0.7; flash(); if (this.bleed <= 0) this._die(); return; }     // eaten while down
     const sf = this.safeSpot();
     if (kind === 'z' && sf >= 0 && (this._structOk(sf) || SEATED.has(p.anim.a))) return;
@@ -425,6 +425,7 @@ export class Survival {
     if (p.carrying) this._drop();
     if ((p.mode === 'seat' || p.mode === 'lie') && p.frame === 'world') { p.mode = 'foot'; p.seat = null; }
     p.downed = true; p.hp = 0; this.reviving = null;
+    if (g.haptic) g.haptic([120, 80, 220]);
     const team = this._teamAlive() > 0;
     this.bleed = team ? BLEED_COOP : BLEED_SOLO;
     g.combat.setOut(false);

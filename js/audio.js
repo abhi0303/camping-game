@@ -131,6 +131,11 @@ export const audio = {
   },
 };
 const hums = {};
+// iPhones pause web audio when the app goes to the background or a call comes in: wake it up again
+const wakeAudio = () => { if (ctx && ctx.state !== 'running' && ctx.state !== 'closed') ctx.resume().catch(() => {}); };
+addEventListener('touchend', wakeAudio, { passive: true });
+addEventListener('pointerdown', wakeAudio);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) wakeAudio(); });
 let noiseBuf = null;
 function noise() {
   if (noiseBuf) return noiseBuf;

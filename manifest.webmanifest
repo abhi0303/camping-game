@@ -1,0 +1,21 @@
+{
+  "id": "./",
+  "name": "RV Van – Jungle Trail",
+  "short_name": "RV Van",
+  "description": "Low-poly RV adventure: drive the jungle trail, build a bridge, survive zombie nights and giants — alone or with up to 3 friends.",
+  "start_url": "./?app=1",
+  "scope": "./",
+  "display": "fullscreen",
+  "display_override": ["fullscreen", "standalone"],
+  "orientation": "landscape",
+  "background_color": "#12141e",
+  "theme_color": "#12141e",
+  "categories": ["games", "entertainment"],
+  "lang": "en",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
