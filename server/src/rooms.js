@@ -70,7 +70,7 @@ async function readTicket(env, ticket) {
 
 /* ---------- who is calling ---------- */
 // Bearer token in the header (or "token" in the body, for the save sent while a page closes)
-async function member(db, req, code, body) {
+export async function member(db, req, code, body) {
   const m = /^Bearer\s+([A-Za-z0-9_-]{20,100})$/.exec(req.headers.get('Authorization') || '');
   const token = m ? m[1] : (body && typeof body.token === 'string' && body.token.length <= 100 ? body.token : '');
   if (!token) throw new ApiError(401, 'login_needed', 'Please log in to this world.');

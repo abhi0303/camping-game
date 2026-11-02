@@ -67,6 +67,7 @@
 
     <!-- backpack hotbar -->
     <div id="hotbarWrap">
+      <div id="farmBar" class="panel hidden"></div>
       <div id="matsBar" class="panel hidden"></div>
       <div id="vitals"><div class="hpbar"><div id="hpFill"></div></div><span id="hpText">❤ 100</span></div>
       <div id="hbName"></div>
@@ -110,6 +111,14 @@
         <div class="scol"><div class="slabel" id="bCap"></div><div class="sgrid" id="bGrid"></div></div>
       </div>
       <div class="sinfo" id="sInfo">Tap an item to move it between the storage and your backpack. Tap outside to close.</div>
+    </div>
+  </div>
+
+  <!-- Farm World popups: market, farm store, plots, shelters -->
+  <div id="farmUI" class="hidden">
+    <div class="sbox fubox">
+      <div class="shead"><span id="fuTitle"></span><span class="sbtns"><button id="fuClose" title="Close (E)">✕ Close</button></span></div>
+      <div id="fuBody"></div>
     </div>
   </div>
 

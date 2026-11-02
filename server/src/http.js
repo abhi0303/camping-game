@@ -17,6 +17,8 @@ export function json(data, status = 200, headers = {}) {
 
 export function errorResponse(e) {
   if (e instanceof ApiError) return json({ error: { code: e.code, message: e.message, ...(e.extra || {}) } }, e.status);
+  // a table that doesn't exist yet: the new code is live but its migration hasn't run
+  if (e && (e.code === '42P01' || e.code === '42703')) return json({ error: { code: 'server_updating', message: 'The Farm World server is being updated. Try again in a minute.' } }, 503);
   console.error('server error:', e && (e.stack || e.message || e));
   return json({ error: { code: 'server_error', message: 'The server had a problem. Try again in a moment.' } }, 500);
 }

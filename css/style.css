@@ -491,3 +491,41 @@ body.touch .fbox input { font-size: 16px; }
 .fdel { display: flex; gap: 6px; }
 .fdel input { flex: 1; min-width: 0; pointer-events: auto; background: #1d2030; color: #fff; border: 1px solid #7a3a4c; border-radius: 8px; padding: 7px 10px; font-size: 13px; }
 .fmsg { font-size: 12px; opacity: .85; }
+
+/* ---------- Farm World: money bar + farm popups ---------- */
+#farmBar { display: flex; gap: 12px; padding: 4px 12px; font-size: 14px; font-weight: 700; margin-bottom: 4px; }
+#farmBar small { font-size: 11px; opacity: .7; font-weight: 600; }
+#farmBar .low { color: #ffb08f; }
+body.touch #farmBar { font-size: 12px; padding: 2px 8px; gap: 9px; }
+#farmUI { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(10,12,20,.45); z-index: 5; pointer-events: auto; }
+.fubox { width: min(640px, calc(100vw - 32px)); max-height: calc(100vh - 24px); max-height: calc(100dvh - 24px); overflow-y: auto; }
+.sbtns #fuClose { background: #fff; color: #111; }
+.fu-head { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+.fu-chip { background: #23273a; border-radius: 8px; padding: 4px 10px; font-weight: 700; font-size: 13px; }
+.fu-tabs { display: flex; gap: 6px; margin-bottom: 10px; }
+.fu-tabs button { pointer-events: auto; cursor: pointer; border: 0; border-radius: 999px; padding: 7px 14px; font-weight: 800; background: #2a2e40; color: #ccd2e0; }
+.fu-tabs button.on { background: #6cc46a; color: #10220f; }
+.fu-row { display: flex; align-items: center; gap: 10px; background: #23273a; border-radius: 10px; padding: 8px 10px; margin-bottom: 6px; flex-wrap: wrap; }
+.fu-row.small { padding: 5px 10px; }
+.fu-ico { font-size: 24px; width: 32px; text-align: center; flex: none; }
+.fu-main { flex: 1; min-width: 140px; display: grid; gap: 2px; }
+.fu-name { font-weight: 800; }
+.fu-sub { font-size: 12px; opacity: .78; }
+.fu-need { color: #ffb08f; font-weight: 700; }
+.fu-qty { display: flex; align-items: center; gap: 4px; flex: none; }
+.fu-qty button { pointer-events: auto; cursor: pointer; width: 32px; height: 32px; border-radius: 8px; border: 0; background: #3a3f55; color: #eee; font-weight: 800; font-size: 16px; }
+.fu-qty button:disabled { opacity: .35; cursor: default; }
+.fu-qty b { min-width: 34px; text-align: center; }
+.fu-go { pointer-events: auto; cursor: pointer; border: 0; border-radius: 8px; padding: 9px 12px; font-weight: 800; background: #6cc46a; color: #10220f; white-space: nowrap; flex: none; }
+.fu-go.sell { background: #f2c14e; color: #222; }
+.fu-go.wide { width: 100%; margin: 4px 0 6px; }
+.fu-go.alt { background: #3a3f55; color: #eee; }
+.fu-go:disabled { opacity: .45; cursor: not-allowed; }
+.fu-msg { min-height: 18px; font-size: 13px; margin-top: 8px; }
+.fu-msg.err { color: #ff8a80; }
+.fu-msg.ok { color: #9be39f; }
+.fu-bar { height: 7px; width: 64px; background: #151824; border-radius: 4px; overflow: hidden; display: inline-block; vertical-align: middle; }
+.fu-bar u { display: block; height: 100%; }
+.fu-hist div { font-size: 13px; padding: 5px 2px; border-bottom: 1px solid rgba(255,255,255,.06); display: flex; justify-content: space-between; gap: 8px; }
+.fu-hist small { opacity: .6; white-space: nowrap; }
+.fp-farm { background: #1f3a26; border: 1px solid rgba(140,230,150,.25); border-radius: 8px; padding: 6px 10px; font-size: 13px; }

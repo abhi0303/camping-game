@@ -43,6 +43,10 @@ export const api = {
   removeMember: (L, id) => req('DELETE', `/v1/rooms/${enc(L.code)}/members/${enc(id)}`, { token: L.token }),
   logout: L => req('POST', `/v1/rooms/${enc(L.code)}/logout`, { token: L.token, body: {} }),
   deleteWorld: (L, confirm) => req('DELETE', `/v1/rooms/${enc(L.code)}`, { token: L.token, body: { confirm } }),
+  // farm economy: state (counts production up to now), one action, recent history
+  farm: L => req('GET', `/v1/rooms/${enc(L.code)}/farm`, { token: L.token }),
+  farmAct: (L, body) => req('POST', `/v1/rooms/${enc(L.code)}/farm`, { token: L.token, body }),
+  farmHistory: L => req('GET', `/v1/rooms/${enc(L.code)}/farm/history`, { token: L.token }),
   // last save while the page closes: a beacon can't carry headers, so the token goes in the body
   beacon(L, body) {
     if (!API_BASE || !navigator.sendBeacon) return false;

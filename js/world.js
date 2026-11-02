@@ -148,8 +148,25 @@ export class World {
         im.castShadow = t.shadow; im.receiveShadow = !t.shadow;
         im.computeBoundingSphere();
         this.scene.add(im);
+        (this.vegMeshes || (this.vegMeshes = [])).push(im);
       }
     }
+  }
+
+  // Farm World: clear trees, bushes and rocks from these rectangles (the farm and its path).
+  // Done after the jungle is made, so Zombie Trail's jungle stays exactly as it is.
+  clearArea(rects) {
+    const inside = (x, z) => rects.some(r => x > r.x0 && x < r.x1 && z > r.z0 && z < r.z1);
+    const zero = new THREE.Matrix4().makeScale(0, 0, 0), m = new THREE.Matrix4();
+    for (const im of this.vegMeshes || []) {
+      let hit = false;
+      for (let i = 0; i < im.count; i++) {
+        im.getMatrixAt(i, m);
+        if (inside(m.elements[12], m.elements[14])) { im.setMatrixAt(i, zero); hit = true; }
+      }
+      if (hit) { im.instanceMatrix.needsUpdate = true; im.computeBoundingSphere(); }
+    }
+    for (const cell of this.grid) for (let i = cell.length - 1; i >= 0; i--) { const c = cell[i]; if ((c.tree || c.rock) && inside(c.x, c.z)) cell.splice(i, 1); }
   }
 
   /* ---------------- trailhead (start) ---------------- */
