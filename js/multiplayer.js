@@ -23,6 +23,7 @@ export class Session {
     this.pending = null;              // guest: waiting for the host to accept us
     this.myName = 'Player'; this.mySlot = 0; this.lastCode = ''; this.rejoining = false; this.rtt = 0; this.joined = false;
     this.myIds = [];                  // guest: the ids this tab had in the room (so the host can drop our old copy)
+    this.farm = null;                 // Farm World session (js/farm/farm.js) when playing a saved world
     this.tP = 0; this.tR = 0; this.tW = 0; this.tB = 0; this.tPing = 0; this.fullT = 0; this.fullR = 0; this.fullB = 0; this.dirty = true;
     this.sentP = new Map(); this.sentMe = '';     // last avatar states sent (only changes go out, plus a full refresh each second)
     this.sentR = new Map(); this.sentB = '';      // same for the RVs and the bridge
@@ -57,8 +58,8 @@ export class Session {
     try { await this._joinOnce(code, 20000); }
     catch (e) { this._toSolo(); throw e; }
   }
-  async _joinOnce(code, timeout) {
-    await this.net.join(code, timeout);
+  async _joinOnce(code, timeout, peerId, extra = null) {
+    await this.net.join(code, timeout, peerId);
     const re = this.myIds.slice(-4);              // our earlier ids in this room: the host drops those copies
     this.myIds.push(this.net.id);
     this._roles();
@@ -71,7 +72,7 @@ export class Session {
         reject(err);
       };
       this.pending = done;
-      this.net.send('hello', { n: this.myName, cid: this.net.cid, re }, true);
+      this.net.send('hello', { n: this.myName, cid: this.net.cid, re, ...(extra || {}) }, true);
     });
   }
   // the link to the host dropped (phone app switch, Wi-Fi hiccup...): get back into the same room by
@@ -102,8 +103,62 @@ export class Session {
     this._toSolo();
     g.toast(`⚠ Could not get back into room ${code} (${why}). Playing solo — Esc → "Rejoin room" to try again`);
   }
+  /* ---------- Farm World: the server says who hosts; the host checks every guest's ticket ---------- */
+  async hostFarm(o) {
+    await this.net.host(o.code, o.peerId);
+    this.myName = o.name; this.mySlot = o.seat; this.lastCode = o.code; this.joined = true; this.rejoining = false;
+    this.leftHosting();
+    this.players.set(this.net.id, { n: o.name, c: o.seat, cid: o.memberId });
+    this.g.player.char.setColors(PLAYER_COLORS[o.seat % PLAYER_COLORS.length]);   // each member keeps their own outfit
+    for (const r of this.g.rvs) r.owner = this.net.id;
+    this._roles(); this._fresh();
+    this.g.onRoster();
+  }
+  async joinFarm(o) {
+    this.myName = o.name; this.lastCode = o.code;
+    await this._joinOnce(o.code, 15000, o.peerId, { ticket: o.ticket, mid: o.memberId });
+  }
+  // forget the players of the last live session (new host / stepped down)
+  leftHosting() {
+    for (const id of [...this.g.remotes.map.keys()]) { this.g.remotes.remove(id); this.g.onPlayerGone && this.g.onPlayerGone(id); }
+    this.players.clear(); this.states.clear(); this.recent.clear(); this.sentP.clear();
+  }
+  // host: a guest wants in. Only members of the world (checked with the server) get in, in their own seat.
+  async _farmHello(d, from) {
+    const net = this.net, g = this.g;
+    if (this.players.has(from)) { this._welcome(from, this.players.get(from)); return; }
+    let m;
+    try { m = await this.farm.verify(d.ticket); }
+    catch (e) {
+      const fatal = e.code === 'bad_ticket';
+      net.sendTo(from, 'deny', { fatal, m: fatal ? 'You are not a member of this world.' : 'The host could not check your login just now.' });
+      net.dropPeer(from, true, 400);
+      return;
+    }
+    if (!net.isHost || !net.connOf(from)) return;          // they left, or we stopped hosting, while checking
+    for (const [id, p] of [...this.players]) {
+      if (id === from || p.cid !== m.id) continue;
+      if (id === net.id) { net.sendTo(from, 'deny', { fatal: true, m: 'You are already playing this world on another device.' }); net.dropPeer(from, true, 400); return; }
+      net.sendTo(id, 'kick', { r: 'dup' }); net.dropPeer(id, true, 400); this._drop(id, true);   // the newest device wins
+    }
+    const back = this.recent.has(m.id), me = { n: m.name, c: m.seat, cid: m.id };
+    this.players.set(from, me); this.recent.delete(m.id);
+    g.toast(back ? `🔄 ${me.n} is back` : `👋 ${me.n} joined`);
+    this._welcome(from, me);
+  }
+  // host: a member was removed from the world: out of the live game too
+  kickMember(memberId, r = 'removed') {
+    if (!this.net.isHost) return 0;
+    let n = 0;
+    for (const [id, p] of [...this.players]) {
+      if (p.cid !== memberId || id === this.net.id) continue;
+      this.net.sendTo(id, 'kick', { r }); this.net.dropPeer(id, true, 400); this._drop(id, true); n++;
+    }
+    return n;
+  }
   // pause menu button after a failed reconnect
   async rejoin() {
+    if (this.farm && this.farm.active) { this.farm.reopen({ manual: true }); return; }
     if (this.net.online || !this.lastCode) return;
     this.net.mode = 'rejoin'; this.rejoining = false;
     this._roles();
@@ -118,6 +173,7 @@ export class Session {
     if (net.isHost) { this.resync(); return; }
     if (this.rejoining || this.pending) { g.toast('📡 Already reconnecting…'); return; }
     if (net.mode === 'guest') { net.reconnectNow(); return; }
+    if (this.farm && this.farm.active) { this.rejoin(); return; }
     if (this.lastCode && this.joined) this.rejoin();          // playing solo after a failed reconnect
   }
   resync() {
@@ -146,6 +202,16 @@ export class Session {
   }
   // next updates carry everything again (not just what changed)
   _fresh() { this.sentP.clear(); this.sentR.clear(); this.sentB = ''; this.sentMe = ''; this.fullT = 1; this.dirty = true; }
+  // host: let a guest in and send them everything
+  _welcome(from, me) {
+    const net = this.net, g = this.g;
+    this._ensureRVs(this.rvFor(me.c) + 1);
+    net.accept(from);
+    net.sendTo(from, 'welcome', { slot: me.c, world: this.worldState(), rvs: g.rvs.map(r => r.netState()), st: this.storages(),
+      roster: this.roster(), ps: this.allStates(), dep: this.deployedList(), bs: g.buildState ? g.buildState() : null, sv: g.survivalState ? g.survivalState(me.cid) : null });
+    net.send('roster', this.roster());
+    g.onRoster();
+  }
   _roles() {
     const { net } = this, g = this.g;
     g.materials.net = net; g.obstacles.net = net;
@@ -216,6 +282,7 @@ export class Session {
     const net = this.net, g = this.g;
     net.on('hello', (d, from) => {                       // host: someone wants in
       if (!net.isHost) return;
+      if (this.farm && this.farm.active) { this._farmHello(d || {}, from); return; }
       let cid = String(d.cid || from);
       if (this.banned.has(cid)) { net.sendTo(from, 'kick', { r: 'ban' }); net.dropPeer(from, true, 400); return; }
       // the same tab coming back (refresh / reconnect): throw away its old copy first. The tab tells us
@@ -237,12 +304,7 @@ export class Session {
         this.players.set(from, me); this.recent.delete(cid);
         g.toast(back ? `🔄 ${me.n} is back` : `👋 ${me.n} joined`);
       }
-      this._ensureRVs(this.rvFor(me.c) + 1);
-      net.accept(from);
-      net.sendTo(from, 'welcome', { slot: me.c, world: this.worldState(), rvs: g.rvs.map(r => r.netState()), st: this.storages(),
-        roster: this.roster(), ps: this.allStates(), dep: this.deployedList(), bs: g.buildState ? g.buildState() : null, sv: g.survivalState ? g.survivalState(cid) : null });
-      net.send('roster', this.roster());
-      g.onRoster();
+      this._welcome(from, me);
     });
     net.on('welcome', d => {                             // guest: we're in (or back in)
       const again = this.joined;
@@ -269,12 +331,19 @@ export class Session {
       if (this.pending) this.pending();
     });
     net.on('full', d => { if (this.pending) { const e = new Error(`That room is full (${(d && d.max) || MAX_PLAYERS} players max).`); e.fatal = true; this.pending(e); } });
+    net.on('deny', d => {                                // farm host: not let in (fatal = not a member)
+      if (!this.pending) return;
+      const e = new Error((d && d.m) || 'The host did not let you in.'); e.fatal = !!(d && d.fatal);
+      this.pending(e);
+    });
     net.on('kick', d => {
-      const msg = d && d.r === 'ban' ? 'The host removed you from this room.' : 'You were removed from the room by the host.';
+      const r = d && d.r;
+      const msg = r === 'ban' ? 'The host removed you from this room.' : r === 'dup' ? 'You opened this world on another device, so it closed here.'
+        : r === 'removed' ? 'The owner removed you from this world.' : 'You were removed from the room by the host.';
       if (this.pending && !this.joined) { const e = new Error(msg); e.fatal = true; this.pending(e); return; }
       if (this.pending) this.pending(Object.assign(new Error(msg), { fatal: true }));
       this.net.leave(); this._toSolo();
-      g.onKicked && g.onKicked(msg);
+      g.onKicked && g.onKicked(msg, r);
     });
     net.on('roster', d => {
       if (!net.isGuest) return;
@@ -317,6 +386,7 @@ export class Session {
     net.on('leave', (why, from) => this._drop(from, false, why));
     net.on('lost', reason => {
       if (this.pending) { this.pending(new Error('Lost the connection to the room.')); return; }
+      if (this.farm && this.farm.active) { this.farm.hostLost(reason); return; }      // farm: ask the server who hosts now
       if (reason === 'bye' || !this.lastCode) {
         this._toSolo();
         g.toast('⚠ The host closed the room — you are playing solo now');
