@@ -81,27 +81,35 @@ A permanent world for a group of up to 4 friends. It's saved on the Farm World s
 
 The farm is in a clearing just east of the trailhead (follow the **🌾 FARM** sign by the road). Everything on it belongs to the whole group: one shared money balance (💰, starts at ₹500), one store of goods, the same shelters and animals for every member, online or not.
 
-- **Farm store:** put the logs and stones you collect (chopping trees, rockfalls, crates) into the farm. Logs become 🪵 wood, stones stay 🪨 stone. Planks stay with you for the bridge.
-- **Plots:** 8 plots. Walk up to a plot sign to build a shelter on it:
+The main road splits it in two: **the farm** (plots and storage) on one side, **the Farm Store and the Market** on the other.
+
+- **Plots:** 8 plots in two rows along a walkway, each with its own wooden signboard by its gate. Walk up to a plot sign to build a shelter on it:
 
   | Shelter | Cost | Holds |
   |---|---|---|
-  | 🏠 Chicken coop | ₹100 · 20 wood | 6 chickens |
+  | 🏠 Chicken coop | ₹100 · 20 wood | 6 chickens (any kind) |
   | 🛖 Goat shed | ₹250 · 40 wood | 4 goats |
   | 🏚 Cow barn | ₹500 · 60 wood · 20 stone | 3 cows |
   | 🐎 Horse stable | ₹600 · 60 wood · 20 stone | 2 horses |
-- **Market:** buy animals, 🌾 feed, wood and stone; sell 🥚 eggs, 🥛 goat milk, 🍼 cow milk, wood and stone. The **Recent** tab shows who bought, sold or built what.
+- **Pens and gates:** every shelter has a fenced pen with a dirt yard, a feed trough and a water trough. Press **E** at the gate to open or close it — a closed gate blocks the way, everyone sees it move, and it stays as you left it.
+- **Feeding:** animals only eat when you feed them. Open the gate, walk to the feed trough and press **E**: **Feed all** or **Feed selected** (the hungriest first). One feeding costs 1 🌾 feed per chicken (2 per goat or horse, 3 per cow) and keeps it fed — and producing — for **2 hours** (you can feed up to a day ahead). With too little feed only some animals get fed. New animals arrive fed for 2 hours.
+- **Production panel:** stand at a plot to see its numbers live — total animals, **next egg / milk in**, **feed due in**, feeding duration and what's in storage. When nobody is fed it says **Production Paused – Feed Required**. The timers come from the server's time stamps, and the farm refreshes by itself when an egg is laid.
+- **Chickens:**
 
-  | Animal | Price | Eats (feed / h) | Makes |
-  |---|---|---|---|
-  | 🐔 Chicken | ₹40 | 0.25 | 1 egg every 2 h (sells for ₹6) |
-  | 🐐 Goat | ₹150 | 0.5 | 1 goat milk every 4 h (₹30) |
-  | 🐄 Cow | ₹400 | 1 | 1 cow milk every 2 h (₹25) |
-  | 🐴 Horse | ₹600 | 0.75 | — (for carts and riding, coming later) |
-- **Feed and health:** animals eat from the shared feed (₹2 each). Fed animals make goods and stay healthy; without feed they get hungry after about a day, stop producing and grow weak (they don't die). Feed them again and they recover. Walk up to a shelter to see each animal's health and hunger.
-- **While nobody plays:** animals keep eating and producing. When anyone opens the world, the server works out what happened since, using its own clock, for up to a week of absence. The stores hold at most 60 eggs and 30 of each milk, so sell before they fill up.
-- **Safe for a group:** every purchase, sale and build is checked by the server against the shared money and goods. Two members buying at the same moment can't spend the same money; a double click or a retry after a lost connection never buys twice.
-- The money bar above the hotbar and the Esc menu show the money, the animals, what they make per hour and how long the feed lasts. Animals walk around their pens the same way on every player's screen.
+  | Chicken | Price | Lays | Egg price | Unlocks |
+  |---|---|---|---|---|
+  | 🐔 Chicken (white) | ₹40 | 1 egg per 2 h fed | ₹6 | from the start |
+  | 🐓 Brown Desi chicken | ₹180 | 1 brown egg per 2 h fed | ₹14 | after the farm earns ₹300 from sales |
+  | 🐦‍⬛ Dark Desi chicken | ₹450 | 1 dark egg per 2.5 h fed | ₹35 | after the farm earns ₹1500 from sales |
+
+  Each kind has its own look, and its eggs are kept separately. 🐐 Goats (₹150) give goat milk (₹30), 🐄 cows (₹400) cow milk (₹25), 🐴 horses (₹600) are for carts and riding later.
+- **Health:** an animal left hungry for a day gets weak (it never dies). Fed again it recovers.
+- **Farm Store** (across the road): talk to the farmer behind the counter (**E**). His menu: purchase animals, sell farm products, purchase animal feed (₹2), farming supplies (coming with crop fields) and construction materials (🪵 wood ₹6, 🪨 stone ₹8). You can walk inside.
+- **Market** (next to the store): the selling hall — sell eggs, milk, wood and stone, see the price board and the farm's trade log (who bought, sold, built or upgraded what).
+- **Farm storage** (end of the walkway): store the logs and stones you collect (chopping trees, rockfalls, crates) — logs become 🪵 wood. It also sets how much the farm can hold: level 1 holds 60 of each egg, 30 of each milk, 500 feed / wood / stone. **Upgrade to level 2** (₹600 · 80 wood · 40 stone) for twice as much and a bigger storehouse. Two players pressing Upgrade at once upgrade it only once.
+- **While nobody plays:** fed animals keep producing until their feed runs out. When anyone opens the world, the server works out what happened since, using its own clock, for up to a week of absence. Goods stop at the storage limit, so sell before it fills up.
+- **Safe for a group:** every purchase, sale, feeding, build, gate and upgrade is checked by the server against the shared money and goods. Two members buying at the same moment can't spend the same money; a double click or a retry after a lost connection never does anything twice.
+- The money bar above the hotbar and the Esc menu show the money, the goods, the animals and how many are hungry. Animals walk around their pens the same way on every player's screen.
 
 The shared world is everything the zombie save holds except your personal backpack: road blocks, crates, materials, the bridge, the RV's checkpoint, the RV storages and the objective.
 
@@ -213,7 +221,7 @@ Global: **M** map, **K** sound, **B** mic on / off (co-op), **R** RV back to the
 - `js/combat.js` – shotgun and cannon
 - `js/minimap.js` – minimap and full map
 - `js/app.js`, `sw.js`, `manifest.webmanifest`, `icons/` – installable app: service worker (offline cache), install button / iOS hint, full screen, wake lock, back button
-- `js/farm/` – Farm World: server address (`config.js`), API calls (`api.js`), logins kept on this device (`logins.js`), the session that hosts / joins / saves / hands over the world (`farm.js`), start-menu screens (`menu.js`), Esc-menu members panel (`panel.js`); the farm: plot layout (`layout.js`), models (`models.js`), farm in the world + animals (`farmland.js`), shared money and goods (`economy.js`), market / store / plot / shelter popups and the money bar (`farmui.js`)
+- `js/farm/` – Farm World: server address (`config.js`), API calls (`api.js`), logins kept on this device (`logins.js`), the session that hosts / joins / saves / hands over the world (`farm.js`), start-menu screens (`menu.js`), Esc-menu members panel (`panel.js`); the farm: plot / store layout (`layout.js`), small props (`props.js`), models (`models.js`), the farmer (`npc.js`), farm in the world + animals + gates (`farmland.js`), shared money, goods and production timers (`economy.js`), store / market / storage / plot / shelter / feeding popups, the production panel and the money bar (`farmui.js`)
 - `server/` – the Farm World server (Cloudflare Worker + NeonDB): API, migrations, tests, setup and deploy steps in [`server/README.md`](server/README.md)
 
 ## Performance

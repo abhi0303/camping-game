@@ -158,6 +158,7 @@ export class CameraRig {
         if (Math.abs(lp.x) < 1.35 && lp.z > -4.0 && lp.z < 4.25 && lp.y < 3.45 && lp.y > -0.2) { d = Math.max(0.6, (d * (i - 1)) / 10); break; }
       }
     }
+    if (this.clip && !driving && !inRV) d = this.clip(this.target, this._d, d);     // e.g. stay inside the Farm Store
     cam.position.copy(this.target).addScaledVector(this._d, d);
     const gmin = this.world ? this.world.heightAt(cam.position.x, cam.position.z) + 0.4 : 0.35;
     if (cam.position.y < gmin) cam.position.y = gmin;

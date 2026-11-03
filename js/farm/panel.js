@@ -65,10 +65,10 @@ export class FarmPanel {
   _farmLine() {
     const e = this.c.eco;
     if (!e || !e.ready) return '';
-    const animals = ['chicken', 'goat', 'cow', 'horse'].map(t => `${e.cat(t).icon} ${e.count(t)}`).join(' · ');
-    const makes = ['egg', 'goat_milk', 'cow_milk'].filter(p => e.makesPerHour(p) > 0).map(p => `${e.cat(p).icon} +${e.makesPerHour(p).toFixed(1)}/h`).join(' · ');
-    const fh = e.feedHours();
-    return `<div class="fp-farm">🏡 Farm · 💰 ₹${e.money} · ${animals}${makes ? ' · ' + makes : ''}${isFinite(fh) ? ` · 🌾 feed for ${fh < 1 ? '<1' : Math.round(fh)} h` : ''}</div>`;
+    const animals = e.items('animal').filter(k => e.count(k.id)).map(k => `${k.icon} ${e.count(k.id)}`).join(' · ') || 'no animals yet';
+    const makes = ['egg', 'egg_brown', 'egg_dark', 'goat_milk', 'cow_milk'].filter(p => e.cat(p) && e.makesPerHour(p) > 0).map(p => `${e.cat(p).icon} +${e.makesPerHour(p).toFixed(1)}/h`).join(' · ');
+    const hungry = e.hungryCount();
+    return `<div class="fp-farm">🏡 Farm · 💰 ₹${e.money} · ${animals}${makes ? ' · ' + makes : ''} · 🌾 ${e.qty('feed')} feed${hungry ? ` · ${hungry} hungry` : ''}</div>`;
   }
   async _click(e) {
     const b = e.target.closest('[data-f]');
