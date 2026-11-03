@@ -191,6 +191,14 @@ INSERT INTO catalog (item, kind, name, icon, buy_price, sell_price, data, sort) 
    '{"levels": [{"level": 1, "mult": 1}, {"level": 2, "mult": 2, "money": 600, "wood": 80, "stone": 40}]}', 30);
 `,
   },
+  {
+    id: 4,
+    name: 'egg_every_hour',
+    sql: `
+-- every chicken (white, Brown Desi, Dark Desi) lays one egg per hour while fed (was one per 2 h / 2.5 h)
+UPDATE catalog SET data = data || '{"rate": 1}' WHERE item IN ('chicken', 'chicken_brown', 'chicken_dark');
+`,
+  },
 ];
 
 const LOCK_ID = 727001;   // advisory lock: two migrate runs never overlap
