@@ -4,7 +4,7 @@
 // shows what the animals produced in the meantime.
 import { api, LOGIN_GONE } from './api.js';
 
-const REFRESH_MS = 60000;
+const REFRESH_MS = 60000, HOUR = 3600e3;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const newId = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2, 12));
 
@@ -20,7 +20,7 @@ export class FarmEconomy {
     this.pollT = setInterval(() => this.load(), REFRESH_MS);
     return this.load();
   }
-  stop() { clearInterval(this.pollT); this.L = null; }
+  stop() { clearInterval(this.pollT); clearTimeout(this.evT); this.L = null; }
   _soon() { clearTimeout(this.soonT); this.soonT = setTimeout(() => this.load(), 400); }
 
   async load() {
@@ -30,8 +30,12 @@ export class FarmEconomy {
   }
   _apply(st) {
     if (!st || (this.st && st.at < this.st.at)) return;          // an older answer that arrived late
-    this.st = st;
+    this.st = st; this.loadedAt = Date.now();
     this.g.onChange(st);
+    // when an egg / milk is due or an animal's feed runs out before the next refresh, ask again just after it
+    clearTimeout(this.evT);
+    const ms = this.nextEventMs();
+    if (ms < REFRESH_MS) this.evT = setTimeout(() => this.load(), Math.max(5000, ms + 1500));
   }
   // The server's clock, seen from here: its time stamp belongs halfway through the request. Quick
   // answers give the best estimate, so a slower one only replaces it after a few minutes.
@@ -56,6 +60,7 @@ export class FarmEconomy {
           const t0 = Date.now(), r = await api.farmAct(this.L, { requestId, ...body });
           this._clock(r.at, t0, Date.now());
           if (body.action === 'sell') this.sold = true;
+          if (body.action === 'feed') this.fedOnce = true;
           this._apply(r);
           try { this.g.net.send('farmRev', { rev: r.rev }); } catch (e) { /* playing alone */ }
           return r;
@@ -82,10 +87,42 @@ export class FarmEconomy {
     const home = this.cat(k.shelter);
     return this.st.buildings.filter(b => b.type === k.shelter).reduce((t, b) => t + Math.max(0, home.capacity - this.animalsIn(b.id).length), 0);
   }
-  // per hour, with every animal fed and healthy
-  feedPerHour() { return this.st ? this.st.animals.reduce((t, a) => t + (this.cat(a.type).feed || 0), 0) : 0; }
-  makesPerHour(product) {
-    return this.st ? this.st.animals.reduce((t, a) => { const k = this.cat(a.type); return t + (k.product === product ? k.rate * (a.health / 100) : 0); }, 0) : 0;
+  // a shelter's production right now, from the server's numbers (fedUntil, progress, health) and its clock:
+  // { count, fed, hungry, nextMs (next product), dueMs (first animal whose feed runs out; 0 = some are hungry),
+  //   feedHours, feedCost, products, paused (nobody fed), full (storage full) }
+  shelterInfo(bd) {
+    const now = this.serverNow(), at = Date.parse(this.st.at), list = this.animalsIn(bd.id), k = this.cat(bd.type), home = this.cat(k.animal) || {};
+    const out = { count: list.length, fed: 0, hungry: 0, nextMs: Infinity, dueMs: Infinity, feedHours: home.feedHours || 2, feedCost: home.feedCost || 1, products: [], need: 0 };
+    for (const a of list) {
+      const c = this.cat(a.type), fu = a.fedUntil ? Date.parse(a.fedUntil) : -Infinity;
+      if (fu > now) { out.fed++; out.dueMs = Math.min(out.dueMs, fu - now); } else { out.hungry++; out.dueMs = 0; out.need += c.feedCost || 1; }
+      if (!c.product || !c.rate) continue;
+      if (!out.products.includes(c.product)) out.products.push(c.product);
+      const per = c.rate * (a.health / 100) / HOUR;
+      if (!(fu > now) || per <= 0) continue;
+      const p = a.progress + per * Math.max(0, Math.min(now, fu) - at), left = p >= 1 ? 0 : (1 - p) / per;
+      if (now + left <= fu + 30e3) out.nextMs = Math.min(out.nextMs, left);    // laid before this animal's feed runs out (a fed
+      // chicken lays its egg right at the end of its 2 h; 30 s covers rounding)
+    }
+    out.paused = out.count > 0 && out.fed === 0;
+    out.full = out.products.length > 0 && out.products.every(p => this.qty(p) >= (this.st.caps[p] || Infinity));
+    return out;
   }
-  feedHours() { const f = this.feedPerHour(); return f > 0 ? Math.max(0, this.qty('feed') - (this.st.feedEaten || 0)) / f : Infinity; }
+  // the next moment the farm changes by itself (something is laid, an animal gets hungry)
+  nextEventMs() {
+    if (!this.st) return Infinity;
+    let ms = Infinity;
+    for (const b of this.st.buildings) { const i = this.shelterInfo(b); ms = Math.min(ms, i.nextMs, i.dueMs > 0 ? i.dueMs : Infinity); }
+    return ms;
+  }
+  hungryCount() { const now = this.serverNow(); return this.st ? this.st.animals.filter(a => !(a.fedUntil && Date.parse(a.fedUntil) > now)).length : 0; }
+  // products per hour while fed (used in the overview)
+  makesPerHour(product) {
+    const now = this.serverNow();
+    return this.st ? this.st.animals.reduce((t, a) => { const k = this.cat(a.type); return t + (k.product === product && a.fedUntil && Date.parse(a.fedUntil) > now ? k.rate * (a.health / 100) : 0); }, 0) : 0;
+  }
+  // the farm has earned enough (from sales) to buy this animal
+  unlocked(item) { const k = this.cat(item); return !k || !k.unlock || (this.st.totalEarned || 0) >= k.unlock; }
+  get storageLevel() { return this.st ? this.st.storageLevel || 1 : 1; }
+  storageLevels() { const s = this.cat('storage'); return (s && s.levels) || [{ level: 1, mult: 1 }]; }
 }

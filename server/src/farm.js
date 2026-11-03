@@ -1,21 +1,26 @@
 // Farm economy: the world's shared money and goods, shelters, animals and what they produce.
 // Every change runs in one transaction with the world's row locked, so two players buying at the
 // same moment can never spend the same money twice. Prices and rules come from the catalog table.
-// Animal production is counted lazily: whenever the farm is opened or changed, the time since
-// produced_at (database clock) is simulated and produced_at moves forward in the same transaction.
+// Feeding is done by the players: one feeding (feedCost units of feed) keeps an animal fed for
+// feedHours; only fed animals produce. Production is counted lazily: whenever the farm is opened or
+// changed, the time since produced_at (database clock) is worked out and produced_at moves forward
+// in the same transaction, so no period is ever counted twice.
 import { ApiError, badInput, json, rateLimit, readJson } from './http.js';
 import { rows, tx } from './db.js';
 import { member } from './rooms.js';
 import { PLOTS } from './layout.js';
 
+const H = 3600e3;
 const MAX_OFFLINE_H = 24 * 7;          // production is counted for at most a week of absence
 const START_GOODS = { feed: 20 };      // a new farm starts with ₹500 (column default) and some feed
-const HUNGER_PER_H = 100 / 24;         // an unfed animal is starving after a day
-const EAT_PER_H = 50, HEAL_PER_H = 10, SICK_PER_H = 5, MIN_HEALTH = 10;   // animals get weak, never die
-const REQ_RE = /^[A-Za-z0-9_-]{8,64}$/;
+const FEED_AHEAD_H = 24;               // an animal can be fed for at most a day ahead
+const STARVE_AFTER_H = 24;             // hungry for this long: the animal starts getting weak
+const HEAL_PER_H = 10, SICK_PER_H = 5, MIN_HEALTH = 10;   // animals get weak, never die
+const REQ_RE = /^[A-Za-z0-9_-]{8,64}$/, UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const DEPOSIT_MAX = 50, DEPOSIT_PER_MIN = 150;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const r1 = v => Math.round(v * 10) / 10;
+const lower = s => s.toLowerCase();
 
 /* ---------- reading ---------- */
 async function catalog(c) {
@@ -33,85 +38,77 @@ async function writeInv(c, roomId, items, inv) {
   await c.rows(`INSERT INTO inventory (room_id, item, qty) SELECT $1, unnest($2::text[]), unnest($3::bigint[])
       ON CONFLICT (room_id, item) DO UPDATE SET qty = EXCLUDED.qty`, [roomId, keys, keys.map(k => inv[k] || 0)]);
 }
+// storage limits grow with the farm storage level
+const storageMult = (cat, level) => ((cat.storage && cat.storage.levels) || []).reduce((m, l) => (l.level <= level ? l.mult || m : m), 1);
+const capOf = (cat, item, level) => (cat[item] && cat[item].cap ? cat[item].cap * storageMult(cat, level) : Infinity);
 
 /* ---------- production ---------- */
-// Simulate `hours` of farm life in steps of at most an hour. Animals share the feed store; fed animals
-// heal and produce (scaled by health); unfed ones get hungry, then weak. Products go into storage up to
-// its limit; the rest is lost. Mutates animals and inv; returns the eaten part of the next feed unit.
-export function simulate(animals, inv, feedEaten, cat, hours) {
-  const steps = Math.max(1, Math.ceil(hours - 1e-9)), h = hours / steps;
-  let feed = Math.max(0, (inv.feed || 0) - feedEaten);
+// Work out the farm between two moments (ms), in steps of at most an hour. An animal produces only
+// while it is fed (until fed_until), scaled by its health. Fed animals heal; one left hungry for a day
+// gets weak. Products go into storage up to its limit; the rest is lost. Mutates animals and inv.
+export function simulate(animals, inv, cat, fromMs, toMs, level = 1) {
+  const span = Math.max(0, toMs - fromMs), steps = Math.max(1, Math.ceil(span / H - 1e-9)), step = span / steps;
   const made = {};
-  for (const a of animals) { a.fed = false; a.made = false; }
+  for (const a of animals) { a.made = false; a.fu = a.fed_until ? new Date(a.fed_until).getTime() : -Infinity; }
   for (let s = 0; s < steps; s++) {
-    let need = 0;
-    for (const a of animals) need += (cat[a.type].feed || 0) * h;
-    const f = need > 1e-12 ? Math.min(1, feed / need) : 1;
-    feed = Math.max(0, feed - need * f);
+    const s0 = fromMs + s * step, s1 = s0 + step;
     for (const a of animals) {
-      const k = cat[a.type];
-      if (f > 0) a.fed = true;
-      if (f >= 0.999) { a.hunger = Math.max(0, a.hunger - EAT_PER_H * h); a.health = Math.min(100, a.health + HEAL_PER_H * h); }
-      else {
-        a.hunger = clamp(a.hunger + (1 - f) * HUNGER_PER_H * h - f * EAT_PER_H * h, 0, 100);
-        if (a.hunger >= 100) a.health = Math.max(MIN_HEALTH, a.health - SICK_PER_H * h);
-        else a.health = Math.min(100, a.health + HEAL_PER_H * h * f);
-      }
-      if (k.product && k.rate) a.progress += k.rate * h * f * (a.health / 100);
+      const k = cat[a.type], fedH = clamp(Math.min(s1, a.fu) - s0, 0, step) / H;
+      const starveH = clamp(s1 - Math.max(s0, a.fu + STARVE_AFTER_H * H), 0, step) / H;
+      a.health = Math.max(MIN_HEALTH, Math.min(100, a.health + HEAL_PER_H * fedH) - SICK_PER_H * starveH);
+      if (k.product && k.rate) a.progress += k.rate * fedH * (a.health / 100);
     }
     for (const a of animals) {
       const p = cat[a.type].product, whole = p ? Math.floor(a.progress + 1e-9) : 0;
       if (whole < 1) continue;
-      const take = Math.min(whole, Math.max(0, (cat[p].cap ?? Infinity) - (inv[p] || 0)));
+      const take = Math.min(whole, Math.max(0, capOf(cat, p, level) - (inv[p] || 0)));
       if (take > 0) { inv[p] = (inv[p] || 0) + take; made[p] = (made[p] || 0) + take; a.made = true; }
       a.progress = Math.max(0, a.progress - whole);
     }
   }
-  const qty = Math.max(0, Math.ceil(feed - 1e-9));
-  inv.feed = qty;
-  return { made, feedEaten: Math.max(0, Math.min(qty - feed, 0.999999)) };
+  for (const a of animals) a.hunger = clamp((toMs - a.fu) / (STARVE_AFTER_H * H) * 100, 0, 100);
+  return { made };
 }
 
 // Bring the farm up to now. Must run inside a transaction; locks the world's row.
 async function settle(c, roomId, cat) {
-  const r = await c.one('SELECT money, econ_rev, produced_at, feed_eaten, now() AS now FROM rooms WHERE id = $1 FOR UPDATE', [roomId]);
+  const r = await c.one(`SELECT money, econ_rev, produced_at, total_earned, storage_level, now() AS now FROM rooms WHERE id = $1 FOR UPDATE`, [roomId]);
   const inv = await invMap(c, roomId), dirty = [];
-  let changed = false, feedEaten = r.feed_eaten;
+  let changed = false;
   if (r.econ_rev === 0) {                                  // first time this farm is opened: starting goods
     for (const [k, n] of Object.entries(START_GOODS)) { inv[k] = (inv[k] || 0) + n; dirty.push(k); }
     changed = true;
   }
-  const hours = Math.min(MAX_OFFLINE_H, Math.max(0, (r.now - r.produced_at) / 3600e3));
-  if (hours > 0) {
-    const animals = await c.rows('SELECT id, type, health, hunger, progress FROM animals WHERE room_id = $1 ORDER BY born_at, id', [roomId]);
+  const from = Math.max(r.produced_at.getTime(), r.now.getTime() - MAX_OFFLINE_H * H), to = r.now.getTime();
+  if (to > from) {
+    const animals = await c.rows('SELECT id, type, health, hunger, progress, fed_until FROM animals WHERE room_id = $1 ORDER BY born_at, id', [roomId]);
     if (animals.length) {
-      const out = simulate(animals, inv, feedEaten, cat, hours);
-      feedEaten = out.feedEaten;
-      dirty.push('feed', ...Object.keys(out.made));
+      const out = simulate(animals, inv, cat, from, to, r.storage_level);
+      dirty.push(...Object.keys(out.made));
       await c.rows(`UPDATE animals a SET health = v.health, hunger = v.hunger, progress = v.progress,
-          last_fed_at = CASE WHEN v.fed THEN $7 ELSE a.last_fed_at END,
-          last_production_at = CASE WHEN v.made THEN $7 ELSE a.last_production_at END
-          FROM unnest($1::uuid[], $2::real[], $3::real[], $4::float8[], $5::bool[], $6::bool[]) AS v(id, health, hunger, progress, fed, made)
+          last_production_at = CASE WHEN v.made THEN $6 ELSE a.last_production_at END
+          FROM unnest($1::uuid[], $2::real[], $3::real[], $4::float8[], $5::bool[]) AS v(id, health, hunger, progress, made)
           WHERE a.id = v.id`,
-      [animals.map(a => a.id), animals.map(a => a.health), animals.map(a => a.hunger), animals.map(a => a.progress), animals.map(a => a.fed), animals.map(a => a.made), r.now]);
+      [animals.map(a => a.id), animals.map(a => a.health), animals.map(a => a.hunger), animals.map(a => a.progress), animals.map(a => a.made), r.now]);
       changed = true;
     }
   }
   await writeInv(c, roomId, dirty, inv);
-  await c.rows('UPDATE rooms SET produced_at = $2, feed_eaten = $3, econ_rev = econ_rev + $4 WHERE id = $1', [roomId, r.now, feedEaten, changed ? 1 : 0]);
-  return { money: Number(r.money), rev: r.econ_rev + (changed ? 1 : 0), now: r.now, inv, feedEaten };
+  await c.rows('UPDATE rooms SET produced_at = $2, econ_rev = econ_rev + $3 WHERE id = $1', [roomId, r.now, changed ? 1 : 0]);
+  return { money: Number(r.money), rev: r.econ_rev + (changed ? 1 : 0), now: r.now, inv, level: r.storage_level, earned: Number(r.total_earned) };
 }
 
 async function state(c, roomId, cat, s) {
-  const blds = await c.rows('SELECT id, type, plot, level, x, z, yaw FROM buildings WHERE room_id = $1 ORDER BY plot', [roomId]);
-  const ans = await c.rows('SELECT id, type, shelter_id, health, hunger, progress, born_at FROM animals WHERE room_id = $1 ORDER BY born_at, id', [roomId]);
-  const inventory = {};
-  for (const [k, v] of Object.entries(cat)) if (v.kind === 'good') inventory[k] = s.inv[k] || 0;
+  const blds = await c.rows('SELECT id, type, plot, level, x, z, yaw, gate_open FROM buildings WHERE room_id = $1 ORDER BY plot', [roomId]);
+  const ans = await c.rows('SELECT id, type, shelter_id, health, hunger, progress, fed_until, born_at FROM animals WHERE room_id = $1 ORDER BY born_at, id', [roomId]);
+  const inventory = {}, caps = {};
+  for (const [k, v] of Object.entries(cat)) if (v.kind === 'good') { inventory[k] = s.inv[k] || 0; if (v.cap) caps[k] = capOf(cat, k, s.level); }
   return {
-    rev: s.rev, money: s.money, at: s.now.toISOString(), feedEaten: r1(s.feedEaten),
-    inventory,
-    buildings: blds.map(b => ({ id: b.id, type: b.type, plot: b.plot, level: b.level, x: b.x, z: b.z, yaw: b.yaw })),
-    animals: ans.map(a => ({ id: a.id, type: a.type, shelter: a.shelter_id, health: r1(a.health), hunger: r1(a.hunger), progress: Math.round(a.progress * 100) / 100, born: a.born_at })),
+    rev: s.rev, money: s.money, at: s.now.toISOString(), storageLevel: s.level, totalEarned: s.earned,
+    inventory, caps,
+    buildings: blds.map(b => ({ id: b.id, type: b.type, plot: b.plot, level: b.level, x: b.x, z: b.z, yaw: b.yaw, gateOpen: b.gate_open })),
+    animals: ans.map(a => ({ id: a.id, type: a.type, shelter: a.shelter_id, health: r1(a.health), hunger: r1(a.hunger), progress: Math.round(a.progress * 1000) / 1000,
+      fedUntil: a.fed_until ? a.fed_until.toISOString() : null, born: a.born_at })),
     catalog: cat, plots: PLOTS.length,
   };
 }
@@ -130,12 +127,12 @@ export async function farmState(req, env, db, code) {
 export async function farmHistory(req, env, db, code) {
   const me = await member(db, req, code);
   const list = await rows(db, `SELECT t.kind, t.detail, t.money_delta, t.created_at, m.name FROM room_transactions t
-      LEFT JOIN room_members m ON m.id = t.member_id WHERE t.room_id = $1 ORDER BY t.created_at DESC, t.id DESC LIMIT 30`, [me.room_id]);
+      LEFT JOIN room_members m ON m.id = t.member_id WHERE t.room_id = $1 AND t.kind <> 'gate' ORDER BY t.created_at DESC, t.id DESC LIMIT 30`, [me.room_id]);
   return json({ history: list.map(x => ({ kind: x.kind, who: x.name || 'A former member', message: x.detail.message || '', money: Number(x.money_delta), at: x.created_at })) });
 }
 
-// one action: { requestId, action: buy | sell | build | deposit, ... }. A retried requestId returns
-// the result of the first try instead of running again.
+// one action: { requestId, action: buy | sell | build | deposit | feed | upgrade, ... }. A retried requestId
+// returns the result of the first try instead of running again.
 export async function farmAct(req, env, db, code) {
   rateLimit(req, 'farmact', 120, 60e3, env);
   const b = await readJson(req, 4096);
@@ -152,8 +149,8 @@ export async function farmAct(req, env, db, code) {
     const out = await fn(c, { me, b, cat, s });
     await writeInv(c, me.room_id, out.items || [], s.inv);
     // the CHECK (money >= 0) constraint backs up the checks in the actions
-    if (out.money) await c.rows('UPDATE rooms SET money = money + $2 WHERE id = $1', [me.room_id, out.money]);
-    s.money += out.money || 0;
+    if (out.money) await c.rows('UPDATE rooms SET money = money + $2, total_earned = total_earned + $3 WHERE id = $1', [me.room_id, out.money, out.earned || 0]);
+    s.money += out.money || 0; s.earned += out.earned || 0;
     const detail = { ...out.detail, message: out.message };
     await c.rows(`INSERT INTO room_transactions (room_id, member_id, request_id, kind, detail, money_delta) VALUES ($1, $2, $3, $4, $5, $6)`,
       [me.room_id, me.id, rid, b.action, JSON.stringify(detail), out.money || 0]);
@@ -169,41 +166,46 @@ function whole(v, lo, hi, what = 'Amount') {
   if (!Number.isInteger(n) || n < lo || n > hi) throw badInput(`${what} must be a whole number from ${lo} to ${hi}.`);
   return n;
 }
-const lower = s => s.toLowerCase();
+const plural = (n, k) => `${n} ${lower(k.name)}${n === 1 || /s$/.test(k.name) ? '' : 's'}`;
 
 async function buy(c, { me, b, cat, s }) {
   const item = String(b.item || ''), k = cat[item];
-  if (!k || !k.buy || k.kind === 'building') throw new ApiError(400, 'bad_item', 'That can\'t be bought at the market.');
+  if (!k || !k.buy || k.kind === 'building' || k.kind === 'upgrade') throw new ApiError(400, 'bad_item', 'That can\'t be bought here.');
   const qty = whole(b.qty, 1, k.kind === 'animal' ? 12 : 500);
+  if (k.unlock && s.earned < k.unlock) throw new ApiError(409, 'locked', `${k.name}s are sold once the farm has earned ₹${k.unlock} from sales (₹${s.earned} so far).`);
   const cost = k.buy * qty;
   if (s.money < cost) throw new ApiError(409, 'not_enough_money', `Not enough money: ${qty} × ${k.name} costs ₹${cost}, the farm has ₹${s.money}.`);
   if (k.kind === 'animal') {
     const home = cat[k.shelter];
     const sh = await c.rows(`SELECT b.id, (SELECT count(*)::int FROM animals a WHERE a.shelter_id = b.id) AS n
         FROM buildings b WHERE b.room_id = $1 AND b.type = $2 ORDER BY b.plot`, [me.room_id, k.shelter]);
+    const pref = String(b.shelter || '');                    // bought from a shelter's panel: that shelter first
+    if (UUID_RE.test(pref)) sh.sort((x, y) => (y.id === pref) - (x.id === pref));
     if (!sh.length) throw new ApiError(409, 'no_shelter', `${k.name}s need a ${lower(home.name)}. Build one on a farm plot first.`);
     const free = sh.reduce((t, x) => t + Math.max(0, home.capacity - x.n), 0);
-    if (free < qty) throw new ApiError(409, 'no_space', free ? `Only ${free} free place${free > 1 ? 's' : ''} for ${lower(k.name)}s. Build another ${lower(home.name)} for more.` : `Every ${lower(home.name)} is full. Build another one for more ${lower(k.name)}s.`);
+    if (free < qty) throw new ApiError(409, 'no_space', free ? `Only ${free} free place${free > 1 ? 's' : ''} in your ${lower(home.name)}s. Build another for more.` : `Every ${lower(home.name)} is full. Build another one for more animals.`);
     const homes = [];
     for (const x of sh) for (let i = x.n; i < home.capacity && homes.length < qty; i++) homes.push(x.id);
-    await c.rows('INSERT INTO animals (room_id, type, shelter_id, last_fed_at) SELECT $1, $2, unnest($3::uuid[]), now()', [me.room_id, item, homes]);
-    return { money: -cost, detail: { item, qty, cost }, message: `${me.name} bought ${qty} ${qty === 1 ? lower(k.name) : lower(k.name) + 's'} for ₹${cost}` };
+    // new animals arrive fed for one feeding period
+    await c.rows(`INSERT INTO animals (room_id, type, shelter_id, last_fed_at, fed_until)
+        SELECT $1, $2, unnest($3::uuid[]), now(), now() + make_interval(secs => $4)`, [me.room_id, item, homes, (k.feedHours || 2) * 3600]);
+    return { money: -cost, detail: { item, qty, cost }, message: `${me.name} bought ${plural(qty, k)} for ₹${cost}` };
   }
-  const have = s.inv[item] || 0, cap = k.cap ?? Infinity;
-  if (have + qty > cap) throw new ApiError(409, 'storage_full', `The farm can keep at most ${cap} ${lower(k.name)} (it has ${have}).`);
+  const have = s.inv[item] || 0, cap = capOf(cat, item, s.level);
+  if (have + qty > cap) throw new ApiError(409, 'storage_full', `The farm storage holds at most ${cap} ${lower(k.name)} (it has ${have}). Upgrade the storage for more room.`);
   s.inv[item] = have + qty;
   return { money: -cost, items: [item], detail: { item, qty, cost }, message: `${me.name} bought ${qty} ${lower(k.name)} for ₹${cost}` };
 }
 
 async function sell(c, { me, b, s, cat }) {
   const item = String(b.item || ''), k = cat[item];
-  if (!k || !k.sell) throw new ApiError(400, 'bad_item', 'The market doesn\'t buy that.');
+  if (!k || !k.sell) throw new ApiError(400, 'bad_item', 'That can\'t be sold here.');
   const qty = whole(b.qty, 1, 100000);
   const have = s.inv[item] || 0;
   if (qty > have) throw new ApiError(409, 'not_enough', `The farm only has ${have} ${lower(k.name)}.`);
   s.inv[item] = have - qty;
   const pay = k.sell * qty;
-  return { money: pay, items: [item], detail: { item, qty, pay }, message: `${me.name} sold ${qty} ${lower(k.name)} for ₹${pay}` };
+  return { money: pay, earned: pay, items: [item], detail: { item, qty, pay }, message: `${me.name} sold ${qty} ${lower(k.name)} for ₹${pay}` };
 }
 
 async function build(c, { me, b, s, cat }) {
@@ -211,19 +213,22 @@ async function build(c, { me, b, s, cat }) {
   if (!k || k.kind !== 'building') throw new ApiError(400, 'bad_item', 'Unknown building.');
   const plot = whole(b.plot, 0, PLOTS.length - 1, 'Plot');
   if (await c.one('SELECT 1 FROM buildings WHERE room_id = $1 AND plot = $2', [me.room_id, plot])) throw new ApiError(409, 'plot_taken', 'Something is already built on that plot.');
-  const wood = k.wood || 0, stone = k.stone || 0, cost = k.buy || 0;
-  const miss = [];
-  if (s.money < cost) miss.push(`₹${cost - s.money} more money`);
-  if ((s.inv.wood || 0) < wood) miss.push(`${wood - (s.inv.wood || 0)} more wood`);
-  if ((s.inv.stone || 0) < stone) miss.push(`${stone - (s.inv.stone || 0)} more stone`);
+  const miss = needs(s, k.buy || 0, k.wood || 0, k.stone || 0);
   if (miss.length) throw new ApiError(409, 'not_enough', `A ${lower(k.name)} needs ${miss.join(', ')}.`);
-  s.inv.wood = (s.inv.wood || 0) - wood; s.inv.stone = (s.inv.stone || 0) - stone;
+  s.inv.wood = (s.inv.wood || 0) - (k.wood || 0); s.inv.stone = (s.inv.stone || 0) - (k.stone || 0);
   const P = PLOTS[plot];
   await c.rows('INSERT INTO buildings (room_id, type, plot, x, z, yaw) VALUES ($1, $2, $3, $4, $5, $6)', [me.room_id, type, plot, P.x, P.z, P.yaw]);
-  return { money: -cost, items: ['wood', 'stone'], detail: { type, plot, cost, wood, stone }, message: `${me.name} built a ${lower(k.name)} on plot ${plot + 1}` };
+  return { money: -(k.buy || 0), items: ['wood', 'stone'], detail: { type, plot, cost: k.buy, wood: k.wood, stone: k.stone }, message: `${me.name} built a ${lower(k.name)} on plot ${plot + 1}` };
+}
+function needs(s, money, wood, stone) {
+  const miss = [];
+  if (s.money < money) miss.push(`₹${money - s.money} more money`);
+  if ((s.inv.wood || 0) < wood) miss.push(`${wood - (s.inv.wood || 0)} more wood`);
+  if ((s.inv.stone || 0) < stone) miss.push(`${stone - (s.inv.stone || 0)} more stone`);
+  return miss;
 }
 
-// logs and stones collected in the world go into the farm's store (as wood / stone for building)
+// logs and stones collected in the world go into the farm storage (as wood / stone for building)
 async function deposit(c, { me, b, s, cat }) {
   const items = b.items && typeof b.items === 'object' ? b.items : {};
   const want = { wood: whole(items.wood || 0, 0, DEPOSIT_MAX, 'Wood'), stone: whole(items.stone || 0, 0, DEPOSIT_MAX, 'Stone') };
@@ -233,12 +238,72 @@ async function deposit(c, { me, b, s, cat }) {
   if (recent.n + want.wood + want.stone > DEPOSIT_PER_MIN) throw new ApiError(429, 'slow_down', 'That is a lot at once — wait a minute and store the rest.');
   const got = {};
   for (const k of ['wood', 'stone']) {
-    const space = Math.max(0, (cat[k].cap ?? Infinity) - (s.inv[k] || 0));
-    got[k] = Math.min(want[k], space);
+    got[k] = Math.min(want[k], Math.max(0, capOf(cat, k, s.level) - (s.inv[k] || 0)));
     s.inv[k] = (s.inv[k] || 0) + got[k];
   }
-  if (!got.wood && !got.stone) throw new ApiError(409, 'storage_full', 'The farm store is full.');
+  if (!got.wood && !got.stone) throw new ApiError(409, 'storage_full', 'The farm storage is full. Upgrade it for more room.');
   return { money: 0, items: ['wood', 'stone'], detail: { wood: got.wood, stone: got.stone }, message: `${me.name} stored ${[got.wood && `${got.wood} wood`, got.stone && `${got.stone} stone`].filter(Boolean).join(' and ')}` };
 }
 
-const ACTIONS = { buy, sell, build, deposit };
+// feed the animals of one shelter: { shelter, count } (count = how many, the hungriest first) or { all: true }.
+// Each feeding costs feedCost units and keeps that animal fed feedHours longer (at most a day ahead).
+// With too little feed, only as many animals as the feed allows are fed.
+async function feed(c, { me, b, s, cat }) {
+  const shelter = String(b.shelter || '');
+  if (!UUID_RE.test(shelter)) throw badInput('Pick a shelter to feed.');
+  const bd = await c.one('SELECT type FROM buildings WHERE id = $1 AND room_id = $2', [shelter, me.room_id]);
+  if (!bd) throw new ApiError(404, 'not_found', 'That shelter is not on this farm.');
+  const list = await c.rows(`SELECT id, type, fed_until, (fed_until IS NOT NULL AND fed_until > now()) AS fed, now() AS now
+      FROM animals WHERE shelter_id = $1 ORDER BY fed_until ASC NULLS FIRST, born_at, id`, [shelter]);
+  if (!list.length) throw new ApiError(409, 'no_animals', 'There are no animals here to feed.');
+  const want = b.all ? list.length : whole(b.count, 1, list.length, 'Number of animals');
+  const now = list[0].now.getTime();
+  let fed = 0, used = 0, full = 0, short = false;
+  const ids = [], until = [];
+  for (const a of list) {
+    if (fed >= want) break;
+    const k = cat[a.type], cost = k.feedCost || 1, hours = k.feedHours || 2;
+    const base = Math.max(now, a.fed_until ? a.fed_until.getTime() : 0);
+    if (base + hours * H > now + FEED_AHEAD_H * H + 1000) { full++; continue; }
+    if ((s.inv.feed || 0) < cost) { short = true; break; }
+    s.inv.feed -= cost; used += cost; fed++;
+    ids.push(a.id); until.push(new Date(base + hours * H).toISOString());
+  }
+  if (!fed) {
+    if (short) throw new ApiError(409, 'not_enough', 'No feed left. Buy feed at the Farm Store.');
+    throw new ApiError(409, 'already_fed', `These animals are already fed for the next ${FEED_AHEAD_H} hours.`);
+  }
+  await c.rows(`UPDATE animals a SET fed_until = v.until, last_fed_at = now() FROM unnest($1::uuid[], $2::timestamptz[]) AS v(id, until) WHERE a.id = v.id`, [ids, until]);
+  const k = cat[cat[bd.type].animal] || cat[list[0].type];
+  const message = `${me.name} fed ${fed} ${lower(k.name)}${fed === 1 ? '' : 's'} (${used} feed)` + (short && fed < want ? ` — not enough feed for the other ${want - fed}` : '');
+  return { money: 0, items: ['feed'], detail: { shelter, fed, wanted: want, used, short: short && fed < want, full }, message };
+}
+
+// upgrade the farm storage to the next level: { target: 'storage', level } (the level asked for, so two
+// players pressing the button at the same time upgrade only once)
+async function upgrade(c, { me, b, s, cat }) {
+  if (b.target !== 'storage' || !cat.storage) throw badInput('Unknown upgrade.');
+  const level = whole(b.level, 2, 99, 'Level');
+  if (s.level >= level) throw new ApiError(409, 'already_upgraded', `The farm storage is already level ${s.level}.`);
+  const next = (cat.storage.levels || []).find(l => l.level === s.level + 1);
+  if (!next || next.level !== level) throw new ApiError(409, 'max_level', 'There is no higher storage level yet.');
+  const miss = needs(s, next.money || 0, next.wood || 0, next.stone || 0);
+  if (miss.length) throw new ApiError(409, 'not_enough', `The upgrade needs ${miss.join(', ')}.`);
+  s.inv.wood = (s.inv.wood || 0) - (next.wood || 0); s.inv.stone = (s.inv.stone || 0) - (next.stone || 0);
+  await c.rows('UPDATE rooms SET storage_level = $2 WHERE id = $1', [me.room_id, next.level]);
+  s.level = next.level;
+  return { money: -(next.money || 0), items: ['wood', 'stone'], detail: { target: 'storage', level: next.level, cost: next.money }, message: `${me.name} upgraded the farm storage to level ${next.level}` };
+}
+
+// open or close the gate of a shelter's pen: { shelter, open }. Asking for the state it is already in is fine
+// (two players closing it at once both succeed).
+async function gate(c, { me, b }) {
+  const shelter = String(b.shelter || '');
+  if (!UUID_RE.test(shelter)) throw badInput('Pick a gate.');
+  const open = b.open === true;
+  const r = await c.one('UPDATE buildings SET gate_open = $3 WHERE id = $1 AND room_id = $2 RETURNING plot', [shelter, me.room_id, open]);
+  if (!r) throw new ApiError(404, 'not_found', 'That shelter is not on this farm.');
+  return { money: 0, items: [], detail: { shelter, open }, message: `${me.name} ${open ? 'opened' : 'closed'} the gate of plot ${r.plot + 1}` };
+}
+
+const ACTIONS = { buy, sell, build, deposit, feed, upgrade, gate };

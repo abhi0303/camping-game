@@ -150,6 +150,47 @@ CREATE TABLE room_transactions (
 CREATE INDEX room_transactions_room_time_idx ON room_transactions (room_id, created_at DESC);
 `,
   },
+  {
+    id: 3,
+    name: 'feeding_varieties_storage',
+    sql: `
+-- plot rows are now 21 m apart (they were 14 m with 13 m deep plots: the two rows' gates and signs met)
+UPDATE buildings SET z = CASE WHEN plot < 4 THEN -189 ELSE -168 END;
+
+-- feeding: an animal is fed until a time (each feeding = feedHours); nothing is eaten automatically any more
+ALTER TABLE animals ADD COLUMN fed_until TIMESTAMPTZ;
+UPDATE animals SET fed_until = now() + interval '2 hours';
+UPDATE rooms SET feed_eaten = 0;
+
+-- each pen has a gate that players open and close (shared by everyone in the room)
+ALTER TABLE buildings ADD COLUMN gate_open BOOLEAN NOT NULL DEFAULT false;
+
+-- money earned from sales (unlocks premium animals) and the farm storage level (raises the storage limits)
+ALTER TABLE rooms
+  ADD COLUMN total_earned  BIGINT NOT NULL DEFAULT 0 CHECK (total_earned >= 0),
+  ADD COLUMN storage_level SMALLINT NOT NULL DEFAULT 1 CHECK (storage_level >= 1);
+UPDATE rooms r SET total_earned = COALESCE((SELECT sum(t.money_delta) FROM room_transactions t WHERE t.room_id = r.id AND t.kind = 'sell'), 0);
+
+ALTER TABLE catalog DROP CONSTRAINT catalog_kind_check;
+ALTER TABLE catalog ADD CONSTRAINT catalog_kind_check CHECK (kind IN ('animal', 'good', 'building', 'upgrade'));
+UPDATE catalog SET name = 'Chicken', data = '{"feedCost": 1, "feedHours": 2, "product": "egg", "rate": 0.5, "shelter": "coop", "variety": "Regular"}', sort = 1 WHERE item = 'chicken';
+UPDATE catalog SET data = '{"feedCost": 2, "feedHours": 2, "product": "goat_milk", "rate": 0.25, "shelter": "goat_shed"}', sort = 4 WHERE item = 'goat';
+UPDATE catalog SET data = '{"feedCost": 3, "feedHours": 2, "product": "cow_milk", "rate": 0.5, "shelter": "barn"}', sort = 5 WHERE item = 'cow';
+UPDATE catalog SET data = '{"feedCost": 2, "feedHours": 2, "shelter": "stable"}', sort = 6 WHERE item = 'horse';
+UPDATE catalog SET name = 'Eggs', sort = 11 WHERE item = 'egg';
+UPDATE catalog SET sort = 14 WHERE item = 'goat_milk';
+UPDATE catalog SET sort = 15 WHERE item = 'cow_milk';
+UPDATE catalog SET sort = 16 WHERE item = 'wood';
+UPDATE catalog SET sort = 17 WHERE item = 'stone';
+INSERT INTO catalog (item, kind, name, icon, buy_price, sell_price, data, sort) VALUES
+  ('chicken_brown', 'animal', 'Brown Desi chicken', '🐓', 180, NULL, '{"feedCost": 1, "feedHours": 2, "product": "egg_brown", "rate": 0.5, "shelter": "coop", "variety": "Brown Desi", "unlock": 300}', 2),
+  ('chicken_dark',  'animal', 'Dark Desi chicken',  '🐦‍⬛', 450, NULL, '{"feedCost": 1, "feedHours": 2, "product": "egg_dark", "rate": 0.4, "shelter": "coop", "variety": "Dark Desi", "unlock": 1500}', 3),
+  ('egg_brown', 'good', 'Brown Desi eggs', '🟤', NULL, 14, '{"cap": 60}', 12),
+  ('egg_dark',  'good', 'Dark Desi eggs',  '⚫', NULL, 35, '{"cap": 60}', 13),
+  ('storage', 'upgrade', 'Farm storage', '📦', NULL, NULL,
+   '{"levels": [{"level": 1, "mult": 1}, {"level": 2, "mult": 2, "money": 600, "wood": 80, "stone": 40}]}', 30);
+`,
+  },
 ];
 
 const LOCK_ID = 727001;   // advisory lock: two migrate runs never overlap

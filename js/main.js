@@ -35,7 +35,7 @@ import { FarmPanel } from './farm/panel.js';
 import { FarmEconomy } from './farm/economy.js';
 import { Farmland } from './farm/farmland.js';
 import { FarmUI } from './farm/farmui.js';
-import { MARKET, STORE, PLOTS, FARM_CENTER, inFarm } from './farm/layout.js';
+import { MARKET, STORE, STORAGE, PLOTS, FARM_CENTER, inFarm } from './farm/layout.js';
 
 const $ = id => document.getElementById(id);
 
@@ -136,8 +136,17 @@ const farm = new Farm({ net, session, toast: m => toast(m),
 session.farm = farm;
 survival.g.farmHud = () => farmHud();
 // the farm itself: plots, shelters, animals and the market. The numbers come from the server (farmEco).
-const farmland = new Farmland(scene, world, { onMarket: () => farmUI.open('market'), onStore: () => farmUI.open('store'),
-  onPlot: i => farmUI.open('plot', i), onShelter: b => farmUI.open('shelter', b) });
+const farmland = new Farmland(scene, world, { onMarket: () => farmUI.open('market'), onStore: () => farmUI.open('store'), onStorage: () => farmUI.open('storage'),
+  onPlot: i => farmUI.open('plot', i), onShelter: b => farmUI.open('shelter', b), onFeed: b => farmUI.open('feed', b),
+  // gates: move at once here and for the others (PeerJS), then the server keeps it (shared and saved)
+  onGate: (b, open) => {
+    farmland.setGate(b.id, open, true); audio.thud(open ? 120 : 90, 0.07);
+    try { net.send('farmGate', { id: b.id, open }); } catch (e) { /* playing alone */ }
+    farmEco.act({ action: 'gate', shelter: b.id, open }).then(() => farmland.gateDone(b.id),
+      e => { toast('⚠ ' + (e.message || e)); farmland.setGate(b.id, null); try { net.send('farmGate', { id: b.id, open: !open }); } catch (er) { /* alone */ } });
+  } });
+net.on('farmGate', d => { if (d && typeof d.id === 'string') farmland.setGate(d.id, !!d.open); });
+rig.clip = (t, d, dist) => (farm.active ? farmland.camClip(t, d, dist) : dist);
 const farmEco = new FarmEconomy({ net, toast: m => toast(m), onGone: msg => farm.gone(msg, true),
   onChange: st => { farmland.setState(st); farmUI.render(); farmUI.renderBar(farm.active); if (!overlay.classList.contains('hidden')) farmPanel.render(); } });
 const farmUI = new FarmUI({ eco: farmEco, materials, toast: m => toast(m), hooks: uiHooks });
@@ -208,10 +217,11 @@ const nearValley = () => anyRV(r => Math.hypot(r.root.position.x - VALLEY.x, r.r
 const farmHas = fn => farmEco.ready && fn(farmEco.st);
 const FARM_OBJ = [
   { text: 'Walk to the farm east of the trailhead (follow the 🌾 FARM sign by the road)', done: () => inFarm(whereAmI().x, whereAmI().z) || farmHas(s => s.buildings.length > 0), at: () => FARM_CENTER },
-  { text: 'Get 20 wood: chop trees and put the logs in the Farm store — or buy wood at the Market', done: () => farmHas(s => s.inventory.wood >= 20 || s.buildings.length > 0), at: () => STORE },
+  { text: 'Get 20 wood: chop trees and store the logs at the farm storage — or buy wood at the Farm Store across the road', done: () => farmHas(s => s.inventory.wood >= 20 || s.buildings.length > 0), at: () => STORAGE },
   { text: 'Build a chicken coop: walk up to a plot sign', done: () => farmHas(s => s.buildings.some(b => b.type === 'coop')), at: () => PLOTS[0] },
-  { text: 'Buy chickens (and feed) at the Market', done: () => farmHas(s => s.animals.some(a => a.type === 'chicken')), at: () => MARKET },
-  { text: 'Chickens lay eggs over time, even while nobody plays — sell eggs at the Market', done: () => farmEco.sold, at: () => MARKET },
+  { text: 'Buy chickens (and feed) from the farmer at the Farm Store, across the road', done: () => farmHas(s => s.animals.some(a => a.type.startsWith('chicken'))), at: () => STORE },
+  { text: 'Feed the chickens every 2 hours: open the pen gate, walk to the trough, press E', done: () => farmHas(s => s.animals.length > 0) && farmEco.fedOnce, at: () => PLOTS[0] },
+  { text: 'Fed chickens lay eggs, even while nobody plays — sell eggs at the Market', done: () => farmEco.sold, at: () => MARKET },
   { text: 'Grow the farm: goats need a goat shed, cows a barn, horses a stable', done: () => farmHas(s => s.buildings.length >= 3), at: () => FARM_CENTER },
   ...OBJ.slice(0, 8),
   { text: 'Explore north over the pass to Watchtower Valley (clear the road on the way)', done: nearValley, at: () => world.towerBenchPos },
@@ -742,7 +752,7 @@ function globalKeys() {
 /* ---------- main loop ---------- */
 let lastT = performance.now(), lastRender = 0, fpsFrames = 0, fpsT = 0, saveT = 0;
 const focus = new THREE.Vector3(), pw = new THREE.Vector3();
-let freezeCam = null;
+let freezeCam = null, plotInfoT = 0;
 
 function step(dt) {
   globalKeys();
@@ -765,7 +775,10 @@ function step(dt) {
   remotes.localId = net.online ? net.id : 'local';
   remotes.tick(dt);
   survival.update(dt, input);
-  if (farm.active) farmland.update(dt, farmEco.serverNow());
+  if (farm.active) {
+    farmland.update(dt, farmEco.serverNow(), player.mode === 'foot' ? player.pos : null);
+    if ((plotInfoT -= dt) <= 0) { plotInfoT = 0.25; farmUI.renderInfo(player.mode === 'foot' ? farmland.plotAt(player.pos) : null); }
+  } else if (plotInfoT !== 1) { plotInfoT = 1; farmUI.renderInfo(null); }
   structures.update(dt, camera.position);
   tracers.update(dt);
   player.char.root.getWorldPosition(pw);

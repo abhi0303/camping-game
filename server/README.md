@@ -30,8 +30,8 @@ What it stores:
 | `POST /v1/rooms/:code/heartbeat` | host | every 15 s: online members + world snapshot when it changed; `release: true` when leaving |
 | `POST /v1/rooms/:code/verify` | host | check a joining player's ticket |
 | `GET /v1/rooms/:code/farm` | member | the farm: money, goods, shelters, animals, catalog (counts production up to now first) |
-| `POST /v1/rooms/:code/farm` | member | one action with a `requestId`: `buy {item, qty}`, `sell {item, qty}`, `build {type, plot}`, `deposit {items: {wood, stone}}` |
-| `GET /v1/rooms/:code/farm/history` | member | the last 30 purchases / sales / builds, with who did them |
+| `POST /v1/rooms/:code/farm` | member | one action with a `requestId`: `buy {item, qty, shelter?}`, `sell {item, qty}`, `build {type, plot}`, `deposit {items: {wood, stone}}`, `feed {shelter, count \| all}`, `upgrade {target: 'storage', level}`, `gate {shelter, open}` |
+| `GET /v1/rooms/:code/farm/history` | member | the last 30 purchases / sales / builds / feedings / upgrades, with who did them |
 | `POST /v1/admin/migrate` | admin secret | apply database migrations |
 
 Members send `Authorization: Bearer <token>`. Errors look like `{ "error": { "code": "members_full", "message": "…" } }`.
@@ -49,12 +49,15 @@ Opening the world on a second device moves your own session there. All timing us
 
 - **One farm per world.** Every action runs in one transaction with the world's row locked (`SELECT … FOR UPDATE`). That means two purchases at the same time are handled one after the other, and `money` can never go below zero (a `CHECK` constraint backs this up).
 - **Retries are safe.** Every action carries a `requestId`; a retried id returns the first result instead of running again (`UNIQUE (room_id, request_id)`).
+- **Feeding is explicit.** Each animal has `fed_until`. A `feed` action costs `feedCost` feed per animal and moves its `fed_until` `feedHours` later (from now, or from its current time if still fed; at most 24 h ahead). With too little feed, only the hungriest animals that the feed covers are fed.
 - **Production is counted lazily.** Whenever the farm is read or changed, the time since `rooms.produced_at` is simulated in steps of up to an hour (at most a week), and `produced_at` moves forward in the same transaction, so the same time is never counted twice. Each step:
-  - animals eat from the shared feed;
-  - fed animals heal and make goods, scaled by their health;
-  - unfed animals get hungry, then weak (never below 10 health);
-  - goods stop at the store's limit.
-- **Balancing:** change `buy_price`, `sell_price` or the `data` JSON (feed per hour, rate, capacity, limits) in the `catalog` table. No deploy is needed.
+  - animals produce only while fed (`fed_until`), scaled by their health, and heal;
+  - an animal hungry for more than a day gets weak (never below 10 health);
+  - goods stop at the storage limit (catalog `cap` × the storage level's multiplier).
+- **Unlocks:** `rooms.total_earned` counts money from sales; an animal with `unlock` in its catalog data can only be bought once the farm has earned that much.
+- **Storage upgrades:** the `storage` catalog row lists the levels (`mult`, cost in money / wood / stone). The client asks for a specific level, so two players upgrading at once upgrade once (the second gets `already_upgraded`).
+- **Gates:** `buildings.gate_open` keeps each pen's gate open or closed for everyone.
+- **Balancing:** change `buy_price`, `sell_price` or the `data` JSON (feed cost, feeding hours, rate, capacity, limits, unlocks, storage levels) in the `catalog` table. No deploy is needed.
 - **Logs and stones from the world** are reported by the players and can't be checked by the server. Deposits are limited to 50 of each per request and 150 per member per minute.
 
 ## Set up and deploy
