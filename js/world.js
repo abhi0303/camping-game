@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { GeoBuilder, MAT, rand, srand, clamp, lerp, canvasTexture } from './utils.js';
+import { GeoBuilder, MAT, rand, srand, clamp, canvasTexture } from './utils.js';
+import { DayNight, flambeau } from './day-night.js';
 import { buildTerrain, X0, Z0, SX, SZ, START, CAMP, BRIDGE, RIVER_HALF, NORTH, VALLEY, TOWER_ZONE, GIANT } from './terrain.js';
 
 const GC = 10, GNX = Math.ceil(SX / GC), GNZ = Math.ceil(SZ / GC);   // collision grid (10 m cells)
@@ -17,7 +18,7 @@ export class World {
     srand(4242);
 
     this._lights();
-    this._sky();
+    this.dayNight = new DayNight(this);     // sun, sky, fog, clouds and lamps by the time of day (js/day-night.js)
     const T = this.T = buildTerrain();
     this.W = T.W;
     scene.add(T.mesh, T.roadMesh, T.waterMesh);
@@ -86,18 +87,7 @@ export class World {
     sun.shadow.mapSize.set(1024, 1024);
     const sc = sun.shadow.camera; sc.left = -30; sc.right = 30; sc.top = 30; sc.bottom = -30; sc.near = 1; sc.far = 160;
     sun.shadow.bias = -0.0006; sun.shadow.normalBias = 0.04;
-    this.sunOffset = new THREE.Vector3(34, 60, 20);
     this.scene.add(sun); this.scene.add(sun.target);
-  }
-  _sky() {
-    const g = new THREE.SphereGeometry(500, 16, 10);
-    const pos = g.attributes.position, col = [];
-    const top = new THREE.Color(0x4a8fd6), hor = new THREE.Color(0xd3e6f0), c = new THREE.Color();
-    for (let i = 0; i < pos.count; i++) { c.copy(hor).lerp(top, Math.pow(clamp(pos.getY(i) / 500, 0, 1), 0.6)); col.push(c.r, c.g, c.b); }
-    g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
-    this.skyMat = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide, fog: false, depthWrite: false });
-    this.dome = new THREE.Mesh(g, this.skyMat); this.dome.renderOrder = -1;
-    this.scene.add(this.dome);
   }
 
   /* ---------------- vegetation (instanced, chunked) ---------------- */
@@ -180,6 +170,10 @@ export class World {
       b.cyl(0.5, 0.55, 0.5, 7, x, gy + 0.25, z, 0x7d7b74);
       this.addCollider({ x, z, r: 0.45 });
     }
+    for (const sd of [1, -1]) {                                   // torches beside the gate
+      const x = g.x + g.nx * 6.5 * sd, z = g.z + g.nz * 6.5 * sd;
+      flambeau(b, x, this.T.heightAt(x, z), z); this.addCollider({ x, z, r: 0.2 });
+    }
     const ang = Math.atan2(g.nx, g.nz);
     b.cyl(0.26, 0.26, 12.4, 7, g.x, gy + 5.9, g.z, 0x6e4a2a, Math.PI / 2, ang, 0);
     b.cyl(0.2, 0.2, 11.2, 6, g.x, gy + 5.2, g.z, 0x7a5230, Math.PI / 2, ang, 0);
@@ -204,7 +198,7 @@ export class World {
       b.box(0.9, 1.9, 0.08, 0.6, 1.25, 1.62, 0x5a3a1e);
       b.box(1.0, 0.7, 0.08, -1.1, 1.8, 1.62, 0x2a3a48);
       b.box(1.1, 0.8, 0.06, -1.1, 1.8, 1.6, 0x6e4626);
-      b.box(0.25, 0.18, 0.2, 0.6, 2.45, 1.7, 0xfff4d6, 'lamp');
+      b.box(0.25, 0.18, 0.2, 0.6, 2.45, 1.7, 0xfff4d6, 'lamp'); b.light(0.6, 2.32, 1.85);
       b.box(4.4, 0.12, 1.2, 0, 0.36, 2.2, 0x7a5230);
     });
     this.addCollider({ x: hx, z: hz, r: 2.4 });
@@ -246,6 +240,12 @@ export class World {
     b.cyl(0.09, 0.09, 1.1, 5, fx, y0 + 0.15, fz, 0x5a3b22, 0, -0.6, Math.PI / 2);
     for (const a of [0.3, 2.4, 4.4]) b.box(1.8, 0.4, 0.45, fx + Math.cos(a) * 2.8, y0 + 0.2, fz + Math.sin(a) * 2.8, 0x6e4a2a, 'solid', 0, -a + Math.PI / 2, 0);
     this.addCollider({ x: fx, z: fz, r: 1.0 });
+    b.light(fx, y0 + 0.55, fz, 'fire');
+    for (const a of [1.35, 3.4, 5.4]) {                            // torches around the fire ring (none on the road)
+      const x = fx + Math.cos(a) * 4.4, z = fz + Math.sin(a) * 4.4;
+      if (this.T.roadDistAt(x, z) < 6) continue;
+      flambeau(b, x, this.T.heightAt(x, z), z); this.addCollider({ x, z, r: 0.2 });
+    }
     for (const [dx, dz, a] of [[6, 8, 0.3], [9, 2, -0.4]]) picnicTable(b, CAMP.x + dx, y0, CAMP.z + dz, a, this);
     // lookout platform
     const lx = CAMP.x + 10, lz = CAMP.z - 9;
@@ -353,21 +353,10 @@ export class World {
 
   update(dt, focus, camera) {
     this.time += dt;
-    if (Math.abs(this.night - this.nightTarget) > 0.001) {
+    // Zombie Trail: the night comes and goes with the campaign (in Farm World DayNight follows the real time)
+    if (this.dayNight.mode !== 'real' && Math.abs(this.night - this.nightTarget) > 0.001)
       this.night = clamp(this.night + Math.sign(this.nightTarget - this.night) * dt * 0.8, 0, 1);
-      const n = this.night;
-      this.scene.background.copy(this.skyDay).lerp(this.skyNight, n);
-      this.scene.fog.color.copy(this.scene.background);
-      this.sun.intensity = lerp(2.3, 0.1, n);
-      this.hemi.intensity = lerp(1.5, 0.32, n);
-      this.hemi.color.setHex(n > 0.5 ? 0x8fa6d8 : 0xd6e8ff);
-      this.skyMat.color.setRGB(lerp(1, 0.1, n), lerp(1, 0.13, n), lerp(1, 0.25, n));
-      this.cloudMat.emissiveIntensity = lerp(0.5, 0.03, n);
-      MAT.lamp.emissiveIntensity = n * 1.6;
-    }
-    this.sun.position.copy(focus).add(this.sunOffset);
-    this.sun.target.position.copy(focus);
-    this.dome.position.copy(camera.position);
+    this.dayNight.update(dt, focus, camera);     // sun + shadows, sky, fog, clouds, lamps
     this.fireBoost = Math.max(0, this.fireBoost - dt);
     const big = 1 + 0.9 * Math.min(1, this.fireBoost / 5);
     const f = (1 + Math.sin(this.time * 17) * 0.08 + Math.sin(this.time * 31) * 0.05) * big;

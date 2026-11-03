@@ -149,6 +149,20 @@ A stone path with lanterns leads from behind the Fish Market north through the j
 
 The shared world is everything the zombie save holds except your personal backpack: road blocks, crates, materials, the bridge, the RV's checkpoint, the RV storages and the objective.
 
+### Day and night (real India time)
+
+Farm World follows the **real time in India (IST)**. The sun's position comes from the date, the time and the world's place on Earth (the Maikal hills of central India), so sunrise and sunset move with the seasons — in early November about 6:10 AM and 5:25 PM, in June about 5:20 AM and 6:50 PM. The time is on the top bar (🌅 6:42 AM).
+
+- **Morning:** soft golden light from the east, long shadows to the west, a warm horizon.
+- **Day / afternoon:** a bright blue sky; the sun moves across it, and the shadows turn and shorten toward midday.
+- **Evening:** orange and pink light from the west, long shadows to the east, the sky darkening.
+- **Night:** stars and a moon, cool moonlight. Lamps come on one by one from sunset and go off after sunrise: lanterns at the Farm Store, the Market and the Fish Market, lit windows, lamps at every pen gate and shelter, street lamps along the walkway and the fish path, and flickering **torches** (flambeaux) at the farm's sign, the walkway, the Market, the Fish Market, the trailhead and the camp. Inside the Farm Store the ceiling lamps light the room.
+- **Together:** everyone in a world sees the same sky — it uses the farm server's clock (the same one the animals use), not each computer's clock, and nothing extra is sent over the network. Opening the game later shows the right time of day at once.
+
+Zombie Trail keeps its zombie nights (the campaign decides when it is dark); they now have stars, a moon and lit torches too.
+
+The settings are at the top of `js/day-night.js` (`DAY_NIGHT`): the time zone (`Asia/Kolkata`), latitude / longitude, fixed sunrise / sunset times as a fallback (`solar: 'fixed'`), and weather hooks for later (cloud cover, fog). **Testing other times** (only on your own computer — `localhost`): add `?time=17:30` to the address (optionally `&date=2026-06-21` and `&speed=60` to run the clock 60× faster), or call `__game.dayNight.setTime('22:00')` in the console (`setTime(null)` goes back to the real time). It changes only the light on that screen, never the farm's clock.
+
 ## Survival rules
 
 - **Nights:** the first night falls after **3 minutes**, the next one **6 minutes** after that, then every **10 minutes**. A night lasts **5 minutes** and brings **zombies**. The timer is at the top of the screen.
@@ -247,6 +261,7 @@ Global: **M** map, **K** sound, **B** mic on / off (co-op), **R** RV back to the
 - `js/touch.js`, `js/input.js` – mobile controls, keyboard/mouse/touch input
 - `js/save.js` – save/load + checkpoint flags
 - `js/terrain.js`, `js/world.js`, `js/obstacles.js` – map, jungle, road blocks
+- `js/day-night.js` – day and night: the clock (IST), the sun's position, sky, stars and moon, fog, clouds, sunlight / moonlight and shadows, and the lamps (halos, torch flames and smoke, the few real lights that follow the player)
 - `js/bridge.js`, `js/bridgeEditor.js`, `js/materials.js` – bridge physics, designer, materials
 - `js/rv.js`, `js/rvModel.js`, `js/rvInterior.js`, `js/rvDims.js` – the RV
 - `js/player.js`, `js/character.js`, `js/camera.js` – player, animation, cameras
@@ -270,3 +285,4 @@ Global: **M** map, **K** sound, **B** mic on / off (co-op), **R** RV back to the
 - Slow links don't fall behind: when a link has a lot of data waiting, position and state snapshots for it are skipped (the next one replaces them) instead of piling up, and network timers run on real time, so a slow phone still sends its updates on time.
 - Voice links check themselves: a link whose network path stays down, or that brings no sound while that player's mic is on, is remade. In each pair only one player rings, so the other one asks over the game connection when it has no working link.
 - Quality menu (top-right): **Low** (no shadows, shorter view distance, 30 fps), **Medium**, **High**.
+- Day and night cost almost nothing: the sky, stars and moon are a few draw calls, all lamp halos are one instanced mesh, all torch flames another and their smoke a third. About 70 lamps share a small pool of real lights (2 on Low, 4 on Medium, 6 on High) that follow the lamps nearest to you; nothing is created while playing, and sunlight shadows aren't drawn while the sun and moon are both below the horizon.

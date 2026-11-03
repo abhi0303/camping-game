@@ -9,6 +9,7 @@ import { FISH_MARKET, FISH_SIGN, toWorld, toLocal } from '../farm/layout.js';
 import { signboard, wallSign } from '../farm/models.js';
 import { C, FARM_MAT, lampPost, barrel, crate } from '../farm/props.js';
 import { FarmerNPC } from '../farm/npc.js';
+import { flambeau } from '../day-night.js';
 import { fishMarketModel, FISH_MARKET_DIM, dockModel, buildFish } from './models.js';
 
 const DOCK_X = [-112, -97, -82];        // roughly where the three docks meet the river (world x)
@@ -136,6 +137,11 @@ export class FishingArea {
       }
     };
     lay(pts, 24); lay(branch, 0);
+    // torches where the path leaves the Fish Market, and by the Fish Market's sign at the road
+    const [sx, sz] = pts[0], ln = Math.hypot(pts[1][0] - sx, pts[1][1] - sz), ax = (pts[1][0] - sx) / ln, az = (pts[1][1] - sz) / ln;
+    const torch = (x, z) => { flambeau(b, x, this.H(x, z), z); this.world.addCollider({ x, z, r: 0.2 }); };
+    for (const sd of [-1, 1]) torch(sx + ax * 1.2 + az * 1.8 * sd, sz + az * 1.2 - ax * 1.8 * sd);
+    for (const lx of [-2.2, 2.2]) { const w = toWorld(FISH_SIGN, lx, 0); torch(w.x, w.z); }
     for (const [x, z] of lamps) { lampPost(b, x, this.H(x, z), z, Math.PI); this.world.addCollider({ x, z, r: 0.2 }); }
     // barrels and crates at the bank; reeds and rocks between the docks
     for (const sp of s) {

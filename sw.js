@@ -8,7 +8,7 @@ const SHELL = 'rv-shell-v1', CDN = 'rv-cdn-v1';
 const FILES = [
   './', './index.html', './manifest.webmanifest', './css/style.css',
   './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png', './icons/icon.svg', './icons/favicon-32.png',
-  ...['main', 'world', 'terrain', 'rv', 'rvModel', 'rvInterior', 'rvDims', 'player', 'character', 'camera', 'input', 'touch', 'audio', 'inventory',
+  ...['main', 'world', 'day-night', 'terrain', 'rv', 'rvModel', 'rvInterior', 'rvDims', 'player', 'character', 'camera', 'input', 'touch', 'audio', 'inventory',
     'items', 'gear', 'drone', 'bridge', 'bridgeEditor', 'obstacles', 'materials', 'minimap', 'net', 'multiplayer', 'remote', 'save', 'utils',
     'zombies', 'survival', 'combat', 'voice', 'structures', 'designer', 'giants', 'app',
     'farm/config', 'farm/api', 'farm/logins', 'farm/farm', 'farm/menu', 'farm/panel',

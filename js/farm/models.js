@@ -4,7 +4,7 @@
 // centre); hAt(x, z) gives the ground height at a local point, so posts and floors sit on slopes.
 import * as THREE from 'three';
 import { GeoBuilder, canvasTexture } from '../utils.js';
-import { C, FARM_MAT, planks, boards, crate, barrel, eggCrate, eggStack, milkCan, hayBale, sack, lantern, lampPost, woodPile,
+import { C, FARM_MAT, planks, boards, crate, barrel, eggCrate, eggStack, milkCan, hayBale, sack, lantern, lampPost, wallLantern, woodPile,
   stonePile, stoneBin, wheel, bench, shelf, stockShelf, fenceRun } from './props.js';
 
 const flat = () => 0;
@@ -123,6 +123,7 @@ function coop(b, y0, cz) {
     b.box(0.8, 1.0, 0.08, 0.6, 1.25, 1.54, C.woodD); b.box(0.68, 0.88, 0.04, 0.6, 1.25, 1.59, 0x3a2414);   // little door
     b.box(0.7, 0.5, 0.06, -0.9, 1.75, 1.53, C.white); b.box(0.58, 0.38, 0.05, -0.9, 1.75, 1.56, C.glass, 'glass');
     b.box(0.05, 0.5, 0.06, -0.9, 1.75, 1.58, C.white);
+    wallLantern(b, 1.45, 1.35, 1.52);                                                                   // a lamp by the door
     // nesting boxes on the side with a lid
     b.box(0.9, 0.6, 2.0, 2.4, 1.15, -0.1, C.wood); b.box(1.0, 0.08, 2.1, 2.42, 1.5, -0.1, C.redD, 'solid', 0, 0, -0.25);
     for (const z of [-0.7, -0.1, 0.5]) b.box(0.02, 0.5, 0.04, 2.86, 1.15, z + 0.3, C.woodD);
@@ -136,6 +137,7 @@ function goatShed(b, y0, cz) {
     planks(b, 3.8, 2.4, -2.95, 1.2, 0, C.woodD, undefined, Math.PI / 2); planks(b, 3.8, 2.4, 2.95, 1.2, 0, C.woodD, undefined, Math.PI / 2);
     for (const x of [-2.95, 0, 2.95]) b.box(0.18, 2.95, 0.18, x, 1.48, 1.9, C.woodD);
     b.box(6.2, 0.18, 0.2, 0, 2.95, 1.9, C.woodD);
+    lantern(b, 1.5, 2.4, 1.9);                                                                          // hangs from the front beam
     b.group(0, 3.0, 0, -0.17, 0, 0, () => { b.box(6.8, 0.12, 4.7, 0, 0, 0, C.roofGD); for (let i = 0; i < 9; i++) b.box(6.84, 0.05, 0.56, 0, 0.08 + (i % 2) * 0.01, -2.2 + i * 0.55, i % 2 ? C.roofG : C.roofGD); });
     hayBale(b, -1.8, 0, -1.2); hayBale(b, -1.8, 0.5, -1.2, 0.2); hayBale(b, 1.6, 0, -1.2, -0.1);
     b.box(1.4, 0.9, 0.12, 0.2, 0.9, -1.75, C.woodL);                          // hay rack
@@ -152,7 +154,8 @@ function barn(b, y0, cz) {
     b.box(2.6, 2.6, 0.06, 0, 1.3, 2.48, C.white); b.box(2.3, 2.3, 0.08, 0, 1.25, 2.5, C.red);
     for (const s of [1, -1]) b.box(0.14, 3.1, 0.06, 0, 1.25, 2.55, C.white, 'solid', 0, 0, s * 0.78);
     b.box(0.08, 2.4, 0.07, 0, 1.25, 2.56, C.white);
-    b.box(1.3, 1.0, 0.08, 0, 3.85, 2.47, C.white); b.box(1.1, 0.8, 0.06, 0, 3.85, 2.5, 0x3a2a20);
+    b.box(1.3, 1.0, 0.08, 0, 3.85, 2.47, C.white); b.box(1.1, 0.8, 0.06, 0, 3.85, 2.5, 0x3a2a20, 'window');   // the loft window
+    for (const s of [-1, 1]) wallLantern(b, s * 1.75, 1.95, 2.5);
   });
 }
 function stable(b, y0, cz) {
@@ -165,6 +168,7 @@ function stable(b, y0, cz) {
     gableWall(b, 8, 2.8, 1.2, -2.15, C.wood);
     gableRoof(b, 8, 4.4, 2.8, 1.25, C.roofG, 0.45, C.roofGD);
     b.box(1.2, 0.6, 0.06, 0, 2.4, 2.2, C.woodXL);
+    for (const s of [-1, 1]) { b.box(0.04, 0.32, 0.04, s * 2.64, 2.65, 2.3, C.iron); lantern(b, s * 2.64, 2.05, 2.3); }   // small lanterns at the stalls
     hayBale(b, -2.6, 0, -1.4); barrel(b, 2.8, 0, -1.4);
   });
 }
@@ -178,6 +182,7 @@ function penFence(b, hAt, hw) {
   fenceRun(b, P.gate, P.z1, P.x, P.z1, hAt);
   if (back < P.x - 0.3) { fenceRun(b, -P.x, P.z0, -back, P.z0, hAt, { corners: false }); fenceRun(b, back, P.z0, P.x, P.z0, hAt, { corners: false }); }
   for (const s of [-1, 1]) { const g = hAt(s * P.gate, P.z1); b.box(0.2, 1.9, 0.2, s * P.gate, g + 0.55, P.z1, C.woodD); b.box(0.28, 0.08, 0.28, s * P.gate, g + 1.52, P.z1, C.wood); }   // gate posts
+  lantern(b, P.gate, hAt(P.gate, P.z1) + 1.52, P.z1);                                                   // a lamp on the gate post
 }
 export const TROUGH_FEED = { x: -2.9, z: 4.5 }, TROUGH_WATER = { x: 2.9, z: 4.5 };
 function troughs(b, hAt) {
@@ -257,6 +262,7 @@ export function storageModel(level, hAt = flat) {
       b.group(0, 2.55, 0, -0.16, 0, 0, () => { b.box(5.2, 0.1, 3.8, 0, 0, 0, C.roofGD); for (let i = 0; i < 7; i++) b.box(5.24, 0.05, 0.56, 0, 0.07, -1.65 + i * 0.55, i % 2 ? C.roofG : C.roofGD); });
       shelf(b, -1.2, 0, -1.2, 1.6, 1.6, 0.5, 3); stockShelf(b, -1.2, 0, -1.2, 1.6, 1.6, 3, ['crate', 'sack']);
       crate(b, 1.0, 0, -0.9, 0.6); crate(b, 1.05, 0.6, -0.95, 0.5, C.woodXL, 0.3); sack(b, 1.6, 0, 0.2, 0.4);
+      b.box(0.03, 0.2, 0.03, -1.6, 2.62, 1.4, C.iron); lantern(b, -1.6, 2.06, 1.4);
     });
     woodPile(b, 3.3, hAt(3.3, 0), 0.2, 3, 1.5);
     stonePile(b, -3.3, hAt(-3.3, 0.6), 0.6, 6, 0.3);
@@ -279,7 +285,7 @@ export function storageModel(level, hAt = flat) {
     for (const s of [-1, 1]) {                                                          // open double doors
       b.group(s * 1.6, 0, 2.8, 0, s * -1.3, 0, () => { planks(b, 1.5, 2.6, -s * 0.75, 1.35, 0, C.red, 4); for (const d of [1, -1]) b.box(0.08, 2.9, 0.05, -s * 0.75, 1.35, 0.06, C.white, 'solid', 0, 0, d * 0.52); });
     }
-    for (const s of [-1, 1]) { b.box(1.1, 0.9, 0.08, s * 2.9, 2.2, 2.82, C.white); b.box(0.92, 0.72, 0.05, s * 2.9, 2.2, 2.86, C.glow, 'glow'); b.box(0.06, 0.72, 0.06, s * 2.9, 2.2, 2.9, C.white); b.box(0.92, 0.06, 0.06, s * 2.9, 2.2, 2.9, C.white); }
+    for (const s of [-1, 1]) { b.box(1.1, 0.9, 0.08, s * 2.9, 2.2, 2.82, C.white); b.box(0.92, 0.72, 0.05, s * 2.9, 2.2, 2.86, C.glow, 'window'); b.box(0.06, 0.72, 0.06, s * 2.9, 2.2, 2.9, C.white); b.box(0.92, 0.06, 0.06, s * 2.9, 2.2, 2.9, C.white); }
     gableWall(b, 8.4, 3.3, 1.7, 2.75, C.wood); gableWall(b, 8.4, 3.3, 1.7, -2.75, C.wood);
     b.group(0, 0, 0, 0, Math.PI / 2, 0, () => gableRoof(b, 5.6, 8.4, 3.3, 1.75, C.roof, 0.55));
     for (let i = 0; i < 5; i++) b.box(0.14, 0.18, 6.6, -3.6 + i * 1.8, 3.25, 0, C.woodD);                    // visible beams
@@ -292,7 +298,7 @@ export function storageModel(level, hAt = flat) {
     for (const x of [-2.7, 0, 2.7]) { shelf(b, x, 0.05, -2.2, 2.2, 2.2, 0.55, 4); stockShelf(b, x, 0.05, -2.2, 2.2, 2.2, 4, x < 0 ? ['egg', 'can', 'crate'] : x > 0 ? ['sack', 'jar', 'crate'] : ['crate', 'egg', 'sack']); }
     shelf(b, -3.6, 0.05, 0.4, 2.2, 2.0, 0.5, 4, Math.PI / 2); stockShelf(b, -3.6, 0.05, 0.4, 2.2, 2.0, 4, ['can', 'egg', 'jar'], Math.PI / 2);
     barrel(b, 3.4, 0.05, 1.2); barrel(b, 3.1, 0.05, 1.9, C.woodD); sack(b, 2.2, 0.05, 1.0, 0.3); sack(b, 2.6, 0.05, 1.5, -0.2);
-    for (const x of [-1.2, 1.2]) b.box(0.35, 0.25, 0.35, x, 3.0, 0.4, C.glow, 'glow');                      // ceiling lamps
+    for (const x of [-1.2, 1.2]) { b.box(0.35, 0.25, 0.35, x, 3.0, 0.4, C.glow, 'lampGlass'); b.light(x, 2.85, 0.4, 'ceiling'); }   // ceiling lamps
     bench(b, 2.7, 0.05, 3.9); hayBale(b, -3.0, 0.05, 3.7, 0.1);
   });
   // side lean-to with wood and stone
@@ -333,7 +339,7 @@ export function storeModel(floor, hAt = flat) {
     for (const s of [-1, 1]) planks(b, D, Hw, s * W / 2, Hw / 2, 0, C.redD, 26, Math.PI / 2);
     for (const x of [-W / 2, W / 2]) for (const z of [-D / 2, D / 2]) b.box(0.24, Hw + 0.1, 0.24, x, Hw / 2, z, C.white);
     const win = (B, x, y, z, ry) => B.group(x, y, z, 0, ry, 0, () => {
-      B.box(1.5, 1.3, 0.1, 0, 0, 0.02, C.white); B.box(1.3, 1.1, 0.05, 0, 0, 0.06, C.glow, 'glow');
+      B.box(1.5, 1.3, 0.1, 0, 0, 0.02, C.white); B.box(1.3, 1.1, 0.05, 0, 0, 0.06, C.glow, 'window');
       B.box(0.07, 1.1, 0.08, 0, 0, 0.09, C.white); B.box(1.3, 0.07, 0.08, 0, 0, 0.09, C.white);
       B.box(1.7, 0.1, 0.25, 0, -0.72, 0.12, C.white);
     });
@@ -356,6 +362,7 @@ export function storeModel(floor, hAt = flat) {
       fenceRun(b, s * (W / 2 - 0.1), D / 2 + 0.15, s * (W / 2 - 0.1), D / 2 + P - 0.05, flat, { h: 0.95, spacing: 1.2, color: C.woodL });
     }
     lantern(b, -2.3, 2.9, D / 2 + P - 0.45); lantern(b, 2.3, 2.9, D / 2 + P - 0.45);
+    for (const x of [-4.2, 4.2]) { b.box(0.03, 0.5, 0.03, x, 3.55, D / 2 + 1.3, C.iron); lantern(b, x, 2.86, D / 2 + 1.3); }   // over the displays
     // porch displays: eggs by the door (left), milk cans on the right, a bench
     b.box(2.4, 0.9, 0.8, -4.0, 0.45, D / 2 + 1.3, C.wood); b.box(2.6, 0.08, 0.95, -4.0, 0.93, D / 2 + 1.3, C.woodXL);
     for (let i = 0; i < 3; i++) eggStack(b, -4.8 + i * 0.75, 0.97, D / 2 + 1.3, 2 + (i % 2), 0, i === 1 ? [C.eggB, C.eggB] : i === 2 ? [C.eggD, C.egg] : [C.egg, C.egg, C.eggB]);
@@ -372,7 +379,7 @@ export function storeModel(floor, hAt = flat) {
     eggCrate(b, -4.1, 1.14, 2.2); lantern(b, -3.3, 1.14, 2.35);
     woodPile(b, W / 2 - 1.2, 0.08, -2.6, 3, 1.4, Math.PI / 2); stoneBin(b, W / 2 - 1.3, 0.08, 0.2, Math.PI / 2);
     for (const [x, z] of [[4.6, 2.4], [5.2, 3.0], [2.8, 3.4]]) barrel(b, x, 0.08, z, z > 3 ? C.woodD : C.wood);
-    for (const x of [-3.5, 0, 3.5]) for (const z of [-2, 1.5]) { b.box(0.05, 0.7, 0.05, x, Hw - 0.35, z, C.iron); b.box(0.5, 0.18, 0.5, x, Hw - 0.75, z, C.iron); b.box(0.36, 0.12, 0.36, x, Hw - 0.88, z, C.glow, 'glow'); }
+    for (const x of [-3.5, 0, 3.5]) for (const z of [-2, 1.5]) { b.box(0.05, 0.7, 0.05, x, Hw - 0.35, z, C.iron); b.box(0.5, 0.18, 0.5, x, Hw - 0.75, z, C.iron); b.box(0.36, 0.12, 0.36, x, Hw - 0.88, z, C.glow, 'lampGlass'); b.light(x, Hw - 1.0, z, 'ceiling'); }
   });
   // the part hidden while someone is inside: front wall, roof, gables, beams
   r.group(0, F, 0, 0, 0, 0, () => {
@@ -382,7 +389,7 @@ export function storeModel(floor, hAt = flat) {
     for (const s of [-1, 1]) r.box(0.18, 3.35, 0.2, s * (DW + 0.05), 1.67, D / 2 + 0.02, C.white);
     r.box(DW * 2 + 0.3, 0.2, 0.22, 0, 3.35, D / 2 + 0.02, C.white);
     for (const x of [-4.6, 4.6]) r.group(x, 2.0, D / 2 + 0.05, 0, 0, 0, () => {
-      r.box(1.5, 1.3, 0.1, 0, 0, 0.02, C.white); r.box(1.3, 1.1, 0.05, 0, 0, 0.06, C.glow, 'glow');
+      r.box(1.5, 1.3, 0.1, 0, 0, 0.02, C.white); r.box(1.3, 1.1, 0.05, 0, 0, 0.06, C.glow, 'window');
       r.box(0.07, 1.1, 0.08, 0, 0, 0.09, C.white); r.box(1.3, 0.07, 0.08, 0, 0, 0.09, C.white);
       r.box(1.7, 0.1, 0.25, 0, -0.72, 0.12, C.white);
     });
@@ -403,7 +410,7 @@ export function storeModel(floor, hAt = flat) {
       r.add(new THREE.ExtrudeGeometry(shape, { depth: 0.14, bevelEnabled: false }), C.red, 0, 0, z - 0.07);
       for (let i = 0; i < 13; i++) { const x = -6 + i, top = Hw + (Math.abs(x) < 5.4 ? 3.0 - Math.abs(x) * (1.15 / 5.4) : 1.85 * (W / 2 - Math.abs(x)) / 1.6); r.box(0.05, top - Hw - 0.1, 0.03, x, (top + Hw) / 2, z + (z > 0 ? 0.09 : -0.09), C.redD); }
     }
-    r.box(1.6, 1.2, 0.12, 0, Hw + 1.25, -D / 2 - 0.1, C.white); r.box(1.36, 0.96, 0.06, 0, Hw + 1.25, -D / 2 - 0.16, C.glow, 'glow');
+    r.box(1.6, 1.2, 0.12, 0, Hw + 1.25, -D / 2 - 0.1, C.white); r.box(1.36, 0.96, 0.06, 0, Hw + 1.25, -D / 2 - 0.16, C.glow, 'window');
     for (let i = 0; i < 5; i++) r.box(W, 0.2, 0.18, 0, Hw - 0.12, -D / 2 + 1 + i * 2, C.woodD);               // ceiling beams
     r.box(W, 0.12, D, 0, Hw - 0.02, 0, C.woodD);                                                        // ceiling
   });
@@ -441,6 +448,7 @@ export function marketModel(hAt = flat) {
     barrel(b, 0.4, 0.06, -1.6); hayBale(b, -0.8, 0.06, -1.6, 0.2);
     b.box(1.6, 1.0, 0.08, 0, 2.2, -D / 2 + 0.28, 0x2a3a2e); b.box(1.75, 1.15, 0.06, 0, 2.2, -D / 2 + 0.24, C.woodD);
     lantern(b, -1.5, 2.6, D / 2 - 0.4); lantern(b, 1.5, 2.6, D / 2 - 0.4);
+    for (const x of [-3.2, 3.2]) { b.box(0.03, 0.42, 0.03, x, 3.0, 0.9, C.iron); lantern(b, x, 2.36, 0.9); }   // hanging lamps over the stalls
   });
   return build(b);
 }

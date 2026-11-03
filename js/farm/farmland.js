@@ -11,6 +11,7 @@ import { shelterModel, penGround, gateModel, signboard, wallSign, storageModel, 
   SHELTER_FOOT, PEN_FENCE, TROUGH_FEED, TROUGH_WATER, ANIMAL_GEO } from './models.js';
 import { C, FARM_MAT, crate, barrel, eggStack, milkCan, hayBale, sack, lampPost, woodPile, stoneBin, fenceRun } from './props.js';
 import { FarmerNPC } from './npc.js';
+import { flambeau } from '../day-night.js';
 
 const MAX_PER_TYPE = 64;
 const SPEED = { chicken: 1.6, chicken_brown: 1.5, chicken_dark: 1.4, goat: 0.8, cow: 0.45, horse: 0.6,
@@ -51,6 +52,7 @@ export class Farmland {
     const s1 = signboard('🌾 FARM', 'plots · storage', { w: 2.0, h: 0.8, lift: 0.9, bg: '#41622c' });
     this.place(s1, { ...SIGN, yaw: 0 });
     this._storeSide();
+    this._lamps();
     // animals: one instanced mesh per kind (the store's goats use the goat mesh too)
     this.inst = {};
     for (const [type, geo] of Object.entries(ANIMAL_GEO)) {
@@ -253,6 +255,19 @@ export class Farmland {
     for (const L of LAMPS) this.world.addCollider({ x: L.x, z: L.z, r: 0.2 });
     this.place(signboard('FARM STORE', 'and MARKET', { w: 2.0, h: 0.8, lift: 0.9, bg: '#7a2a20', hAt: this.hAt(STORE_SIGN) }), STORE_SIGN);
     this.storeCols = cols;
+  }
+  // street lamps along the walkway and torches (flambeaux) at the farm's entrances — lit from dusk to dawn
+  _lamps() {
+    const b = new GeoBuilder();
+    const post = (x, z, ry) => { lampPost(b, x, this.H(x, z), z, ry); this.world.addCollider({ x, z, r: 0.2 }); };
+    const torch = (x, z) => { flambeau(b, x, this.H(x, z), z); this.world.addCollider({ x, z, r: 0.2 }); };
+    const at = (F, lx, lz) => { const w = toWorld(F, lx, lz); torch(w.x, w.z); };
+    for (const x of [-92, -80, -68]) { post(x, -182.4, -Math.PI / 2); post(x, -174.6, Math.PI / 2); }   // between the plots, over the walkway
+    torch(-105.5, -182.6); torch(-105.5, -174.4);                                                       // the walkway's west end
+    torch(SIGN.x - 2.3, SIGN.z); torch(SIGN.x + 2.3, SIGN.z);                                           // the FARM sign by the road
+    at(STORE_SIGN, -2.2, 0); at(STORE_SIGN, 2.2, 0);                                                    // the FARM STORE sign across the road
+    at(MARKET, 5.4, 3.7); at(MARKET, -4.4, 4.9);                                                        // the Market's front
+    this.scene.add(b.build(FARM_MAT));
   }
   // crates, egg crates, milk cans, wood and stone around the store
   _storeProps(S, sb, h) {

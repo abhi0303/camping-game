@@ -152,6 +152,12 @@ net.on('farmGate', d => { if (d && typeof d.id === 'string') farmland.setGate(d.
 rig.clip = (t, d, dist) => (farm.active ? farmland.camClip(t, d, dist) : dist);
 const farmEco = new FarmEconomy({ net, toast: m => toast(m), onGone: msg => farm.gone(msg, true),
   onChange: st => { farmland.setState(st); farmUI.render(); farmUI.renderBar(farm.active); if (!overlay.classList.contains('hidden')) farmPanel.render(); } });
+// day and night (js/day-night.js): Farm World follows the real time in India by the farm server's clock, the
+// same for every member, so the sun, sky and lamps match on every screen without any messages
+world.dayNight.clock = () => farmEco.serverNow();
+world.dayNight.synced = () => farmEco.syncAt > 0;
+const PHASE_MSG = { evening: '🌇 Evening — the sun is going down; the lamps come on at dusk', night: '🌙 Night has fallen — lanterns, windows and torches light the farm', morning: '🌅 Sunrise — a new day on the farm' };
+world.dayNight.onPhase = ph => { if (started && survival.farm && PHASE_MSG[ph]) toast(PHASE_MSG[ph]); };
 const farmUI = new FarmUI({ eco: farmEco, materials, toast: m => toast(m), hooks: uiHooks, onCollect: () => { farmEco.collected = true; audio.thud(300, 0.05); } });
 // fishing (Farm World): the Fish Market, the docks on the river and the mini-game; the server checks catches
 const fishArea = new FishingArea(scene, world);
@@ -356,6 +362,7 @@ function applyQuality(name) {
   renderer.shadowMap.enabled = q.shadows;
   camera.far = q.far; camera.updateProjectionMatrix(); scene.fog.far = q.fog; scene.fog.near = q.fog * 0.25;
   world.sun.castShadow = q.shadows;
+  world.dayNight.setQuality(QUALITY[name] ? name : 'medium');   // lamps' real lights + torch smoke
   if (world.sun.shadow.mapSize.x !== q.size) {
     world.sun.shadow.mapSize.set(q.size, q.size);
     if (world.sun.shadow.map) { world.sun.shadow.map.dispose(); world.sun.shadow.map = null; }
@@ -461,7 +468,7 @@ function farmHud() {
   const L = farm.L;
   if (!L) return '🌾 Farm World';
   const on = net.online && !session.rejoining ? Math.max(1, session.players.size) : 1, mem = farm.info ? farm.info.members.length : 0;
-  return `🌾 ${L.roomName} · 🟢 ${on}/4 online${mem ? ` · 👥 ${mem}/4 members` : ''}`;
+  return `🌾 ${L.roomName} · ${world.dayNight.clockText()} · 🟢 ${on}/4 online${mem ? ` · 👥 ${mem}/4 members` : ''}`;
 }
 async function farmInvite() {
   if (!farm.isOwner) { toast('Only the owner of this world can invite new members'); return; }
@@ -803,6 +810,7 @@ function step(dt) {
   tracers.update(dt);
   player.char.root.getWorldPosition(pw);
   focus.copy(drone.active ? drone.pos : player.mode === 'drive' ? player.rv.root.position : pw);
+  world.dayNight.setMode(survival.farm ? 'real' : 'game');     // Farm World: real time · Zombie Trail: zombie nights
   world.update(dt, focus, camera);
   flags.update(dt);
   minimap.update(dt, whereAmI(), mapMarkers());
@@ -852,7 +860,7 @@ function debugStage(st, build) {
   if (build) { designer.show(build); designer._action('build'); designer.close(); }
   if (st === 'siege' || st === 'giants') survival._toStage(st);
 }
-window.__game = { debugStage, net, session, voice, structures, designer, giants, player, rvs, remotes, obstacles, bridgeWorld, materials, world, inv, gear, editor, input, rig, camera, zombies, survival, combat, applySave, collectSave, saveNow, farm, farmEco, farmUI, farmland, fishArea, fishing, get objI() { return objI; },
+window.__game = { debugStage, net, session, voice, structures, designer, giants, player, rvs, remotes, obstacles, bridgeWorld, materials, world, inv, gear, editor, input, rig, camera, zombies, survival, combat, applySave, collectSave, saveNow, farm, farmEco, farmUI, farmland, fishArea, fishing, dayNight: world.dayNight, get objI() { return objI; },
   // test hooks: advance the game n frames / pin the camera
   run: n => { for (let i = 0; i < n; i++) step(1 / 60); renderer.render(scene, camera); }, setCam: a => { freezeCam = a; } };
 

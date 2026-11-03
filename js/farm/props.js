@@ -1,7 +1,8 @@
 // Small low-poly props for the farm (crates, barrels, egg crates, milk cans, hay, lanterns, sacks,
 // shelves, wood and stone piles, wheels...). Each one adds parts to a GeoBuilder in its local space.
 // Wood is made of planks in slightly different shades, which gives the "wooden texture" in this
-// flat-shaded art style; lantern glass and lit windows go into the 'glow' material.
+// flat-shaded art style. Lantern glass ('lampGlass') and windows ('window') glow at night, and every
+// lantern marks a light point (GeoBuilder.light) that js/day-night.js lights after sunset.
 import * as THREE from 'three';
 import { MAT } from '../utils.js';
 
@@ -12,7 +13,7 @@ export const C = {
   egg: 0xf2ece0, eggB: 0xc98a52, eggD: 0x6e5a48, milk: 0xe8ecef, glow: 0xffd27a, glass: 0x9cc6dd, rope: 0xc8b28a,
   dirt: 0x8b6a45, dirtD: 0x6f5233, dirtL: 0xa3825a, grass: 0x55893a, grassD: 0x467a30, sack: 0xd9c49a, iron: 0x3a3a3e,
 };
-// the shared materials plus an unlit one for lantern glass / lit windows
+// the shared materials plus an unlit one for things that always glow (a till's screen, the truck's lamps)
 export const FARM_MAT = { ...MAT, glow: new THREE.MeshBasicMaterial({ vertexColors: true }) };
 
 const shade = (c, k) => { const o = new THREE.Color(c); o.multiplyScalar(k); return o.getHex(); };
@@ -71,9 +72,11 @@ export function hayBale(b, x, y, z, ry = 0) {
 export function sack(b, x, y, z, ry = 0, c = C.sack) {
   b.group(x, y, z, 0, ry, 0, () => { b.box(0.45, 0.6, 0.3, 0, 0.3, 0, c); b.box(0.3, 0.12, 0.22, 0, 0.66, 0, shade(c, 0.9)); b.box(0.32, 0.03, 0.24, 0, 0.6, 0, C.rope); });
 }
-export function lantern(b, x, y, z) {
+// a hanging lantern (kind: how it lights up at night — 'lamp', or 'street' for a lamp post's)
+export function lantern(b, x, y, z, kind = 'lamp') {
   b.box(0.2, 0.04, 0.2, x, y + 0.36, z, C.iron);
-  b.box(0.14, 0.24, 0.14, x, y + 0.2, z, C.glow, 'glow');
+  b.box(0.14, 0.24, 0.14, x, y + 0.2, z, C.glow, 'lampGlass');
+  b.light(x, y + 0.2, z, kind);
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) b.box(0.02, 0.26, 0.02, x + sx * 0.08, y + 0.2, z + sz * 0.08, C.iron);
   b.box(0.18, 0.04, 0.18, x, y + 0.06, z, C.iron);
   b.cyl(0.01, 0.01, 0.12, 4, x, y + 0.44, z, C.iron);
@@ -84,7 +87,15 @@ export function lampPost(b, x, y, z, ry = 0) {
     b.box(0.14, 2.6, 0.14, 0, 1.3, 0, C.woodD);
     b.box(0.5, 0.08, 0.08, 0.22, 2.55, 0, C.woodD);
     b.box(0.07, 0.4, 0.07, 0.1, 2.38, 0, C.woodD, 'solid', 0, 0, 0.8);
-    lantern(b, 0.42, 2.0, 0);
+    lantern(b, 0.42, 2.0, 0, 'street');
+  });
+}
+// a lantern on an iron bracket, out from a wall that faces +z
+export function wallLantern(b, x, y, z, ry = 0) {
+  b.group(x, y, z, 0, ry, 0, () => {
+    b.box(0.08, 0.2, 0.05, 0, 0.55, 0.02, C.iron);
+    b.box(0.04, 0.04, 0.34, 0, 0.62, 0.17, C.iron);
+    lantern(b, 0, 0.12, 0.32);
   });
 }
 // logs stacked in a pyramid, lying along z (the light end rings show at both ends)

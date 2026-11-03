@@ -28,6 +28,10 @@ export const MAT = {
   taillight: new THREE.MeshLambertMaterial({ vertexColors: true, emissive: 0xff2010, emissiveIntensity: 0.25 }),
   amber: new THREE.MeshLambertMaterial({ vertexColors: true, emissive: 0xff9a20, emissiveIntensity: 0.35 }),
   lamp: new THREE.MeshLambertMaterial({ vertexColors: true, emissive: 0xfff0c8, emissiveIntensity: 0.0 }),
+  // lantern glass and lamp shades: dull glass by day, glowing at night; windows: glass by day, lit rooms at
+  // night (js/day-night.js sets their colours from the time of day)
+  lampGlass: new THREE.MeshBasicMaterial({ vertexColors: true }),
+  window: new THREE.MeshBasicMaterial({ color: 0x4f6170 }),
 };
 
 /* ---------- Geometry builder ---------- */
@@ -81,6 +85,12 @@ export class GeoBuilder {
   cyl(rt, rb, h, seg, x, y, z, color, rx = 0, ry = 0, rz = 0, mat = 'solid') {
     return this.add(new THREE.CylinderGeometry(rt, rb, h, seg), color, x, y, z, rx, ry, rz, mat);
   }
+  // a light point at a local point (a lantern, a lamp, a torch's flame): js/day-night.js finds it in the
+  // built model and lights it at night. kind: 'lamp' | 'street' | 'ceiling' | 'flame' | 'fire'
+  light(x, y, z, kind = 'lamp') {
+    const p = new THREE.Vector3(x, y, z).applyMatrix4(this.stack[this.stack.length - 1]);
+    (this.lights || (this.lights = [])).push([p.x, p.y, p.z, kind]);
+  }
   build(materials = MAT) {
     const group = new THREE.Group();
     for (const key in this.buckets) {
@@ -95,6 +105,7 @@ export class GeoBuilder {
       group.add(mesh);
     }
     this.buckets = {};
+    if (this.lights) { group.userData.lights = this.lights; this.lights = null; }
     return group;
   }
 }
