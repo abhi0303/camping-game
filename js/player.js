@@ -390,11 +390,12 @@ export class Player {
       if (this.pos.x < -0.9 && Math.abs(this.vel.x) > 0.3) this.pos.z = damp(this.pos.z, DOOR_Z, 6, dt);
       if (this.pos.x < -1.96) { this.toWorld(); this.mode = 'foot'; }
     } else {
-      // ground = terrain or bridge deck; RV roof when standing on it; float when the water is deep
+      // ground = terrain or bridge deck; RV roof when standing on it; float when the water is deep — only in the
+      // river itself: dry hollows lower than the river's water level are walked on, not swum over
       let g = this.world.groundAt(this.pos.x, this.pos.z, this.pos.y);
       for (const r of this.rvs) { const roof = r.roofHeightAt(this.pos); if (roof !== null && this.pos.y >= roof - 0.3) g = Math.max(g, roof); }
       const W = this.world.W;
-      this.swimming = g < W - 1.15 && this.pos.y < W - 0.5;
+      this.swimming = g < W - 1.15 && this.pos.y < W - 0.5 && this.world.waterDepth(this.pos.x, this.pos.z) > 0;
       if (this.swimming) g = W - 1.15;
       if (this.pos.y <= g) {
         if (!this.grounded && this.vy < -4) { this.char.land(clamp(-this.vy / 14, 0.3, 1)); audio.thud(90, 0.08); }

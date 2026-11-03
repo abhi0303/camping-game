@@ -571,11 +571,14 @@ body.touch #farmBar { font-size: 12px; padding: 2px 8px; gap: 9px; }
 .fu-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 6px; }
 .fu-table th, .fu-table td { text-align: left; padding: 5px 6px; border-bottom: 1px solid rgba(255,255,255,.07); }
 .fu-table th { opacity: .65; font-size: 12px; }
-body.touch #farmInfo { top: 182px; right: 8px; width: 176px; font-size: 11px; padding: 6px 8px; }
+/* phones: on the left under the team list (the game sets its top) — the right side has the touch buttons */
+body.touch #farmInfo { top: 120px; left: 8px; right: auto; width: 156px; font-size: 11px; padding: 6px 8px; }
+body.touch #farmInfo .fi-st { font-size: 11px; padding: 3px 6px; margin: 2px 0 3px; }
+body.touch #farmInfo .fi-t small { display: none; }
 .fu-hist div { font-size: 13px; padding: 5px 2px; border-bottom: 1px solid rgba(255,255,255,.06); display: flex; justify-content: space-between; gap: 8px; }
 .fu-hist small { opacity: .6; white-space: nowrap; }
 .fp-farm { background: #1f3a26; border: 1px solid rgba(140,230,150,.25); border-radius: 8px; padding: 6px 10px; font-size: 13px; }
-@media (max-height: 560px) { #farmInfo { top: 220px; } body.touch #farmInfo { top: 106px; width: 172px; font-size: 10.5px; padding: 5px 7px; } body.touch #farmInfo .fi-t { font-size: 11px; margin-bottom: 2px; } #farmInfo .fi-r { padding: 1px 0; } body.touch #farmInfo .fi-opt { display: none; } }
+@media (max-height: 560px) { #farmInfo { top: 220px; } body.touch #farmInfo { width: 156px; font-size: 10.5px; padding: 5px 7px; } body.touch #farmInfo .fi-t { font-size: 11px; margin-bottom: 2px; } #farmInfo .fi-r { padding: 1px 0; } body.touch #farmInfo .fi-opt { display: none; } }
 
 /* ---------- fishing: HUD, result card, Fish Market screens ---------- */
 #fishHud { position: absolute; left: 50%; bottom: 128px; transform: translateX(-50%); width: min(360px, calc(100vw - 24px)); padding: 9px 12px; font-size: 13px; pointer-events: none; background: rgba(14,24,34,.86); }

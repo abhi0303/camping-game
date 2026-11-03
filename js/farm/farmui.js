@@ -88,6 +88,12 @@ export class FarmUI {
     const html = this._infoBox(this._infoBd, true);
     if (html !== this._infoHtml) { this._infoHtml = html; this.info.innerHTML = html; }
     this.info.classList.remove('hidden');
+    // phones: the touch buttons fill the right side, so the panel sits on the left, under the team list
+    if (document.body.classList.contains('touch')) {
+      const t = $('team'), ref = t && !t.classList.contains('hidden') ? t : $('objective');
+      const top = Math.round(ref.getBoundingClientRect().bottom - $('hud').getBoundingClientRect().top + 6) + 'px';
+      if (this.info.style.top !== top) this.info.style.top = top;
+    }
   }
   // timers move every second (the numbers come from the server's time stamps)
   _tick() {
@@ -131,7 +137,7 @@ export class FarmUI {
     let h = `<div class="fi-t">${a.icon} ${FARM_TITLE[bd.type]} <small>plot ${bd.plot + 1}</small></div>`;
     h += row('Total chickens', `${I.count} / ${k.capacity}`);
     if (!I.count) return h + `<div class="fi-note">No chickens yet — buy some from the farmer at the Farm Store.</div>`;
-    const st = I.paused ? ['red', '⚠ Feed required'] : I.ready ? ['blue', `🥚 ${eggsText(I.ready)}`]
+    const st = I.paused ? ['red', '⚠ Feed required'] : I.ready ? ['blue', compact ? `🥚 ${I.ready} egg${I.ready > 1 ? 's' : ''} ready` : `🥚 ${eggsText(I.ready)}`]
       : I.soon ? ['yellow', `⏳ Next egg in ${clock(I.nextMs)}`] : isFinite(I.nextMs) ? ['green', '🐣 Laying eggs'] : ['red', '⚠ Feed required'];
     h += `<div class="fi-st ${st[0]}">${st[1]}</div>`;
     const kinds = Object.entries(I.kinds).map(([t, n]) => { const c = e.cat(t); return compact ? `${c.icon} ${n}` : `${c.icon} ${n} ${esc(c.variety || c.name)}`; });
