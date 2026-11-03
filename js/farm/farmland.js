@@ -13,7 +13,8 @@ import { C, FARM_MAT, crate, barrel, eggStack, milkCan, hayBale, sack, lampPost,
 import { FarmerNPC } from './npc.js';
 
 const MAX_PER_TYPE = 64;
-const SPEED = { chicken: 1.6, chicken_brown: 1.5, chicken_dark: 1.4, goat: 0.8, cow: 0.45, horse: 0.6 };
+const SPEED = { chicken: 1.6, chicken_brown: 1.5, chicken_dark: 1.4, goat: 0.8, cow: 0.45, horse: 0.6,
+  horse_bay: 0.6, horse_chestnut: 0.62, horse_black: 0.58, horse_white: 0.6, horse_palomino: 0.64, horse_pinto: 0.6 };
 const GATE_OPEN = Math.PI * 0.52;
 const NEST_AT = { x: 2.7, z: -0.9 };          // in the pen, by the coop's nest boxes (behind the back fence)
 const hash = s => { let h = 2166136261; for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619); return ((h >>> 0) % 100000) / 100000; };
@@ -319,6 +320,10 @@ export class Farmland {
     for (const a of this.list.concat(this.decor)) {
       const m = this.inst[a.type];
       if (n[a.type] >= MAX_PER_TYPE) continue;
+      if (a.rentedUntil && Date.parse(a.rentedUntil) > serverMs) continue;      // a horse out on rent isn't home
+      // a baby horse is small and grows with its level (Level 1 ~55 %, Level 10 full size)
+      const size = a.level && a.type.startsWith('horse') ? 0.55 + 0.45 * (Math.min(10, a.level) - 1) / 9 : 1;
+      this._s.setScalar(size);
       const p = this.posOf(a, serverMs), sp = SPEED[a.type] || 1, chick = a.type.startsWith('chicken');
       const bob = p.walking ? Math.abs(Math.sin(t * 9 * sp + a.k * 9)) * (chick ? 0.05 : 0.04) : 0;
       const sick = a.health !== undefined && a.health < 40 ? 0.06 : 0;

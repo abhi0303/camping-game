@@ -94,7 +94,7 @@ The main road splits it in two: **the farm** (plots and storage) on one side, **
   | 🏠 Chicken coop | ₹100 · 20 wood | 6 chickens (any kind) |
   | 🛖 Goat shed | ₹250 · 40 wood | 4 goats |
   | 🏚 Cow barn | ₹500 · 60 wood · 20 stone | 3 cows |
-  | 🐎 Horse stable | ₹600 · 60 wood · 20 stone | 2 horses |
+  | 🐎 Horse stable | ₹600 · 60 wood · 20 stone | 4 horses |
 - **Pens and gates:** every shelter has a fenced pen with a dirt yard, a feed trough and a water trough. Press **E** at the gate to open or close it — a closed gate blocks the way, everyone sees it move, and it stays as you left it.
 - **Feeding:** animals only eat when you feed them. Open the gate, walk to the feed trough and press **E**: **Feed all** or **Feed selected** (the hungriest first). One feeding costs 1 🌾 feed per chicken (2 per goat or horse, 3 per cow) and keeps it fed — and producing — for **2 hours** (you can feed up to a day ahead). With too little feed only some animals get fed. New animals arrive fed for 2 hours.
 - **Production panel:** stand at a plot to see its numbers live — total animals, **next egg / milk in**, **feed due in**, feeding duration and what's in storage. When nobody is fed it says **Production Paused – Feed Required**. The timers come from the server's time stamps.
@@ -108,7 +108,16 @@ The main road splits it in two: **the farm** (plots and storage) on one side, **
 
   The timings live in one file, [`server/src/animals.js`](server/src/animals.js). A Regular White pays for itself in about 3½ hours, a Brown Desi in about 7 and a Black in about 10 — but a Black chicken earns the most per place in the coop. The **Chicken Farm panel** (stand at the coop, or open it from its sign) shows the varieties, **Next Egg In** (the shortest timer, ticking every second), the eggs ready to collect, the feeding left and the feed needed, in colours: 🟢 laying · 🟡 an egg is seconds away · 🔵 eggs ready · 🔴 feed required. The coop's panel also lists every chicken with its own timer.
 
-  Each kind has its own look, and its eggs are kept separately. 🐐 Goats (₹150) give goat milk (₹30), 🐄 cows (₹400) cow milk (₹25), 🐴 horses (₹600) are for carts and riding later.
+  Each kind has its own look, and its eggs are kept separately. 🐐 Goats (₹150) give goat milk (₹30), 🐄 cows (₹400) cow milk (₹25).
+- **Horses:** six colours, each with its own look. Buy a **baby** (Level 1) or a **grown** horse (Level 10):
+
+  | Colour | Baby | Grown | Rent (per 2 h) | Sells for (Level 1 → 10) |
+  |---|---|---|---|---|
+  | Bay, Chestnut (common) | ₹150 | ₹600 | ₹50 | ₹105 → ₹480 |
+  | Black, White (uncommon) | ₹220 | ₹800 | ₹65 | ₹154 → ₹640 |
+  | Golden (Palomino), Spotted (Pinto) (rare) | ₹320 | ₹1,100 | ₹85 | ₹224 → ₹880 |
+
+  A fed horse grows **one level every 2 hours** (2 feed per feeding) up to **Level 10** — about 18 hours of feeding; a hungry one stops growing. Babies are small and grow bigger with each level. **Sell** a horse at any level from the stable's panel (older and rarer horses sell for more). **Rent out** Level 10 horses: now and then (about every 1–2 hours) a customer asks at the Market's Orders tab for 1 or 2 horses for 1–4 hours — any colour at the common rate, or a certain colour for that colour's rate + 20 %. A request waits about an hour for a player to **hand the horses over**; the farm is paid at once, the horses leave the pen and come back by themselves when the time is up (looked after by the renter).
 - **Health:** an animal left hungry for a day gets weak (it never dies). Fed again it recovers.
 - **Farm Store** (across the road): talk to the farmer behind the counter (**E**). His menu: purchase animals, sell farm products, purchase animal feed (₹2), farming supplies (coming with crop fields) and construction materials (🪵 wood ₹6, 🪨 stone ₹8). You can walk inside.
 - **Fish Market** (east of the Market, set back from the road; follow the 🐟 sign): talk to the fisherman (**E**) to buy worms, buy or upgrade your fishing rod, sell fish and see the farm's fish collection. See [Fishing](#fishing) below.

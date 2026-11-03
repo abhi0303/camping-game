@@ -12,6 +12,7 @@ import { PLOTS } from './layout.js';
 import { withAnimalConfig } from './animals.js';
 import { cast, reel, buyRod, fishingState } from './fishing.js';
 import { ensureOrders, ordersState, deliver } from './orders.js';
+import { ensureRentals, rentalsState, rent, sellHorse, isHorse, HORSES } from './horses.js';
 
 const H = 3600e3;
 const MAX_OFFLINE_H = 24 * 7;          // production is counted for at most a week of absence
@@ -63,9 +64,16 @@ export function simulate(animals, inv, cat, fromMs, toMs, level = 1) {
       const starveH = clamp(s1 - Math.max(s0, a.fu + STARVE_AFTER_H * H), 0, step) / H;
       a.health = Math.max(MIN_HEALTH, Math.min(100, a.health + HEAL_PER_H * fedH) - SICK_PER_H * starveH);
       if (k.product && k.rate && !(k.nest && a.ready >= k.nest)) a.progress += k.rate * fedH * (a.health / 100);
+      else if (k.grow && (a.level || 1) < (k.maxLevel || HORSES.maxLevel)) a.progress += k.grow * fedH * (a.health / 100);   // horses grow
     }
     for (const a of animals) {
-      const k = cat[a.type], p = k.product, whole = p ? Math.floor(a.progress + 1e-9) : 0;
+      const k = cat[a.type];
+      if (k.grow) {                                    // a level for every whole step of growth, up to the top level
+        const up = Math.floor(a.progress + 1e-9), max = k.maxLevel || HORSES.maxLevel;
+        if (up >= 1) { a.level = Math.min(max, (a.level || 1) + up); a.progress = a.level >= max ? 0 : Math.max(0, a.progress - up); }
+        continue;
+      }
+      const p = k.product, whole = p ? Math.floor(a.progress + 1e-9) : 0;
       if (whole < 1) continue;
       if (k.nest) {                                    // into the nest box, until it is full
         const take = Math.min(whole, Math.max(0, k.nest - a.ready));
@@ -93,15 +101,15 @@ async function settle(c, roomId, cat) {
   }
   const from = Math.max(r.produced_at.getTime(), r.now.getTime() - MAX_OFFLINE_H * H), to = r.now.getTime();
   if (to > from) {
-    const animals = await c.rows('SELECT id, type, health, hunger, progress, ready, fed_until FROM animals WHERE room_id = $1 ORDER BY born_at, id', [roomId]);
+    const animals = await c.rows('SELECT id, type, health, hunger, progress, ready, level, fed_until FROM animals WHERE room_id = $1 ORDER BY born_at, id', [roomId]);
     if (animals.length) {
       const out = simulate(animals, inv, cat, from, to, r.storage_level);
       dirty.push(...Object.keys(out.made));
-      await c.rows(`UPDATE animals a SET health = v.health, hunger = v.hunger, progress = v.progress, ready = v.ready,
+      await c.rows(`UPDATE animals a SET health = v.health, hunger = v.hunger, progress = v.progress, ready = v.ready, level = v.level,
           last_production_at = CASE WHEN v.made THEN $7 ELSE a.last_production_at END
-          FROM unnest($1::uuid[], $2::real[], $3::real[], $4::float8[], $5::bool[], $6::int[]) AS v(id, health, hunger, progress, made, ready)
+          FROM unnest($1::uuid[], $2::real[], $3::real[], $4::float8[], $5::bool[], $6::int[], $8::int[]) AS v(id, health, hunger, progress, made, ready, level)
           WHERE a.id = v.id`,
-      [animals.map(a => a.id), animals.map(a => a.health), animals.map(a => a.hunger), animals.map(a => a.progress), animals.map(a => a.made), animals.map(a => a.ready), r.now]);
+      [animals.map(a => a.id), animals.map(a => a.health), animals.map(a => a.hunger), animals.map(a => a.progress), animals.map(a => a.made), animals.map(a => a.ready), r.now, animals.map(a => a.level || 1)]);
       changed = true;
     }
   }
@@ -112,8 +120,9 @@ async function settle(c, roomId, cat) {
 
 async function state(c, roomId, cat, s, me) {
   await ensureOrders(c, roomId, cat, s);
+  await ensureRentals(c, roomId, cat, s);
   const blds = await c.rows('SELECT id, type, plot, level, x, z, yaw, gate_open FROM buildings WHERE room_id = $1 ORDER BY plot', [roomId]);
-  const ans = await c.rows('SELECT id, type, shelter_id, health, hunger, progress, ready, fed_until, born_at FROM animals WHERE room_id = $1 ORDER BY born_at, id', [roomId]);
+  const ans = await c.rows('SELECT id, type, shelter_id, health, hunger, progress, ready, level, rented_until, fed_until, born_at FROM animals WHERE room_id = $1 ORDER BY born_at, id', [roomId]);
   const inventory = {}, caps = {};
   for (const [k, v] of Object.entries(cat)) if (v.kind === 'good') { inventory[k] = s.inv[k] || 0; if (v.cap) caps[k] = capOf(cat, k, s.level); }
   return {
@@ -121,10 +130,11 @@ async function state(c, roomId, cat, s, me) {
     inventory, caps,
     buildings: blds.map(b => ({ id: b.id, type: b.type, plot: b.plot, level: b.level, x: b.x, z: b.z, yaw: b.yaw, gateOpen: b.gate_open })),
     animals: ans.map(a => ({ id: a.id, type: a.type, shelter: a.shelter_id, health: r1(a.health), hunger: r1(a.hunger), progress: Math.round(a.progress * 10000) / 10000,
-      ready: a.ready, fedUntil: a.fed_until ? a.fed_until.toISOString() : null, born: a.born_at })),
+      ready: a.ready, level: a.level, rentedUntil: a.rented_until ? a.rented_until.toISOString() : null, fedUntil: a.fed_until ? a.fed_until.toISOString() : null, born: a.born_at })),
     catalog: cat, plots: PLOTS.length,
     fishing: me ? await fishingState(c, roomId, me.id) : null,
     orders: await ordersState(c, roomId, s),
+    rentals: await rentalsState(c, roomId, s),
   };
 }
 
@@ -189,7 +199,8 @@ async function buy(c, { me, b, cat, s }) {
   if (!k || !k.buy || k.kind === 'building' || k.kind === 'upgrade') throw new ApiError(400, 'bad_item', 'That can\'t be bought here.');
   const qty = whole(b.qty, 1, k.kind === 'animal' ? 12 : 500);
   if (k.unlock && s.earned < k.unlock) throw new ApiError(409, 'locked', `${k.name}s are sold once the farm has earned ₹${k.unlock} from sales (₹${s.earned} so far).`);
-  const cost = k.buy * qty;
+  const foal = isHorse(k) && b.age === 'foal';            // a baby horse: cheaper, Level 1
+  const cost = (foal ? k.foal : k.buy) * qty;
   if (s.money < cost) throw new ApiError(409, 'not_enough_money', `Not enough money: ${qty} × ${k.name} costs ₹${cost}, the farm has ₹${s.money}.`);
   if (k.kind === 'animal') {
     const home = cat[k.shelter];
@@ -203,9 +214,10 @@ async function buy(c, { me, b, cat, s }) {
     const homes = [];
     for (const x of sh) for (let i = x.n; i < home.capacity && homes.length < qty; i++) homes.push(x.id);
     // new animals arrive fed for one feeding period
-    await c.rows(`INSERT INTO animals (room_id, type, shelter_id, last_fed_at, fed_until)
-        SELECT $1, $2, unnest($3::uuid[]), now(), now() + make_interval(secs => $4)`, [me.room_id, item, homes, (k.feedHours || 2) * 3600]);
-    return { money: -cost, detail: { item, qty, cost }, message: `${me.name} bought ${plural(qty, k)} for ₹${cost}` };
+    const level = isHorse(k) && !foal ? k.maxLevel || HORSES.maxLevel : 1;
+    await c.rows(`INSERT INTO animals (room_id, type, shelter_id, last_fed_at, fed_until, level)
+        SELECT $1, $2, unnest($3::uuid[]), now(), now() + make_interval(secs => $4), $5`, [me.room_id, item, homes, (k.feedHours || 2) * 3600, level]);
+    return { money: -cost, detail: { item, qty, cost, level }, message: `${me.name} bought ${foal ? `${qty} baby ${lower(k.name)}${qty > 1 ? 's' : ''}` : plural(qty, k)} for ₹${cost}` };
   }
   // a pack (e.g. 10 worms for ₹1) adds `n` of another item per pack
   const into = k.pack ? k.pack.item : item, n = k.pack ? k.pack.n * qty : qty, ik = cat[into];
@@ -294,7 +306,7 @@ async function feed(c, { me, b, s, cat }) {
   await c.rows(`UPDATE animals a SET fed_until = v.until, last_fed_at = now() FROM unnest($1::uuid[], $2::timestamptz[]) AS v(id, until) WHERE a.id = v.id`, [ids, until]);
   // the fed animals' name; a coop with several chicken varieties just says "chickens"
   const types = new Set(list.filter(a => ids.includes(a.id)).map(a => a.type)), home = cat[cat[bd.type].animal] || cat[list[0].type];
-  const noun = types.size === 1 ? lower(cat[[...types][0]].name) : home.nest ? 'chicken' : lower(home.name);
+  const noun = types.size === 1 ? lower(cat[[...types][0]].name) : home.nest ? 'chicken' : home.grow ? 'horse' : lower(home.name);
   const message = `${me.name} fed ${fed} ${noun}${fed === 1 ? '' : 's'} (${used} feed)` + (short && fed < want ? ` — not enough feed for the other ${want - fed}` : '');
   return { money: 0, items: ['feed'], detail: { shelter, fed, wanted: want, used, short: short && fed < want, full }, message };
 }
@@ -350,4 +362,4 @@ async function gate(c, { me, b }) {
   return { money: 0, items: [], detail: { shelter, open }, message: `${me.name} ${open ? 'opened' : 'closed'} the gate of plot ${r.plot + 1}` };
 }
 
-const ACTIONS = { buy, sell, build, deposit, feed, upgrade, gate, collect, cast, reel, rod: buyRod, order: deliver };
+const ACTIONS = { buy, sell, build, deposit, feed, upgrade, gate, collect, cast, reel, rod: buyRod, order: deliver, rent, sellhorse: sellHorse };

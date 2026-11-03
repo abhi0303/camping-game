@@ -348,10 +348,12 @@ test('upgrade from older databases: migration 1 only, 2 with animals and buildin
       }
       // eggs in storage before the price drop: their old value is paid out (10 × (₹6 − ₹1) + 2 × (₹35 − ₹7))
       if (upTo === 4) await p2.query(`INSERT INTO inventory (room_id, item, qty) VALUES ($1, 'egg', 10), ($1, 'egg_dark', 2)`, [room]);
+      // a horse bought before colours and levels: a grown bay horse afterwards
+      if (upTo === 4) await p2.query(`INSERT INTO animals (room_id, type, shelter_id) SELECT $1, 'horse', id FROM buildings WHERE room_id = $1`, [room]);
       const env2 = { ...env, __pool: p2 };
       const r = await worker.fetch(new Request('http://api.test/v1/health'), env2, {});
       assert.equal(r.status, 200);
-      assert.deepEqual((await p2.query('SELECT id FROM schema_migrations ORDER BY id')).rows.map(x => x.id), [1, 2, 3, 4, 5, 6]);
+      assert.deepEqual((await p2.query('SELECT id FROM schema_migrations ORDER BY id')).rows.map(x => x.id), [1, 2, 3, 4, 5, 6, 7]);
       const rm = (await p2.query('SELECT money, storage_level, total_earned FROM rooms')).rows[0];
       assert.deepEqual([Number(rm.money), rm.storage_level, Number(rm.total_earned)], [upTo === 4 ? 500 + 50 + 56 : 500, 1, upTo === 2 ? 42 : 0]);
       if (upTo >= 2) {
@@ -363,6 +365,9 @@ test('upgrade from older databases: migration 1 only, 2 with animals and buildin
       assert.deepEqual([cat.chicken.name, cat.chicken_dark.name, cat.worm_pack.buy_price, cat.rod.kind], ['Regular White chicken', 'Black chicken', 1, 'gear']);
       assert.equal((await p2.query('SELECT rod_level FROM room_members')).rows.length, 0);
       assert.equal((await p2.query('SELECT count(*)::int AS n FROM fishing_casts')).rows[0].n, 0);
+      if (upTo === 4) assert.deepEqual((await p2.query(`SELECT type, level FROM animals WHERE type LIKE 'horse%'`)).rows, [{ type: 'horse_bay', level: 10 }]);
+      assert.equal(cat.horse, undefined);
+      assert.equal((await p2.query(`SELECT (data->>'capacity')::int AS n FROM catalog WHERE item = 'stable'`)).rows[0].n, 4);
     } finally {
       await p2.end();
       const a2 = new pg.Client({ connectionString: ADMIN_URL });
@@ -715,4 +720,133 @@ test('streak: an order every day for 5 days pays ₹200 on the 5th; a missed day
   o = f.orders.list[0]; await stock(w2, o);
   r = await act(w2, { action: 'order', order: o.id });
   assert.deepEqual([r.body.result.streak, r.body.result.bonus], [1, 0]);
+});
+
+
+/* ---------- horses: colours, babies, levels, selling, rentals ---------- */
+import { horsePrice, HORSES } from '../src/horses.js';
+const stable = async (w, plot = 7) => {
+  await q(`UPDATE rooms SET money = 20000 WHERE code = $1`, [w.code]);
+  await setInv(w, 'wood', 200); await setInv(w, 'stone', 100);
+  return (await act(w, { action: 'build', type: 'stable', plot })).body.buildings.find(b => b.plot === plot);
+};
+const horses = async w => (await farm(w)).body.animals.filter(a => a.type.startsWith('horse_'));
+
+test('horses: six colours, a baby (Level 1) or grown (Level 10), 4 to a stable', async () => {
+  const w = await world();
+  const st = await stable(w);
+  const cat = (await farm(w)).body.catalog;
+  const kinds = Object.keys(cat).filter(k => k.startsWith('horse_'));
+  assert.deepEqual(kinds.map(k => [cat[k].variety, cat[k].foal, cat[k].buy, cat[k].rent]), [
+    ['Bay', 150, 600, 50], ['Chestnut', 150, 600, 50], ['Black', 220, 800, 65], ['White', 220, 800, 65], ['Golden (Palomino)', 320, 1100, 85], ['Spotted (Pinto)', 320, 1100, 85]]);
+  assert.equal(cat.stable.capacity, 4);
+  let r = await act(w, { action: 'buy', item: 'horse_palomino', qty: 1, age: 'foal' });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(r.body.money, 20000 - 600 - 320); assert.match(r.body.message, /bought 1 baby golden horse for ₹320/);
+  r = await act(w, { action: 'buy', item: 'horse_black', qty: 2 });
+  assert.equal(r.body.money, 20000 - 600 - 320 - 1600);
+  assert.deepEqual((await horses(w)).map(h => [h.type, h.level, h.shelter === st.id]), [['horse_palomino', 1, true], ['horse_black', 10, true], ['horse_black', 10, true]]);
+  assert.equal((await act(w, { action: 'buy', item: 'horse_bay', qty: 2, age: 'foal' })).body.error.code, 'no_space');
+});
+
+test('horses grow a level every 2 hours they are fed, up to 10; hungry ones don\'t grow', async () => {
+  const w = await world();
+  const st = await stable(w);
+  await act(w, { action: 'buy', item: 'horse_bay', qty: 2, age: 'foal' });
+  await travel(w, 2);                                       // arrived fed for 2 h -> Level 2
+  assert.deepEqual((await horses(w)).map(h => h.level), [2, 2]);
+  await travel(w, 6);                                       // hungry: no growth
+  assert.deepEqual((await horses(w)).map(h => h.level), [2, 2]);
+  await setInv(w, 'feed', 100);
+  for (let i = 0; i < 12; i++) await act(w, { action: 'feed', shelter: st.id, count: 1 });   // 6 feedings each = 12 h
+  await travel(w, 12);
+  assert.deepEqual((await horses(w)).map(h => h.level), [8, 8]);
+  for (let i = 0; i < 8; i++) await act(w, { action: 'feed', shelter: st.id, all: true });
+  await travel(w, 16);
+  const h = await horses(w);
+  assert.deepEqual(h.map(x => [x.level, x.progress]), [[10, 0], [10, 0]]);    // stops at 10
+  const r = await act(w, { action: 'feed', shelter: st.id, all: true });
+  assert.ok(/fed 2 bay horses/.test(r.body.message) || r.body.error, JSON.stringify(r.body.message || r.body.error));
+});
+
+test('selling a horse: the price grows with its level and colour; not while it is out on rent', async () => {
+  const w = await world();
+  await stable(w);
+  const cat = (await farm(w)).body.catalog;
+  assert.deepEqual([horsePrice(cat.horse_bay, 1), horsePrice(cat.horse_bay, 5), horsePrice(cat.horse_bay, 10), horsePrice(cat.horse_pinto, 10)], [105, 272, 480, 880]);
+  await act(w, { action: 'buy', item: 'horse_chestnut', qty: 1, age: 'foal' });
+  await act(w, { action: 'buy', item: 'horse_white', qty: 1 });
+  const [foal, white] = await horses(w);
+  const money0 = (await farm(w)).body.money;
+  let r = await act(w, { action: 'sellhorse', animal: foal.id });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(r.body.money, money0 + 105); assert.match(r.body.message, /sold a Level 1 chestnut horse for ₹105/);
+  assert.equal((await act(w, { action: 'sellhorse', animal: foal.id })).body.error.code, 'not_found');
+  await q(`UPDATE animals SET rented_until = now() + interval '1 hour' WHERE id = $1`, [white.id]);
+  assert.equal((await act(w, { action: 'sellhorse', animal: white.id })).body.error.code, 'on_rent');
+  const hen = (await coop(w, 0), await act(w, { action: 'buy', item: 'chicken', qty: 1 })).body.animals.find(a => a.type === 'chicken');
+  assert.equal((await act(w, { action: 'sellhorse', animal: hen.id })).body.error.code, 'bad_item');
+});
+
+test('rentals: requests only with free Level 10 horses; a player hands them over, paid once; they come back', async () => {
+  const w = await world(), p2 = await addMember(w, 'Rahul');
+  await stable(w);
+  await act(w, { action: 'buy', item: 'horse_bay', qty: 1, age: 'foal' });
+  let f = (await farm(w)).body;
+  assert.deepEqual(f.rentals, []);                          // a baby can't be rented
+  await act(w, { action: 'buy', item: 'horse_bay', qty: 2 });
+  f = (await farm(w)).body;
+  assert.equal(f.rentals.length, 1);
+  const o = f.rentals[0];
+  assert.ok(o.status === 'offer' && o.renter && o.purpose && [1, 2].includes(o.horses) && o.hours >= 1 && o.hours <= 4, JSON.stringify(o));
+  assert.ok(!o.variety || o.variety === 'horse_bay');
+  const rate = o.variety ? 50 * 1.2 : 50;
+  assert.equal(o.pay, Math.round(rate * o.hours / 2 * o.horses));
+  const wait = Date.parse(o.expiresAt) - Date.now();
+  assert.ok(wait > 55 * 60e3 && wait <= 60 * 60e3);
+  // the next request is not before 60 minutes
+  const next = Date.parse((await q(`SELECT next_rental_at FROM rooms WHERE code = $1`, [w.code]))[0].next_rental_at) - Date.now();
+  assert.ok(next > 59 * 60e3 && next < 121 * 60e3, String(next));
+  // two players hand over at once: once
+  const money0 = f.money;
+  const [a, b] = await Promise.all([act(w, { action: 'rent', offer: o.id }), act(p2, { action: 'rent', offer: o.id })]);
+  assert.equal([a, b].filter(x => x.status === 200).length, 1, JSON.stringify([a.body.error, b.body.error]));
+  assert.equal([a, b].find(x => x.body.error).body.error.code, 'already_done');
+  const r = [a, b].find(x => x.status === 200);
+  assert.equal(r.body.money, money0 + o.pay);
+  assert.match(r.body.message, new RegExp(`handed ${o.horses} horses? to ${o.renter} for ${o.hours} h — ₹${o.pay}`));
+  const away = r.body.animals.filter(x => x.rentedUntil && Date.parse(x.rentedUntil) > Date.now());
+  assert.equal(away.length, o.horses);
+  assert.ok(away.every(x => x.level === 10 && Date.parse(x.fedUntil) >= Date.parse(x.rentedUntil)));      // looked after while away
+  assert.deepEqual(r.body.rentals.map(x => x.status), ['active']);
+  // time is up: they are home again and can be rented again
+  await q(`UPDATE animals a SET rented_until = now() - interval '1 minute' FROM rooms r WHERE r.id = a.room_id AND r.code = $1 AND a.rented_until IS NOT NULL`, [w.code]);
+  await q(`UPDATE horse_rentals h SET returns_at = now() - interval '1 minute' FROM rooms r WHERE r.id = h.room_id AND r.code = $1`, [w.code]);
+  await q(`UPDATE rooms SET next_rental_at = NULL WHERE code = $1`, [w.code]);
+  f = (await farm(w)).body;
+  assert.deepEqual(f.rentals.map(x => x.status), ['offer']);
+  assert.ok(f.animals.every(x => !x.rentedUntil || Date.parse(x.rentedUntil) <= Date.now()));
+});
+
+test('rentals: a request for a colour you don\'t have enough of, and an expired one, are refused', async () => {
+  const w = await world();
+  await stable(w);
+  await act(w, { action: 'buy', item: 'horse_pinto', qty: 1 });
+  let o = (await farm(w)).body.rentals[0];
+  // pretend it asks for 2 golden horses
+  await q(`UPDATE horse_rentals SET variety = 'horse_palomino', horses = 2 WHERE id = $1`, [o.id]);
+  let r = await act(w, { action: 'rent', offer: o.id });
+  assert.equal(r.body.error.code, 'no_horses'); assert.match(r.body.error.message, /needs 2 Level 10 golden horses at home — you have 0/);
+  await q(`UPDATE horse_rentals SET expires_at = now() - interval '1 second' WHERE id = $1`, [o.id]);
+  assert.equal((await act(w, { action: 'rent', offer: o.id })).body.error.code, 'expired');
+  // "any horse": the common rate, and the plainest horse goes (the spotted one stays for a request that pays for it)
+  await act(w, { action: 'buy', item: 'horse_chestnut', qty: 1 });
+  const any = (await q(`INSERT INTO horse_rentals (room_id, renter, purpose, horses, variety, hours, pay, expires_at)
+      SELECT id, 'Ravi', 'for a test', 1, NULL, 2, 50, now() + interval '1 hour' FROM rooms WHERE code = $1 RETURNING id`, [w.code]))[0].id;
+  r = await act(w, { action: 'rent', offer: any });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.deepEqual(r.body.animals.filter(a => a.rentedUntil).map(a => a.type), ['horse_chestnut']);
+  const f = (await farm(w)).body;                           // the next look at the farm closes it
+  assert.equal((await q('SELECT status FROM horse_rentals WHERE id = $1', [o.id]))[0].status, 'expired');
+  assert.deepEqual(f.rentals.map(x => x.status), ['active']);   // (the next request comes later)
 });

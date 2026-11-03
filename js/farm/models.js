@@ -490,6 +490,33 @@ export function windmillModel() {
 }
 
 /* ---------- animals: one merged geometry each, facing +z, feet at y = 0 ---------- */
+// horse coats: body, mane and tail, lower legs, a white face mark, brown patches (spotted)
+const HORSE_COATS = {
+  horse_bay: { body: 0x7a4a2a, mane: 0x1e140e, socks: 0x2a1a12 },
+  horse_chestnut: { body: 0xa0522d, mane: 0x8a3e1e, socks: 0x8f4825, blaze: 0xf2eee6 },
+  horse_black: { body: 0x24211f, mane: 0x121110, socks: 0x1a1817, blaze: 0xf2eee6 },
+  horse_white: { body: 0xe6e2da, mane: 0xcfc9be, socks: 0xd8d2c8 },
+  horse_palomino: { body: 0xd9a646, mane: 0xf5eedc, socks: 0xc99436, blaze: 0xf5eedc },
+  horse_pinto: { body: 0xf0ece4, mane: 0x3a2414, socks: 0xe8e2d8, patches: 0x6e4024 },
+};
+function horse(b, o) {
+  b.box(0.5, 0.56, 1.35, 0, 1.25, 0, o.body);
+  b.box(0.26, 0.6, 0.3, 0, 1.68, 0.62, o.body, 'solid', 0.55, 0, 0);
+  b.box(0.24, 0.26, 0.56, 0, 1.98, 0.92, o.body, 'solid', 0.45, 0, 0);
+  b.box(0.07, 0.5, 0.36, 0, 1.82, 0.56, o.mane, 'solid', 0.55, 0, 0);
+  if (o.blaze) b.box(0.08, 0.04, 0.3, 0, 2.11, 0.98, o.blaze, 'solid', 0.45, 0, 0);
+  for (const x of [-0.07, 0.07]) b.box(0.05, 0.12, 0.04, x, 2.16, 0.78, o.body);
+  if (o.patches) {
+    b.box(0.52, 0.34, 0.42, 0, 1.3, 0.28, o.patches); b.box(0.52, 0.28, 0.3, 0, 1.36, -0.42, o.patches);
+    b.box(0.27, 0.3, 0.2, 0, 1.75, 0.66, o.patches, 'solid', 0.55, 0, 0);
+  }
+  for (const x of [-0.17, 0.17]) for (const z of [-0.5, 0.5]) {
+    b.cyl(0.06, 0.055, 0.5, 5, x, 0.73, z, o.body);                    // upper leg
+    b.cyl(0.055, 0.05, 0.42, 5, x, 0.27, z, o.socks);                  // lower leg
+    b.cyl(0.06, 0.065, 0.07, 5, x, 0.035, z, 0x2a2420);                // hoof
+  }
+  b.box(0.1, 0.55, 0.1, 0, 1.0, -0.72, o.mane, 'solid', -0.3, 0, 0);
+}
 function geomOf(fn) { const b = new GeoBuilder(); fn(b); return b.build().children[0].geometry; }
 const leg = (b, x, z, h, r, c) => b.cyl(r, r * 0.8, h, 5, x, h / 2, z, c);
 // a chicken: body, neck, head, comb, wattles, beak, wings, tail, legs. Varieties change colours and shape.
@@ -531,13 +558,7 @@ export const ANIMAL_GEO = {
     for (const x of [-0.22, 0.22]) for (const z of [-0.5, 0.5]) leg(b, x, z, 0.76, 0.07, 0xe8e4dc);
     b.box(0.14, 0.12, 0.18, 0, 0.7, 0.2, 0xe8a8a0);
   }),
-  horse: () => geomOf(b => {
-    b.box(0.5, 0.56, 1.35, 0, 1.25, 0, 0x7a4a2a);
-    b.box(0.26, 0.6, 0.3, 0, 1.68, 0.62, 0x7a4a2a, 'solid', 0.55, 0, 0);
-    b.box(0.24, 0.26, 0.56, 0, 1.98, 0.92, 0x7a4a2a, 'solid', 0.45, 0, 0);
-    b.box(0.07, 0.5, 0.36, 0, 1.82, 0.56, 0x2a1a12, 'solid', 0.55, 0, 0);
-    for (const x of [-0.07, 0.07]) b.box(0.05, 0.12, 0.04, x, 2.16, 0.78, 0x7a4a2a);
-    for (const x of [-0.17, 0.17]) for (const z of [-0.5, 0.5]) leg(b, x, z, 0.98, 0.06, 0x6a3e22);
-    b.box(0.1, 0.55, 0.1, 0, 1.0, -0.72, 0x2a1a12, 'solid', -0.3, 0, 0);
-  }),
+  // horses in six colours (catalog horse_*); 'horse' is the bay one (worlds from before the colours)
+  horse: () => geomOf(b => horse(b, HORSE_COATS.horse_bay)),
+  ...Object.fromEntries(Object.keys(HORSE_COATS).map(k => [k, () => geomOf(b => horse(b, HORSE_COATS[k]))])),
 };

@@ -26,7 +26,8 @@ const FARM_TITLE = { coop: 'CHICKEN FARM', goat_shed: 'GOAT FARM', barn: 'COW FA
 const NOUN = { egg: 'egg', egg_brown: 'egg', egg_dark: 'egg', goat_milk: 'milk', cow_milk: 'milk' };
 const plural = name => name.toLowerCase() + (/s$/.test(name) ? '' : 's');
 // what a shelter's animals are called (a coop holds every chicken variety)
-const kind = a => (a.nest ? 'Chicken' : a.name);
+const kind = a => (a.nest ? 'Chicken' : a.grow ? 'Horse' : a.name);
+const coat = k => (k && k.coat ? `<i class="coat" style="background:${k.coat}"></i>` : '');
 // the farmer's menu
 const STORE_MENU = [
   ['animals', '🐔', 'Purchase animals', 'Regular White, Brown Desi and Black chickens, goats, cows, horses'],
@@ -52,7 +53,7 @@ export class FarmUI {
 
   open(view, arg) {
     if (!this.eco.ready) { this.g.toast('🌾 The farm is still loading…'); this.eco.load(); return; }
-    this.view = view; this.arg = arg; this.msg = ''; this.qty = {}; this.hist = null;
+    this.view = view; this.arg = arg; this.msg = ''; this.qty = {}; this.hist = null; this._confirm = null;
     this.tab = view === 'market' ? 'orders' : null;
     if (!this.isOpen) { this.isOpen = true; this.root.classList.remove('hidden'); this.g.hooks.onOpen && this.g.hooks.onOpen(); }
     this.render();
@@ -77,6 +78,8 @@ export class FarmUI {
     }
     const ord = e.orderNow();
     if (ord.ready) parts.push(`<span title="An order is waiting at the Market" class="order">📜 <small>order ₹${ord.ready.pay}</small></span>`);
+    const offer = (e.rentals() || []).find(r => r.status === 'offer' && Date.parse(r.expiresAt) > e.serverNow());
+    if (offer) parts.push(`<span title="A customer wants to rent horses — at the Market" class="order">🐎 <small>rent ₹${offer.pay}</small></span>`);
     const nests = Object.values(e.eggsReady()).reduce((t, v) => t + v, 0);
     if (nests) parts.push(`<span title="Eggs waiting in the nest boxes — collect them at the coops" class="ready">🪺 ${nests} <small>ready</small></span>`);
     const html = parts.join('');
@@ -122,6 +125,12 @@ export class FarmUI {
   }
   // a new order is ready: tell the players once
   _orderAlert() {
+    const R = this.eco.rentals(), now = this.eco.serverNow();
+    for (const r of R || []) {
+      if (r.status !== 'offer' || Date.parse(r.expiresAt) <= now || (this._alerted || (this._alerted = new Set())).has(r.id)) continue;
+      this._alerted.add(r.id);
+      this.g.toast(`🐎 ${r.renter} wants ${r.horses} horse${r.horses > 1 ? 's' : ''} for ${r.hours} h — ₹${r.pay}. Hand ${r.horses > 1 ? 'them' : 'it'} over at the Market (Orders)`);
+    }
     const { ready } = this.eco.orderNow();
     if (!ready || (this._alerted || (this._alerted = new Set())).has(ready.id)) return;
     this._alerted.add(ready.id);
@@ -131,6 +140,7 @@ export class FarmUI {
   _infoBox(bd, compact = false) {
     const e = this.eco, k = e.cat(bd.type), a = e.cat(k.animal), I = e.shelterInfo(bd);
     if (I.nests) return this._coopBox(bd, k, a, I, compact);
+    if (a && a.grow) return this._stableBox(bd, k, a, I, compact);
     const prods = I.products.length ? I.products : (a.product ? [a.product] : []), noun = NOUN[prods[0]] || 'product';
     const row = (l, v, cls = '') => `<div class="fi-r ${cls}"><span>${l}</span><b>${v}</b></div>`;
     let h = `<div class="fi-t">${a.icon} ${FARM_TITLE[bd.type] || k.name.toUpperCase()} <small>plot ${bd.plot + 1}</small></div>`;
@@ -178,6 +188,17 @@ export class FarmUI {
     const health = x => `<span class="fu-sub">❤ ${bar(x.health, x.health > 50 ? '#5bd16a' : x.health > 25 ? '#f2c14e' : '#ff5a4a')}</span>`;
     return list.map((x, i) => {
       const c = e.cat(x.type), fu = x.fedUntil ? Date.parse(x.fedUntil) : 0, fed = fu > now;
+      if (c.grow) {                                   // a horse: its level, growing while fed; out on rent; sell it
+        const hs = e.horseOf(x, now), price = e.horsePrice(c, hs.level), at = ms => new Date(e.serverNow() + ms).toISOString();
+        const col = hs.away ? 'blue' : hs.ready ? 'blue' : !hs.fed ? 'red' : 'green';
+        const what = hs.away ? `Out on rent — back in <b data-cd="${x.rentedUntil}" data-re="1">${clock(hs.backMs)}</b>` : hs.ready ? 'Ready to rent or sell'
+          : !hs.fed ? 'Hungry — not growing' : `Level ${hs.level + 1} in <b data-cd="${at(hs.nextMs)}" data-re="1">${clock(hs.nextMs)}</b>`;
+        const sell = hs.away ? '' : this._confirm === x.id ? `<button class="fu-go sell" data-x="sellhorse" data-a="${x.id}" ${this.busy ? 'disabled' : ''}>Sure? Sell · ₹${price}</button>`
+          : `<button class="fu-go alt" data-x="sellask" data-a="${x.id}">Sell · ₹${price}</button>`;
+        return `<div class="fu-row small hen ${col}"><span class="fu-ico">🐎</span><span class="fu-main"><span class="fu-name">${coat(c)}${esc(c.variety || c.name)} <small>#${i + 1} · Level ${hs.level} / ${hs.max}${hs.level <= 3 ? ' · baby' : ''}</small></span>
+          <span class="fu-sub"><span class="hen-t">${what}</span> ${bar(hs.pct * 100, { blue: '#5aa9ff', red: '#ff5a4a', green: '#5bd16a' }[col])}</span>
+          <span class="fu-sub">${hs.away ? 'looked after by the renter' : hs.fed ? `fed ${clock(hs.fedMs)}` : '<b class="fu-need">hungry</b>'}</span></span>${health(x)}${sell}</div>`;
+      }
       if (c.nest) {                                   // a chicken: its own egg timer and nest box
         const n = e.nestOf(x, now), col = !n.fed ? 'red' : n.full ? 'blue' : n.nextMs < 30e3 ? 'yellow' : 'green';
         const what = !n.fed ? 'Feed required' : n.full ? 'Nest full — collect the eggs' : `Next egg in ${clock(n.nextMs)}`;
@@ -243,6 +264,15 @@ export class FarmUI {
   // one animal for sale (shelter: put it in this shelter first)
   _animalRow(k, shelter) {
     const e = this.eco, free = e.freeFor(k.id), home = e.cat(k.shelter), open = e.unlocked(k.id);
+    if (k.grow && k.foal) {                           // a horse: buy a baby (Level 1) or a grown one (Level 10)
+      const note = free ? `${free} free place${free > 1 ? 's' : ''} in your stables` : 'needs a horse stable with room (build one on a plot)';
+      const off = p => (!free || e.money < p || this.busy ? 'disabled' : '');
+      return `<div class="fu-row"><span class="fu-ico">🐎</span><span class="fu-main"><span class="fu-name">${coat(k)}${esc(k.name)} <small>${esc(k.tier || '')}</small></span>
+        <span class="fu-sub">A baby grows to Level ${k.maxLevel} in about ${Math.round((k.maxLevel - 1) / k.grow)} h of feeding (${k.feedCost} feed / ${k.feedHours} h) · rents for ₹${k.rent} per 2 h · sells for up to ₹${e.horsePrice(k, k.maxLevel)}</span>
+        <span class="fu-sub">${note}</span></span>
+        <button class="fu-go alt" data-x="buy" data-i="${k.id}" data-q="1" data-age="foal" ${shelter ? `data-s="${shelter}"` : ''} ${off(k.foal)}>Baby · ₹${k.foal}</button>
+        <button class="fu-go" data-x="buy" data-i="${k.id}" data-q="1" ${shelter ? `data-s="${shelter}"` : ''} ${off(k.buy)}>Grown · ₹${k.buy}</button></div>`;
+    }
     const p = k.product && e.cat(k.product);
     const every = k.rate ? 1 / k.rate : 0, pace = !every ? '' : every === 1 ? '1 an hour' : every < 1 ? `1 every ${Math.round(every * 60)} min` : `1 every ${+every.toFixed(1)} h`;
     const what = p ? `${p.name.toLowerCase()}: ${pace} while fed · ₹${p.sell} each` : 'rides and pulls carts later';
@@ -295,7 +325,7 @@ export class FarmUI {
     const cycle = O.streak.days ? ((O.streak.days - 1) % O.streakDays) + 1 : 0;
     const dots = Array.from({ length: O.streakDays }, (_, i) => `<i class="${i < cycle ? 'on' : ''}"></i>`).join('');
     let h = `<div class="or-head">📜 Today's orders <small>· ends at midnight (India time) in <b data-cd="${O.endsAt}">${clock(o.endsMs)}</b></small></div>
-      <div class="or-streak"><span>🔥 ${O.streak.days}-day streak</span><span class="or-dots">${dots}</span>
+      <div class="or-streak"><span>🔥 ${O.streak.days ? `${O.streak.days}-day streak` : 'Start a streak'}</span><span class="or-dots">${dots}</span>
         <small>${O.streak.today ? 'today ✓ — come back tomorrow' : O.streak.days ? 'deliver an order today to keep it' : 'deliver an order every day'} · ₹${O.bonus} bonus every ${O.streakDays}th day</small></div>`;
     const card = (x, live) => {
       let have = true;
@@ -312,7 +342,44 @@ export class FarmUI {
     else if (o.next) h += `<div class="or-wait">⏳ The next order arrives in <b data-cd="${o.next.availableAt}" data-re="1">${clock(Date.parse(o.next.availableAt) - e.serverNow())}</b></div>`;
     else if (o.done.length >= O.perDay) h += `<div class="or-wait done">✅ All ${O.perDay} orders delivered today — new orders tomorrow.</div>`;
     for (const x of o.done) h += `<div class="or-past">✓ Order ${x.n} · ${esc(x.customer)} · ₹${x.pay}${x.doneBy ? ` · delivered by ${esc(x.doneBy)}` : ''}</div>`;
-    return h + '<div class="fu-sub">Orders ask for what your farm can make — eggs, milk and fish. Deliver at least one a day to build the streak.</div>';
+    h += '<div class="fu-sub">Orders ask for what your farm can make — eggs, milk and fish. Deliver at least one a day to build the streak.</div>';
+    const R = e.rentals();
+    return R ? h + this._rentals(R) : h;
+  }
+  // horse rental requests: hand the horses over (the farm is paid at once); horses out on rent and when they're back
+  _rentals(R) {
+    const e = this.eco, now = e.serverNow();
+    const offers = R.filter(r => r.status === 'offer' && Date.parse(r.expiresAt) > now), away = R.filter(r => r.status === 'active' && Date.parse(r.returnsAt) > now);
+    let h = '<div class="or-head" style="margin-top:12px">🐎 Horse rental requests</div>';
+    for (const r of offers) {
+      const k = r.variety && e.cat(r.variety), free = e.freeHorses(r.variety), ok = free >= r.horses, what = `${k ? esc(k.name.toLowerCase()) : 'horse'}${r.horses > 1 ? 's' : ''}`;
+      h += `<div class="or-card horse"><div class="or-t">${esc(r.renter)} wants ${r.horses} ${what} for ${r.hours} h</div>
+        <div class="fu-sub">${esc(r.purpose)}${k ? ` — it has to be ${coat(k)}${esc(k.variety)}` : ' — any colour'} · the request ends in <b data-cd="${r.expiresAt}" data-re="1">${clock(Date.parse(r.expiresAt) - now)}</b></div>
+        <div class="or-pay">Pays <b>₹${r.pay}</b> <small>now, when you hand ${r.horses > 1 ? 'them' : 'it'} over</small></div>
+        <button class="fu-go wide" data-x="rent" data-r="${r.id}" ${!ok || this.busy ? 'disabled' : ''}>${ok ? `🐎 Hand over ${r.horses} horse${r.horses > 1 ? 's' : ''} · ₹${r.pay}` : `Needs ${r.horses} Level 10 ${what} at home — you have ${free}`}</button></div>`;
+    }
+    for (const r of away) h += `<div class="or-past">🐎 ${r.horses} horse${r.horses > 1 ? 's' : ''} with ${esc(r.renter)} — back in <b data-cd="${r.returnsAt}" data-re="1">${clock(Date.parse(r.returnsAt) - now)}</b>${r.by ? ` · handed over by ${esc(r.by)}` : ''}</div>`;
+    if (!offers.length) h += `<div class="fu-sub">${e.freeHorses() ? 'Customers ask to rent horses now and then (about every 1–2 hours) while you have Level 10 horses at home.' : 'Raise a horse to Level 10 at a stable (or buy a grown one) — then customers ask here to rent it.'}</div>`;
+    return h;
+  }
+  // a stable: horses, how many are ready (Level 10 at home), out on rent, the next level, feeding
+  _stableBox(bd, k, a, I, compact) {
+    const e = this.eco, now = e.serverNow(), feed = e.qty('feed'), hs = e.animalsIn(bd.id).map(x => e.horseOf(x, now));
+    const row = (l, v, cls = '') => `<div class="fi-r ${cls}"><span>${l}</span><b>${v}</b></div>`;
+    let h = `<div class="fi-t">🐎 ${FARM_TITLE[bd.type] || k.name.toUpperCase()} <small>plot ${bd.plot + 1}</small></div>`;
+    h += row('Total horses', `${I.count} / ${k.capacity}`);
+    if (!I.count) return h + '<div class="fi-note">No horses yet — buy a baby horse or a grown one from the farmer at the Farm Store.</div>';
+    const ready = hs.filter(x => x.ready).length, away = hs.filter(x => x.away).length, next = Math.min(...hs.map(x => x.nextMs));
+    const growing = hs.filter(x => x.level < x.max).length;
+    const st = I.paused ? ['red', '⚠ Feed required'] : ready ? ['blue', `🐎 ${ready} ready to rent or sell`] : isFinite(next) ? ['green', '🌱 Growing'] : ['red', '⚠ Feed required'];
+    h += `<div class="fi-st ${st[0]}">${st[1]}</div>`;
+    h += row('Levels', hs.map(x => x.level).join(' · '), 'fi-opt');
+    h += row(compact ? 'Ready (Lv 10)' : 'Ready (Level 10, at home)', ready, ready ? 'blue' : '');
+    if (away) h += row('Out on rent', away, 'blue');
+    if (growing) h += row('Next level in', isFinite(next) ? clock(next) : 'feed first', isFinite(next) ? 'green' : 'bad');
+    h += row(compact ? 'Feeding left' : 'Feeding remaining', I.dueMs <= 0 ? `Feed required · ${I.hungry} hungry` : clock(I.dueMs), I.dueMs <= 0 ? 'bad' : I.dueMs < 15 * 60e3 ? 'warn' : 'green');
+    h += row(compact ? 'Feed needed' : 'Feed required / available', `${I.need} · 🌾 ${feed}`, feed < I.need ? 'bad' : '');
+    return h;
   }
   // the farm storage: what it holds, the next level, and storing logs / stones from the team's materials
   _storage() {
@@ -355,10 +422,11 @@ export class FarmUI {
     const e = this.eco, k = e.cat(bd.type), a = e.cat(k.animal), list = e.animalsIn(bd.id), free = k.capacity - list.length;
     const kinds = e.items('animal').filter(x => x.shelter === bd.type);
     const how = a.nest ? `🌾 Feed them at the trough inside the pen: open the gate, walk to the trough and press E. One feed keeps a chicken laying for ${a.feedMinutes >= 60 ? `${a.feedMinutes / 60} h` : `${a.feedMinutes} min`}; each one has its own egg timer. Eggs wait in the nest boxes (up to ${a.nest} each) until someone collects them — a full nest stops laying.`
+      : a.grow ? `🌾 Feed them at the trough inside the pen (open the gate, walk to the trough, press E). A fed horse grows a level every ${Math.round(1 / a.grow)} h, up to Level ${a.maxLevel}. Level ${a.maxLevel} horses can be rented out — customers ask at the Market's Orders tab — or sold here; older and rarer horses sell for more.`
       : `🌾 Feed them at the trough inside the pen: open the gate, walk to the trough and press E. Fed animals produce for ${a.feedHours || 2} h; hungry ones stop and get weak after a day.`;
     return `<div class="fi-box fi-live" data-b="${bd.id}">${this._infoBox(bd)}</div>
       <div class="fu-sub">${how}</div>
-      <div class="fu-animals" data-b="${bd.id}">${this._animalRows(bd)}</div>
+      <div class="${a.grow ? 'fu-horses' : 'fu-animals'}" data-b="${bd.id}">${this._animalRows(bd)}</div>
       ${free > 0 ? `<div class="fu-sub" style="margin-top:8px"><b>Add ${plural(kind(a))} to this ${k.name.toLowerCase()} (${free} free)</b></div>${kinds.map(x => this._animalRow(x, bd.id)).join('')}` : '<div class="fu-sub">This shelter is full. Build another on an empty plot.</div>'}`;
   }
   // the feeding trough: feed everyone, or only some (the hungriest first). The server checks the feed.
@@ -387,7 +455,10 @@ export class FarmUI {
       this.qty[k] = Math.max(1, Math.min(Number(b.dataset.max || 1e9), cur + (x === 'inc' ? step : -step)));
       this.render(); return;
     }
-    if (x === 'buy') await this._do({ action: 'buy', item: b.dataset.i, qty: Number(b.dataset.q), ...(b.dataset.s ? { shelter: b.dataset.s } : {}) });
+    if (x === 'sellask') { this._confirm = b.dataset.a; this.render(); return; }
+    if (x === 'buy') await this._do({ action: 'buy', item: b.dataset.i, qty: Number(b.dataset.q), ...(b.dataset.s ? { shelter: b.dataset.s } : {}), ...(b.dataset.age ? { age: b.dataset.age } : {}) });
+    else if (x === 'sellhorse') await this._do({ action: 'sellhorse', animal: b.dataset.a }, () => { this._confirm = null; });
+    else if (x === 'rent') await this._do({ action: 'rent', offer: b.dataset.r });
     else if (x === 'sell') await this._do({ action: 'sell', item: b.dataset.i, qty: Number(b.dataset.q) }, () => { delete this.qty['s:' + b.dataset.i]; });
     else if (x === 'build') await this._do({ action: 'build', type: b.dataset.t, plot: this.arg }, r => { const bd = r.buildings.find(q => q.plot === this.arg); if (bd) { this.view = 'shelter'; this.arg = bd; } });
     else if (x === 'upgrade') await this._do({ action: 'upgrade', target: 'storage', level: Number(b.dataset.l) });

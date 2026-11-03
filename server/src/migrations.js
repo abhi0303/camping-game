@@ -277,6 +277,47 @@ CREATE TABLE farm_orders (
 ALTER TABLE rooms ADD COLUMN order_streak INTEGER NOT NULL DEFAULT 0, ADD COLUMN order_streak_day DATE;
 `,
   },
+  {
+    id: 7,
+    name: 'horses_levels_rentals',
+    sql: `
+-- horses in six colours: bought as a baby (data.foal, Level 1) or grown (buy_price, Level 10); a fed horse grows
+-- a level every 2 hours (data.grow levels an hour); Level 10 horses are rented out for data.rent per 2 hours
+ALTER TABLE animals ADD COLUMN level SMALLINT NOT NULL DEFAULT 1 CHECK (level BETWEEN 1 AND 10), ADD COLUMN rented_until TIMESTAMPTZ;
+INSERT INTO catalog (item, kind, name, icon, buy_price, sell_price, data, sort) VALUES
+  ('horse_bay',      'animal', 'Bay horse',      '🐎', 600,  NULL, '{"shelter": "stable", "feedCost": 2, "feedHours": 2, "grow": 0.5, "maxLevel": 10, "foal": 150, "rent": 50, "variety": "Bay", "tier": "Common", "coat": "#7a4a2a"}', 6),
+  ('horse_chestnut', 'animal', 'Chestnut horse', '🐎', 600,  NULL, '{"shelter": "stable", "feedCost": 2, "feedHours": 2, "grow": 0.5, "maxLevel": 10, "foal": 150, "rent": 50, "variety": "Chestnut", "tier": "Common", "coat": "#a0522d"}', 7),
+  ('horse_black',    'animal', 'Black horse',    '🐎', 800,  NULL, '{"shelter": "stable", "feedCost": 2, "feedHours": 2, "grow": 0.5, "maxLevel": 10, "foal": 220, "rent": 65, "variety": "Black", "tier": "Uncommon", "coat": "#24211f"}', 8),
+  ('horse_white',    'animal', 'White horse',    '🐎', 800,  NULL, '{"shelter": "stable", "feedCost": 2, "feedHours": 2, "grow": 0.5, "maxLevel": 10, "foal": 220, "rent": 65, "variety": "White", "tier": "Uncommon", "coat": "#e6e2da"}', 9),
+  ('horse_palomino', 'animal', 'Golden horse',   '🐎', 1100, NULL, '{"shelter": "stable", "feedCost": 2, "feedHours": 2, "grow": 0.5, "maxLevel": 10, "foal": 320, "rent": 85, "variety": "Golden (Palomino)", "tier": "Rare", "coat": "#d9a646"}', 10),
+  ('horse_pinto',    'animal', 'Spotted horse',  '🐎', 1100, NULL, '{"shelter": "stable", "feedCost": 2, "feedHours": 2, "grow": 0.5, "maxLevel": 10, "foal": 320, "rent": 85, "variety": "Spotted (Pinto)", "tier": "Rare", "coat": "#f0ece4"}', 11);
+-- horses bought before are grown bay horses; a stable now holds 4 (babies need room too)
+UPDATE animals SET type = 'horse_bay', level = 10 WHERE type = 'horse';
+UPDATE catalog SET data = data || '{"capacity": 4, "animal": "horse_bay"}' WHERE item = 'stable';
+DELETE FROM catalog WHERE item = 'horse';
+
+-- rental requests: an offer waits for a player to hand the horses over; then they are away until returns_at
+ALTER TABLE rooms ADD COLUMN next_rental_at TIMESTAMPTZ;
+CREATE TABLE horse_rentals (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  room_id     UUID NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
+  renter      TEXT NOT NULL,
+  purpose     TEXT NOT NULL,
+  horses      SMALLINT NOT NULL CHECK (horses BETWEEN 1 AND 4),
+  variety     TEXT,                                  -- a certain colour (catalog item), or NULL: any horse
+  hours       SMALLINT NOT NULL CHECK (hours BETWEEN 1 AND 24),
+  pay         INTEGER NOT NULL CHECK (pay > 0),
+  status      TEXT NOT NULL DEFAULT 'offer' CHECK (status IN ('offer', 'active', 'done', 'expired')),
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  expires_at  TIMESTAMPTZ NOT NULL,
+  accepted_at TIMESTAMPTZ,
+  returns_at  TIMESTAMPTZ,
+  horse_ids   UUID[],
+  accepted_by UUID REFERENCES room_members(id) ON DELETE SET NULL
+);
+CREATE INDEX horse_rentals_room_idx ON horse_rentals (room_id, status);
+`,
+  },
 ];
 
 const LOCK_ID = 727001;   // advisory lock: two migrate runs never overlap

@@ -136,6 +136,31 @@ export class FarmEconomy {
     out.soon = out.nextMs < 30e3;
     return out;
   }
+  // a horse right now (from the server's level, growth and fedUntil, and its clock): { level, max, pct (to the next
+  // level), fed, away (out on rent), backMs, nextMs (to the next level; Infinity when not growing), ready (Level 10 at home) }
+  horseOf(a, now = this.serverNow()) {
+    const c = this.cat(a.type) || {}, at = Date.parse(this.st.at), fu = a.fedUntil ? Date.parse(a.fedUntil) : -Infinity, max = c.maxLevel || 10;
+    const per = (c.grow || 0) * (a.health / 100) / HOUR;
+    let level = a.level || 1, p = a.progress || 0;
+    if (level < max && per > 0) {
+      p += per * Math.max(0, Math.min(now, fu) - at);
+      const up = Math.floor(p + 1e-9);
+      level = Math.min(max, level + up); p = level >= max ? 0 : p - up;
+    }
+    const ru = a.rentedUntil ? Date.parse(a.rentedUntil) : 0, away = ru > now, fed = fu > now;
+    return { level, max, pct: level >= max ? 1 : p, fed, away, backMs: away ? ru - now : 0, fedMs: fed ? fu - now : 0,
+      nextMs: fed && level < max && per > 0 ? (1 - p) / per : Infinity, ready: level >= max && !away };
+  }
+  // what a horse sells for at a level (the server's rule: 70 % of the baby price at Level 1 … 80 % of the grown price at 10)
+  horsePrice(k, level) { const lo = k.foal * 0.7, hi = k.buy * 0.8; return Math.round(lo + (hi - lo) * (Math.min(10, Math.max(1, level)) - 1) / 9); }
+  // Level 10 horses at home (of one colour, or any)
+  freeHorses(type) {
+    if (!this.st) return 0;
+    const now = this.serverNow();
+    return this.st.animals.filter(a => (type ? a.type === type : (this.cat(a.type) || {}).grow) && this.horseOf(a, now).ready).length;
+  }
+  // horse rental requests and horses out on rent (null on an older server)
+  rentals() { return this.st && this.st.rentals ? this.st.rentals : null; }
   // Market orders (server state, or null on an older server): the order to deliver now, the next one's arrival
   orders() { return this.st && this.st.orders ? this.st.orders : null; }
   orderNow() {
