@@ -11,6 +11,7 @@ import { member } from './rooms.js';
 import { PLOTS } from './layout.js';
 import { withAnimalConfig } from './animals.js';
 import { cast, reel, buyRod, fishingState } from './fishing.js';
+import { ensureOrders, ordersState, deliver } from './orders.js';
 
 const H = 3600e3;
 const MAX_OFFLINE_H = 24 * 7;          // production is counted for at most a week of absence
@@ -110,6 +111,7 @@ async function settle(c, roomId, cat) {
 }
 
 async function state(c, roomId, cat, s, me) {
+  await ensureOrders(c, roomId, cat, s);
   const blds = await c.rows('SELECT id, type, plot, level, x, z, yaw, gate_open FROM buildings WHERE room_id = $1 ORDER BY plot', [roomId]);
   const ans = await c.rows('SELECT id, type, shelter_id, health, hunger, progress, ready, fed_until, born_at FROM animals WHERE room_id = $1 ORDER BY born_at, id', [roomId]);
   const inventory = {}, caps = {};
@@ -122,6 +124,7 @@ async function state(c, roomId, cat, s, me) {
       ready: a.ready, fedUntil: a.fed_until ? a.fed_until.toISOString() : null, born: a.born_at })),
     catalog: cat, plots: PLOTS.length,
     fishing: me ? await fishingState(c, roomId, me.id) : null,
+    orders: await ordersState(c, roomId, s),
   };
 }
 
@@ -347,4 +350,4 @@ async function gate(c, { me, b }) {
   return { money: 0, items: [], detail: { shelter, open }, message: `${me.name} ${open ? 'opened' : 'closed'} the gate of plot ${r.plot + 1}` };
 }
 
-const ACTIONS = { buy, sell, build, deposit, feed, upgrade, gate, collect, cast, reel, rod: buyRod };
+const ACTIONS = { buy, sell, build, deposit, feed, upgrade, gate, collect, cast, reel, rod: buyRod, order: deliver };

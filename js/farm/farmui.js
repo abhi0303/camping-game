@@ -34,6 +34,7 @@ const STORE_MENU = [
   ['feed', '🌾', 'Purchase animal feed', 'for every animal on the farm'],
   ['supplies', '🧰', 'Purchase farming supplies', 'seeds and tools'],
   ['materials', '🧱', 'Purchase construction materials', 'wood and stone for shelters'],
+  ['orders', '📜', 'Customer orders', 'deliver goods for 10% more · daily streak bonus'],
 ];
 const VEHICLES_UNLOCKED = false;      // (vehicles are not sold yet — the menu shows them once they are)
 
@@ -52,7 +53,7 @@ export class FarmUI {
   open(view, arg) {
     if (!this.eco.ready) { this.g.toast('🌾 The farm is still loading…'); this.eco.load(); return; }
     this.view = view; this.arg = arg; this.msg = ''; this.qty = {}; this.hist = null;
-    this.tab = view === 'market' ? 'sell' : null;
+    this.tab = view === 'market' ? 'orders' : null;
     if (!this.isOpen) { this.isOpen = true; this.root.classList.remove('hidden'); this.g.hooks.onOpen && this.g.hooks.onOpen(); }
     this.render();
   }
@@ -74,6 +75,8 @@ export class FarmUI {
       const n = e.qty(k), c = e.cat(k);
       if (c && (n || e.makesPerHour(k) > 0)) parts.push(`<span title="${esc(c.name)}">${c.icon} ${n}</span>`);
     }
+    const ord = e.orderNow();
+    if (ord.ready) parts.push(`<span title="An order is waiting at the Market" class="order">📜 <small>order ₹${ord.ready.pay}</small></span>`);
     const nests = Object.values(e.eggsReady()).reduce((t, v) => t + v, 0);
     if (nests) parts.push(`<span title="Eggs waiting in the nest boxes — collect them at the coops" class="ready">🪺 ${nests} <small>ready</small></span>`);
     const html = parts.join('');
@@ -106,7 +109,24 @@ export class FarmUI {
       const bd = this.eco.st.buildings.find(b => b.id === el.dataset.b);
       if (bd) { const h = this._animalRows(bd); if (el.innerHTML !== h) el.innerHTML = h; }
     }
-    if (this._barOn) this.renderBar(true);
+    if (this.isOpen) {
+      let due = false;
+      for (const el of this.body.querySelectorAll('[data-cd]')) {
+        const ms = Date.parse(el.dataset.cd) - this.eco.serverNow();
+        if (ms <= 0 && el.dataset.re) due = true;
+        const t = clock(ms); if (el.textContent !== t) el.textContent = t;
+      }
+      if (due) this.render();
+    }
+    if (this._barOn) { this.renderBar(true); this._orderAlert(); }
+  }
+  // a new order is ready: tell the players once
+  _orderAlert() {
+    const { ready } = this.eco.orderNow();
+    if (!ready || (this._alerted || (this._alerted = new Set())).has(ready.id)) return;
+    this._alerted.add(ready.id);
+    const e = this.eco, what = ready.items.map(x => `${x.qty} ${(e.cat(x.item) || {}).name || x.item}`.toLowerCase()).join(', ');
+    this.g.toast(`📜 New order at the Market from ${ready.customer}: ${what} — pays ₹${ready.pay}`);
   }
   _infoBox(bd, compact = false) {
     const e = this.eco, k = e.cat(bd.type), a = e.cat(k.animal), I = e.shelterInfo(bd);
@@ -216,6 +236,7 @@ export class FarmUI {
     if (this.tab === 'sell') return back + this._sellRows();
     if (this.tab === 'feed') return back + this._goodRows(['feed']) + '<div class="fu-sub">Each animal eats its feed at the trough: one feeding keeps it fed (and producing) for 2 hours.</div>';
     if (this.tab === 'materials') return back + this._goodRows(['wood', 'stone']) + '<div class="fu-sub">Or chop trees and break rocks, then store the logs and stones at the farm storage — it\'s free.</div>';
+    if (this.tab === 'orders') return back + this._orders();
     if (this.tab === 'supplies') return back + '<div class="fu-row"><span class="fu-ico">🌱</span><span class="fu-main"><span class="fu-name">Nothing in stock yet</span><span class="fu-sub">Seeds and tools come with the crop fields. Feed is under “Purchase animal feed”.</span></span></div>';
     return back;
   }
@@ -254,7 +275,8 @@ export class FarmUI {
   }
   // the Market: where the farm's produce is sold; prices and the trade log (buying is at the Farm Store)
   _market() {
-    const e = this.eco, tabs = this._tabs([['sell', '💰 Sell produce'], ['prices', '📈 Prices'], ['log', '📜 Trade log']]);
+    const e = this.eco, tabs = this._tabs([['orders', '📜 Orders'], ['sell', '💰 Sell produce'], ['prices', '📈 Prices'], ['log', '🧾 Trade log']]);
+    if (this.tab === 'orders') return tabs + this._orders();
     if (this.tab === 'log') {
       if (!this.hist) { this.eco.history().then(h => { this.hist = h; this.render(); }, () => { this.hist = []; this.render(); }); return tabs + '<div class="fu-sub">Loading…</div>'; }
       return tabs + `<div class="fu-hist">${this.hist.length ? this.hist.map(h => `<div><span>${esc(h.message)}</span> <small>${ago(h.at)}</small></div>`).join('') : '<div class="fu-sub">Nothing bought or sold yet.</div>'}</div>`;
@@ -265,6 +287,32 @@ export class FarmUI {
         <table class="fu-table"><tr><th>Item</th><th>Buy</th><th>Sell</th><th>Farm has</th></tr>${rows}</table>`;
     }
     return tabs + this._sellRows() + '<div class="fu-sub">Fed chickens lay into their nest boxes (collect the eggs at the coop); milk goes straight into the farm storage — even while nobody is playing.</div>';
+  }
+  // customer orders (Market / farmer's menu): the order to deliver now, the next one's arrival, the streak
+  _orders() {
+    const e = this.eco, o = e.orderNow(), O = o.O;
+    if (!O) return '<div class="fu-sub">Customer orders start as soon as the farm server is updated.</div>';
+    const cycle = O.streak.days ? ((O.streak.days - 1) % O.streakDays) + 1 : 0;
+    const dots = Array.from({ length: O.streakDays }, (_, i) => `<i class="${i < cycle ? 'on' : ''}"></i>`).join('');
+    let h = `<div class="or-head">📜 Today's orders <small>· ends at midnight (India time) in <b data-cd="${O.endsAt}">${clock(o.endsMs)}</b></small></div>
+      <div class="or-streak"><span>🔥 ${O.streak.days}-day streak</span><span class="or-dots">${dots}</span>
+        <small>${O.streak.today ? 'today ✓ — come back tomorrow' : O.streak.days ? 'deliver an order today to keep it' : 'deliver an order every day'} · ₹${O.bonus} bonus every ${O.streakDays}th day</small></div>`;
+    const card = (x, live) => {
+      let have = true;
+      const rows = x.items.map(it => {
+        const k = e.cat(it.item) || {}, n = e.qty(it.item), ok = n >= it.qty; have = have && ok;
+        return `<div class="or-item ${ok ? 'ok' : 'need'}"><span>${k.icon || ''} ${esc(k.name || it.item)}</span><b>${Math.min(n, it.qty)} / ${it.qty}</b></div>`;
+      }).join('');
+      const base = x.items.reduce((t, it) => t + ((e.cat(it.item) || {}).sell || 0) * it.qty, 0);
+      return `<div class="or-card${live ? '' : ' done'}"><div class="or-t">Order ${x.n} of ${O.perDay} · ${esc(x.customer)}</div>${rows}
+        <div class="or-pay">Pays <b>₹${x.pay}</b> <small>(₹${base} + ${Math.round(O.extra * 100)}% for the order)</small></div>
+        ${live ? `<button class="fu-go wide" data-x="order" data-o="${x.id}" ${!have || this.busy ? 'disabled' : ''}>${have ? `📦 Deliver order · ₹${x.pay}` : 'Collect the goods first — they go from the farm storage'}</button>` : ''}</div>`;
+    };
+    if (o.ready) h += card(o.ready, true);
+    else if (o.next) h += `<div class="or-wait">⏳ The next order arrives in <b data-cd="${o.next.availableAt}" data-re="1">${clock(Date.parse(o.next.availableAt) - e.serverNow())}</b></div>`;
+    else if (o.done.length >= O.perDay) h += `<div class="or-wait done">✅ All ${O.perDay} orders delivered today — new orders tomorrow.</div>`;
+    for (const x of o.done) h += `<div class="or-past">✓ Order ${x.n} · ${esc(x.customer)} · ₹${x.pay}${x.doneBy ? ` · delivered by ${esc(x.doneBy)}` : ''}</div>`;
+    return h + '<div class="fu-sub">Orders ask for what your farm can make — eggs, milk and fish. Deliver at least one a day to build the streak.</div>';
   }
   // the farm storage: what it holds, the next level, and storing logs / stones from the team's materials
   _storage() {
@@ -344,6 +392,7 @@ export class FarmUI {
     else if (x === 'build') await this._do({ action: 'build', type: b.dataset.t, plot: this.arg }, r => { const bd = r.buildings.find(q => q.plot === this.arg); if (bd) { this.view = 'shelter'; this.arg = bd; } });
     else if (x === 'upgrade') await this._do({ action: 'upgrade', target: 'storage', level: Number(b.dataset.l) });
     else if (x === 'rod') await this._do({ action: 'rod', level: Number(b.dataset.l) });
+    else if (x === 'order') await this._do({ action: 'order', order: b.dataset.o });
     else if (x === 'feedall') await this._do({ action: 'feed', shelter: this.arg.id, all: true }, null, () => this._started());
     else if (x === 'feedn') await this._do({ action: 'feed', shelter: this.arg.id, count: Number(b.dataset.q) }, () => { delete this.qty.f; }, () => this._started());
     else if (x === 'collect') await this._do({ action: 'collect', shelter: b.dataset.b }, r => this.g.onCollect && this.g.onCollect(r));

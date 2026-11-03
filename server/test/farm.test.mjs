@@ -351,7 +351,7 @@ test('upgrade from older databases: migration 1 only, 2 with animals and buildin
       const env2 = { ...env, __pool: p2 };
       const r = await worker.fetch(new Request('http://api.test/v1/health'), env2, {});
       assert.equal(r.status, 200);
-      assert.deepEqual((await p2.query('SELECT id FROM schema_migrations ORDER BY id')).rows.map(x => x.id), [1, 2, 3, 4, 5]);
+      assert.deepEqual((await p2.query('SELECT id FROM schema_migrations ORDER BY id')).rows.map(x => x.id), [1, 2, 3, 4, 5, 6]);
       const rm = (await p2.query('SELECT money, storage_level, total_earned FROM rooms')).rows[0];
       assert.deepEqual([Number(rm.money), rm.storage_level, Number(rm.total_earned)], [upTo === 4 ? 500 + 50 + 56 : 500, 1, upTo === 2 ? 42 : 0]);
       if (upTo >= 2) {
@@ -602,4 +602,117 @@ test('fishing rods: buy Level 2 then Level 3 with the farm money, in order, once
   const spec = { seed: (await lastCast(w)).seed, fish: 'fish_large', rod: 3, pulls: 6 };
   r = await act(w, { action: 'reel', cast: c.cast, log: play(spec).log });
   assert.deepEqual([r.body.result.caught, r.body.result.value, r.body.inventory.fish_large], [true, 14, 1]);
+});
+
+
+/* ---------- Market orders ---------- */
+import { makeOrder, istDay, istDayEnd, ORDERS } from '../src/orders.js';
+const dayBack = (d, n = 1) => new Date(Date.parse(d + 'T00:00:00Z') - n * 86400e3).toISOString().slice(0, 10);
+const openOrder = async w => (await farm(w)).body.orders.list.find(o => o.status === 'open');
+// put exactly what an order asks for into the farm storage
+const stock = async (w, o) => { for (const x of o.items) await setInv(w, x.item, x.qty); };
+
+test('orders ask only for what the farm can make, sized to it, paying 10 % more', async () => {
+  const w = await world();
+  const cat = (await farm(w)).body.catalog;
+  let x = 3; const r = () => (x = (x * 16807) % 2147483647) / 2147483647;
+  for (let i = 0; i < 200; i++) {
+    // no animals: fish only, the kinds the members' rods catch easily
+    let o = makeOrder(cat, [], 1, 1, r);
+    assert.ok(o.items.length === 1 && o.items[0].item === 'fish_small', JSON.stringify(o));
+    o = makeOrder(cat, [], 2, 1, r);
+    assert.ok(o.items.every(it => /^fish_(small|medium)$/.test(it.item)), JSON.stringify(o));
+    // chickens and a cow: their eggs and milk (plus sometimes one kind of fish); never goat milk
+    o = makeOrder(cat, [{ type: 'chicken' }, { type: 'chicken' }, { type: 'chicken_brown' }, { type: 'cow' }], 3, 1, r);
+    assert.ok(o.items.length >= 2 && o.items.length <= 3 && new Set(o.items.map(it => it.item)).size === o.items.length);
+    assert.ok(o.items.every(it => ['egg', 'egg_brown', 'cow_milk'].includes(it.item) || it.item.startsWith('fish_')), JSON.stringify(o));
+    assert.ok(o.items.filter(it => !it.item.startsWith('fish_')).length >= 2);
+    assert.ok(o.items.every(it => it.qty >= 1 && it.qty <= 30));
+    const value = o.items.reduce((t, it) => t + cat[it.item].sell * it.qty, 0);
+    assert.equal(o.pay, Math.ceil(value * 1.1));
+  }
+  assert.deepEqual([istDay(Date.UTC(2026, 10, 3, 18, 29)), istDay(Date.UTC(2026, 10, 3, 18, 31))], ['2026-11-03', '2026-11-04']);   // midnight IST = 18:30 UTC
+  assert.equal(new Date(istDayEnd(Date.UTC(2026, 10, 3, 10))).toISOString(), '2026-11-03T18:30:00.000Z');
+});
+
+test('orders: one at a time, deliver from storage, the next comes 30–60 min later, 3 a day', async () => {
+  const w = await world(), p2 = await addMember(w, 'Rahul');
+  let f = (await farm(w)).body;
+  assert.equal(f.orders.day, istDay(Date.now())); assert.equal(f.orders.list.length, 1);
+  assert.equal(Date.parse(f.orders.endsAt), istDayEnd(Date.now()));
+  let o = f.orders.list[0];
+  assert.equal(o.status, 'open'); assert.equal(o.n, 1); assert.ok(o.customer && o.pay > 0);
+  assert.deepEqual(o.items.map(it => it.item), ['fish_small']);           // a new farm: no animals yet, the Basic rod
+  let r = await act(w, { action: 'order', order: o.id });
+  assert.equal(r.body.error.code, 'not_enough'); assert.match(r.body.error.message, /Still needed: \d+ small fish/);
+  await stock(w, o);
+  const money0 = f.money;
+  // two players deliver at the same moment: paid once
+  const [a, b] = await Promise.all([act(w, { action: 'order', order: o.id }), act(p2, { action: 'order', order: o.id })]);
+  assert.equal([a, b].filter(x => x.status === 200).length, 1, JSON.stringify([a.body.error, b.body.error]));
+  assert.equal([a, b].find(x => x.body.error).body.error.code, 'already_done');
+  r = [a, b].find(x => x.status === 200);
+  assert.equal(r.body.money, money0 + o.pay); assert.equal(r.body.totalEarned, o.pay);
+  assert.ok(o.items.every(it => r.body.inventory[it.item] === 0));
+  assert.match(r.body.message, new RegExp(`delivered .*'s order .* for ₹${o.pay}`));
+  // the next one is on its way
+  const next = r.body.orders.list.find(x => x.n === 2);
+  const wait = Date.parse(next.availableAt) - Date.now();
+  assert.ok(next.status === 'open' && wait > 29 * 60e3 && wait < 61 * 60e3, String(wait));
+  assert.equal((await act(w, { action: 'order', order: next.id })).body.error.code, 'not_yet');
+  // two more, then no more today
+  for (const n of [2, 3]) {
+    await q(`UPDATE farm_orders o SET available_at = now() - interval '1 minute' FROM rooms r WHERE r.id = o.room_id AND r.code = $1 AND o.n = $2`, [w.code, n]);
+    o = await openOrder(w);
+    assert.equal(o.n, n);
+    await stock(w, o);
+    assert.equal((await act(w, { action: 'order', order: o.id })).status, 200);
+  }
+  f = (await farm(w)).body;
+  assert.deepEqual(f.orders.list.map(x => x.status), ['done', 'done', 'done']);
+  assert.equal(f.orders.list[0].doneBy.length > 0, true);
+  const h = await call('GET', `/v1/rooms/${w.code}/farm/history`, undefined, w.token);
+  assert.equal(h.body.history.filter(e => e.kind === 'order').length, 3);
+});
+
+test('orders end at midnight India time; a new day brings a new order', async () => {
+  const w = await world();
+  const o = await openOrder(w);
+  const today = istDay(Date.now());
+  await q(`UPDATE farm_orders SET day = $2::date WHERE id = $1`, [o.id, dayBack(today)]);     // it was yesterday's
+  const f = (await farm(w)).body;
+  assert.equal(f.orders.list.length, 1); assert.notEqual(f.orders.list[0].id, o.id);
+  assert.equal((await q('SELECT status FROM farm_orders WHERE id = $1', [o.id]))[0].status, 'expired');
+  await stock(w, o);
+  assert.equal((await act(w, { action: 'order', order: o.id })).body.error.code, 'expired');
+});
+
+test('streak: an order every day for 5 days pays ₹200 on the 5th; a missed day starts again', async () => {
+  const w = await world();
+  const today = istDay(Date.now());
+  // 4 days in a row up to yesterday
+  await q(`UPDATE rooms SET order_streak = 4, order_streak_day = $2::date WHERE code = $1`, [w.code, dayBack(today)]);
+  let f = (await farm(w)).body;
+  assert.deepEqual(f.orders.streak, { days: 4, today: false });
+  let o = f.orders.list[0];
+  await stock(w, o);
+  let r = await act(w, { action: 'order', order: o.id });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(r.body.money, f.money + o.pay + ORDERS.bonus); assert.equal(ORDERS.bonus, 200);
+  assert.deepEqual([r.body.result.streak, r.body.result.bonus], [5, 200]);
+  assert.match(r.body.message, /5-day streak bonus ₹200/);
+  assert.deepEqual(r.body.orders.streak, { days: 5, today: true });
+  // a second order the same day: no second bonus, the streak stays 5
+  await q(`UPDATE farm_orders o SET available_at = now() FROM rooms r WHERE r.id = o.room_id AND r.code = $1`, [w.code]);
+  o = await openOrder(w); await stock(w, o);
+  r = await act(w, { action: 'order', order: o.id });
+  assert.deepEqual([r.body.result.bonus, r.body.result.streak], [0, 5]);
+  // a missed day: the streak is gone, and the next delivery starts at 1
+  const w2 = await world();
+  await q(`UPDATE rooms SET order_streak = 3, order_streak_day = $2::date WHERE code = $1`, [w2.code, dayBack(today, 2)]);
+  f = (await farm(w2)).body;
+  assert.deepEqual(f.orders.streak, { days: 0, today: false });
+  o = f.orders.list[0]; await stock(w2, o);
+  r = await act(w2, { action: 'order', order: o.id });
+  assert.deepEqual([r.body.result.streak, r.body.result.bonus], [1, 0]);
 });

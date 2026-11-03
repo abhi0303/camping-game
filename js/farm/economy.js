@@ -136,13 +136,23 @@ export class FarmEconomy {
     out.soon = out.nextMs < 30e3;
     return out;
   }
+  // Market orders (server state, or null on an older server): the order to deliver now, the next one's arrival
+  orders() { return this.st && this.st.orders ? this.st.orders : null; }
+  orderNow() {
+    const O = this.orders(); if (!O) return { O: null };
+    const now = this.serverNow(), open = O.list.find(o => o.status === 'open');
+    const ready = open && Date.parse(open.availableAt) <= now ? open : null;
+    return { O, ready, next: open && !ready ? open : null, done: O.list.filter(o => o.status === 'done'), endsMs: Date.parse(O.endsAt) - now };
+  }
   // the next moment the farm changes by itself that this screen can't work out alone (milk is made straight
-  // into storage, an animal gets hungry). Eggs wait in the nests and are counted here, so a farm full of
+  // into storage, an animal gets hungry, a new order arrives, the day ends). Eggs wait in the nests and are counted here, so a farm full of
   // chickens doesn't make the game ask the server every few seconds.
   nextEventMs() {
     if (!this.st) return Infinity;
     let ms = Infinity;
     for (const b of this.st.buildings) { const i = this.shelterInfo(b); ms = Math.min(ms, i.nests ? Infinity : i.nextMs, i.dueMs > 0 ? i.dueMs : Infinity); }
+    const o = this.orderNow();
+    if (o.O) ms = Math.min(ms, Math.max(0, o.endsMs) + 2000, o.next ? Math.max(0, Date.parse(o.next.availableAt) - this.serverNow()) : Infinity);
     return ms;
   }
   // eggs waiting in all nest boxes (by product)

@@ -254,6 +254,29 @@ CREATE INDEX fishing_casts_room_idx ON fishing_casts (room_id, status);
 CREATE INDEX fishing_casts_member_idx ON fishing_casts (member_id, status);
 `,
   },
+  {
+    id: 6,
+    name: 'market_orders',
+    sql: `
+-- Market orders: up to 3 a day (India time), one at a time; what each asks for and pays is fixed when it is made
+CREATE TABLE farm_orders (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  room_id      UUID NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
+  day          DATE NOT NULL,                       -- the India-time day it belongs to (it ends at midnight IST)
+  n            SMALLINT NOT NULL CHECK (n BETWEEN 1 AND 9),
+  customer     TEXT NOT NULL,
+  items        JSONB NOT NULL,                      -- [{ item, qty }]
+  pay          INTEGER NOT NULL CHECK (pay > 0),
+  status       TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'done', 'expired')),
+  available_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  done_at      TIMESTAMPTZ,
+  done_by      UUID REFERENCES room_members(id) ON DELETE SET NULL,
+  UNIQUE (room_id, day, n)
+);
+-- days in a row with at least one delivered order (a bonus every 5th day)
+ALTER TABLE rooms ADD COLUMN order_streak INTEGER NOT NULL DEFAULT 0, ADD COLUMN order_streak_day DATE;
+`,
+  },
 ];
 
 const LOCK_ID = 727001;   // advisory lock: two migrate runs never overlap

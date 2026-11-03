@@ -218,6 +218,10 @@ export class Farmland {
     this.wall(M, -4.5, -2.6, 4.5, -2.6, 0.25, 0.5, cols);
     const mw = toWorld(M, 0, 2.6);
     this.marketSpot = v3(mw.x, mb + my, mw.z);
+    // the orders board by the Market's entrance (customer orders are delivered here)
+    const ow = toWorld(M, -5.9, 3.6), OF = { x: ow.x, z: ow.z, yaw: M.yaw };
+    this.place(signboard('ORDERS', 'deliveries · daily streak', { w: 1.7, h: 0.7, lift: 0.85, bg: '#5a3a1c', hAt: this.hAt(OF) }), OF);
+    this.dot(M, -5.9, 3.6, 0.5, cols);
 
     // the delivery truck with chicken crates, a loading area beside the store
     const T = TRUCK, tb = this.H(T.x, T.z), th = this.hAt(T, tb), ha = th(0, -1.75), hf = th(0, 1.9);
@@ -388,7 +392,7 @@ export class Farmland {
     }
     const l = [];
     if (this.storeSpot) l.push({ pos: this.storeSpot, r: 2.4, label: () => '🧑‍🌾 Talk to the farmer — Farm Store', act: () => this.hooks.onStore() });
-    if (this.marketSpot) l.push({ pos: this.marketSpot, r: 2.8, label: () => '🛒 Market — sell eggs, milk and goods', act: () => this.hooks.onMarket() });
+    if (this.marketSpot) l.push({ pos: this.marketSpot, r: 2.8, label: () => '🛒 Market — orders, sell eggs, milk and goods', act: () => this.hooks.onMarket() });
     if (this.storage) l.push({ pos: this.storage.front, r: 2.8, label: () => `📦 Farm storage (level ${this.storage.level}) — store logs & stones, upgrade`, act: () => this.hooks.onStorage() });
     for (const a of this._plotActs) if (!a.needs || this.byPlot.has(a.plot)) if (!a.nests || this._nests(this.byPlot.get(a.plot))) l.push(a);
     return l;
