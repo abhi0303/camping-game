@@ -157,7 +157,9 @@ const farmUI = new FarmUI({ eco: farmEco, materials, toast: m => toast(m), hooks
 const fishArea = new FishingArea(scene, world);
 const fishing = new Fishing({ scene, area: fishArea, eco: farmEco, player, gear, remotes, input, audio, toast: m => toast(m), haptic: ms => app.haptic(ms),
   beforeStart: () => { if (combat.out) combat.setOut(false); if (farmUI.isOpen) farmUI.close(); },
-  openMarket: () => farmUI.open('fish'), onCatch: () => { farmEco.fished = true; } });
+  openMarket: () => farmUI.open('fish'), onCatch: () => { farmEco.fished = true; },
+  freeMouse: () => { if (document.pointerLockElement) document.exitPointerLock(); },
+  lockMouse: () => { if (started && !paused && !input.locked) input.requestLock(); } });
 player.fishing = fishing;
 { const base = player.netExtra; player.netExtra = () => ({ ...base(), ...fishing.netExtra() }); }
 
@@ -723,7 +725,7 @@ overlay.addEventListener('click', e => { if (e.target === overlay && started) re
 $('menuBtn').addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); openMenu(); });
 document.addEventListener('pointerlockchange', () => {
   // Esc frees the mouse -> pause menu
-  if (!document.pointerLockElement && started && !input.dragging && !inv.isOpen && !farmUI.isOpen && !editor.open && !designer.open) openMenu();
+  if (!document.pointerLockElement && started && !input.dragging && !inv.isOpen && !farmUI.isOpen && !editor.open && !designer.open && !fishing.cardOpen) openMenu();
 });
 // installable app: back button (Android) closes the open popup or shows the menu
 app.init({

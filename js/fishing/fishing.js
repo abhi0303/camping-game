@@ -23,7 +23,8 @@ const v3 = () => new THREE.Vector3();
 const LINE_PTS = 16;
 
 export class Fishing {
-  // g: { scene, area, eco, player, gear, remotes, input, audio, toast, haptic, beforeStart(), onCatch(result) }
+  // g: { scene, area, eco, player, gear, remotes, input, audio, toast, haptic, beforeStart(), onCatch(result),
+  //      freeMouse(), lockMouse() (the result card needs the cursor for its Collect button) }
   constructor(g) {
     this.g = g; this.phase = null; this.spot = null; this.t = 0; this.msg = ''; this.busy = false;
     this.bend = 0; this.bob = v3(); this.tip = v3(); this.castFrom = v3(); this.held = null;
@@ -35,6 +36,8 @@ export class Fishing {
     this._hud();
   }
   get active() { return !!this.phase; }
+  // the catch card is up (its Collect button needs the mouse)
+  get cardOpen() { return !!this.el && this.el.card.className === 'ok'; }
   get locked() { return !!this.phase; }
   get rodLevel() { const f = this.g.eco.st && this.g.eco.st.fishing; return (f && f.rod) || 1; }
   worms() { return this.g.eco.qty('worms'); }
@@ -389,9 +392,9 @@ export class Fishing {
   }
   // the result card (ok: the fish, its weight and value, and a Collect button), or a short failure note
   _card(res, msg) {
-    const c = this.el.card;
+    const c = this.el.card, wasOpen = this.cardOpen;
     clearTimeout(this._cardT);
-    if (!res) { c.classList.add('hidden'); return; }
+    if (!res) { c.className = 'hidden'; if (wasOpen) this.g.lockMouse(); return; }
     if (res.ok) {
       const k = this.g.eco.cat(res.fish) || {}, img = thumb(res.fish);
       c.className = 'ok';
@@ -399,8 +402,10 @@ export class Fishing {
         <div class="fc-big">You caught a ${FISH_NAME[res.fish]}!</div>
         <div class="fc-r">Weight <b>${res.weight} kg</b></div><div class="fc-r">Selling Value <b>₹${res.value}</b></div>
         <div class="fc-r">In the farm storage <b>${k.icon || ''} ${this.g.eco.qty(res.fish)}</b></div>
-        <button class="fu-go wide" data-x="collect">Collect</button>`;
+        <button class="fu-go wide" data-x="collect">Collect <small>(E)</small></button>`;
+      this.g.freeMouse();                 // show the cursor so the button can be clicked (E works too)
     } else {
+      if (wasOpen) this.g.lockMouse();
       c.className = 'bad';
       c.innerHTML = `<div class="fc-t">${res.why === 'nothing' ? 'No bite' : 'The fish escaped!'}</div><div class="fc-msg">${msg}</div>`;
       this._cardT = setTimeout(() => c.classList.add('hidden'), 3200);
