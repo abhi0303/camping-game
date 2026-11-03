@@ -151,7 +151,8 @@ export class FarmUI {
   _animalRow(k, shelter) {
     const e = this.eco, free = e.freeFor(k.id), home = e.cat(k.shelter), open = e.unlocked(k.id);
     const p = k.product && e.cat(k.product);
-    const what = p ? `lays ${p.name.toLowerCase()} · ₹${p.sell} each` : 'rides and pulls carts later';
+    const every = k.rate ? 1 / k.rate : 0, pace = !every ? '' : every === 1 ? '1 an hour' : every < 1 ? `1 every ${Math.round(every * 60)} min` : `1 every ${+every.toFixed(1)} h`;
+    const what = p ? `${p.name.toLowerCase()}: ${pace} while fed · ₹${p.sell} each` : 'rides and pulls carts later';
     const feed = `eats ${k.feedCost || 1} feed / ${k.feedHours || 2} h`;
     if (!open) {
       const pct = Math.min(100, Math.round((e.st.totalEarned || 0) / k.unlock * 100));

@@ -98,9 +98,9 @@ The main road splits it in two: **the farm** (plots and storage) on one side, **
 
   | Chicken | Price | Lays | Egg price | Unlocks |
   |---|---|---|---|---|
-  | 🐔 Chicken (white) | ₹40 | 1 egg per 2 h fed | ₹6 | from the start |
-  | 🐓 Brown Desi chicken | ₹180 | 1 brown egg per 2 h fed | ₹14 | after the farm earns ₹300 from sales |
-  | 🐦‍⬛ Dark Desi chicken | ₹450 | 1 dark egg per 2.5 h fed | ₹35 | after the farm earns ₹1500 from sales |
+  | 🐔 Chicken (white) | ₹40 | 1 egg an hour while fed | ₹6 | from the start |
+  | 🐓 Brown Desi chicken | ₹180 | 1 brown egg an hour while fed | ₹14 | after the farm earns ₹300 from sales |
+  | 🐦‍⬛ Dark Desi chicken | ₹450 | 1 dark egg an hour while fed | ₹35 | after the farm earns ₹1500 from sales |
 
   Each kind has its own look, and its eggs are kept separately. 🐐 Goats (₹150) give goat milk (₹30), 🐄 cows (₹400) cow milk (₹25), 🐴 horses (₹600) are for carts and riding later.
 - **Health:** an animal left hungry for a day gets weak (it never dies). Fed again it recovers.
