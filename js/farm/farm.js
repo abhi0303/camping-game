@@ -240,7 +240,10 @@ export class Farm {
   }
   async createInvite() {
     const r = await api.invite(this.L);
-    return { link: this.inviteLink(r.invite), invite: r.invite, hours: r.hours };
+    const link = this.inviteLink(r.invite), pretty = r.invite.replace(/(.{4})(?=.)/g, '$1 ');
+    // the message to send: the link (browser) and the two codes (the installed app can't open links)
+    const message = `Join my farm "${this.L.roomName || 'Farm World'}" in RV Van 🌾\n${link}\n\nIn the app: Farm World → Join with an invite\nWorld code: ${this.L.code}\nInvite code: ${pretty}\n(works once, for ${r.hours} hours)`;
+    return { link, invite: r.invite, pretty, code: this.L.code, hours: r.hours, message };
   }
   async removeMember(id) {
     const r = await api.removeMember(this.L, id);

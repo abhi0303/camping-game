@@ -155,16 +155,24 @@
             <input id="fcPin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="Choose a PIN (4–6 digits)" autocomplete="new-password" />
             <button id="fcGo" class="mbig">Create world</button>
           </div>
+          <div class="fbox" id="fNew">
+            <div class="fhead">💌 New here? Join with an invite</div>
+            <input id="fnCode" maxlength="300" placeholder="WORLD CODE (or link)" autocomplete="off" autocapitalize="characters" spellcheck="false" />
+            <input id="fnInvite" maxlength="300" placeholder="INVITE CODE" autocomplete="off" autocapitalize="characters" spellcheck="false" />
+            <input id="fnName" maxlength="16" placeholder="Your name" autocomplete="off" />
+            <input id="fnPin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="Choose a PIN (4–6 digits)" autocomplete="new-password" />
+            <button id="fnGo" class="mbig">🌾 Join this world</button>
+          </div>
           <div class="fbox">
             <div class="fhead">🔑 Open a world you belong to</div>
-            <input id="fjCode" maxlength="6" placeholder="WORLD CODE" autocomplete="off" autocapitalize="characters" spellcheck="false" />
+            <input id="fjCode" maxlength="300" placeholder="WORLD CODE" autocomplete="off" autocapitalize="characters" spellcheck="false" />
             <input id="fjName" maxlength="16" placeholder="Your name in that world" autocomplete="off" />
             <input id="fjPin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="Your PIN" autocomplete="current-password" />
             <button id="fjGo" class="mbig alt">Log in &amp; play</button>
           </div>
         </div>
         <p id="fStatus" class="small"></p>
-        <p class="small dim">New friend? The world's owner sends them an invite link (Esc menu → Invite a friend). Remember your PIN — you need it on other devices.</p>
+        <p class="small dim">New friend? The world's owner makes an invite (Esc menu → Invite a friend). Open the link, or — in the installed app — type the world code and invite code under “Join with an invite”. Remember your PIN: you need it on other devices.</p>
       </div>
       <div id="menuPause" class="hidden">
         <button id="play">Resume</button>

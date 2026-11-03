@@ -491,6 +491,8 @@ body.touch .fbox input { font-size: 16px; }
 .fdel { display: flex; gap: 6px; }
 .fdel input { flex: 1; min-width: 0; pointer-events: auto; background: #1d2030; color: #fff; border: 1px solid #7a3a4c; border-radius: 8px; padding: 7px 10px; font-size: 13px; }
 .fmsg { font-size: 12px; opacity: .85; }
+.fcodes { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12.5px; align-items: center; }
+.fcodes code { background: #1d2030; border: 1px solid #444a60; border-radius: 6px; padding: 2px 7px; font-size: 14px; font-weight: 800; letter-spacing: .08em; color: #ffe08a; user-select: text; -webkit-user-select: text; }
 
 /* ---------- Farm World: money bar + farm popups ---------- */
 #farmBar { display: flex; gap: 12px; padding: 4px 12px; font-size: 14px; font-weight: 700; margin-bottom: 4px; }
