@@ -249,6 +249,10 @@ export class Character {
       else if (hold === 'carry') { T.shRz = -0.18; T.elR = -0.2; T.shRx *= 0.4; }
       else if (hold === 'controller') { T.shLx = T.shRx = -0.55; T.elL = T.elR = -1.45; T.shLz = -0.28; T.shRz = 0.28; T.neckX = 0.3; }
       else if (hold === 'binoculars') { T.shLx = T.shRx = -1.35; T.elL = T.elR = -2.25; T.shLz = -0.3; T.shRz = 0.3; }
+      // fishing: the rod held out over the water, swung back over the head to cast, raised to pull
+      else if (hold === 'rod') { T.shRx = -0.45; T.elR = -0.75; T.shRz = 0.06; T.shLx = -0.55; T.elL = -1.2; T.shLz = -0.5; }
+      else if (hold === 'rodCast') { T.shRx = -2.75; T.elR = -0.45; T.shRz = 0.1; T.shLx = -1.5; T.elL = -1.1; T.shLz = -0.35; T.spineX = -0.12; }
+      else if (hold === 'rodPull') { T.shRx = -0.95; T.elR = -1.35; T.shRz = 0.1; T.shLx = -0.9; T.elL = -1.65; T.shLz = -0.5; T.spineX = -0.16; }
       else if (hold === 'gun') {
         // both hands on the shotgun, pointing where you aim (s.aim = pitch up/down)
         const ap = s.aim || 0, k = this.recoilT;

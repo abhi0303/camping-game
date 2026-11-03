@@ -41,6 +41,7 @@ export class Player {
     // survival: health, knocked down, carried by / carrying a teammate (peer ids), shotgun aim
     this.hp = 100; this.downed = false; this.dead = false; this.carried = null; this.carrying = null; this.aiming = false; this.aimPitch = 0;
     this.canDrive = () => true; this.netExtra = null;
+    this.fishing = null;          // set by main: while fishing the player stands still at the dock (js/fishing)
     this._buildInteractions();
   }
 
@@ -283,12 +284,13 @@ export class Player {
       animMode = 'downed'; this.prompt = null;
     } else if (this.mode === 'foot' || this.mode === 'inside') {
       if (this.pitch !== 0) this.pitch = Math.abs(this.pitch) < 0.02 ? 0 : damp(this.pitch, 0, 10, dt);   // getting back up
-      const locked = this.gear && this.gear.locked;   // flying the drone / looking through binoculars
+      const fishing = this.fishing && this.fishing.locked;
+      const locked = (this.gear && this.gear.locked) || fishing;   // flying the drone / looking through binoculars / fishing
       this._move(dt, locked ? NO_INPUT : input, cam);
       const hs = this.vel.length();
       animMode = !this.grounded ? 'jump' : this.crouch ? 'crouch' : hs > 3.2 ? 'run' : hs > 0.15 ? 'walk' : 'idle';
       animSpeed = hs;
-      if (locked) this.prompt = this.gear.lockPrompt();
+      if (locked) this.prompt = fishing ? this.fishing.prompt() : this.gear.lockPrompt();
       else {
         if ((input.wasPressed('KeyF') || input.click) && !(this.gear && this.gear.gunOut) && !this.carrying) {   // the shotgun fires in Combat
           if (this.gear && this.gear.inv.equippedItem()) this.gear.use();
@@ -341,7 +343,7 @@ export class Player {
       r.position.set(this.pos.x, this.visY, this.pos.z);
       r.rotation.set(this.pitch, this.yaw, 0);
     }
-    const hold = (this.mode === 'foot' || this.mode === 'inside') && !this.downed && this.gear ? this.gear.holdPose() : null;
+    const hold = (this.mode === 'foot' || this.mode === 'inside') && !this.downed && this.gear ? (this.fishing && this.fishing.active ? this.fishing.holdPose() : this.gear.holdPose()) : null;
     this.char.update(dt, { mode: animMode, speed: animSpeed, vy: this.vy, steer, hold, aim: this.aimPitch });
     const A = this.anim; A.a = animMode; A.sp = animSpeed; A.st = steer; A.hd = hold;
     return driveCtrl;

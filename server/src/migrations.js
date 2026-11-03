@@ -199,6 +199,61 @@ INSERT INTO catalog (item, kind, name, icon, buy_price, sell_price, data, sort) 
 UPDATE catalog SET data = data || '{"rate": 1}' WHERE item IN ('chicken', 'chicken_brown', 'chicken_dark');
 `,
   },
+  {
+    id: 5,
+    name: 'fast_eggs_nests_fishing',
+    sql: `
+-- chickens now lay every 5 / 7 / 9 minutes (Regular White / Brown Desi / Black; the timings live in
+-- server/src/animals.js). Each chicken keeps its eggs in its own nest box until a player collects them.
+ALTER TABLE animals ADD COLUMN ready INTEGER NOT NULL DEFAULT 0 CHECK (ready >= 0);
+UPDATE catalog SET name = 'Regular White chicken', data = data || '{"variety": "Regular White"}' WHERE item = 'chicken';
+UPDATE catalog SET data = data || '{"variety": "Brown Desi"}' WHERE item = 'chicken_brown';
+UPDATE catalog SET name = 'Black chicken', data = data || '{"variety": "Black"}' WHERE item = 'chicken_dark';
+-- many more eggs, so each one is worth less (a premium chicken still earns more per place in the coop).
+-- Eggs already in a farm's storage keep their value: the price drop is paid out to that farm once.
+UPDATE rooms r SET money = r.money + v.pay FROM (
+  SELECT i.room_id, sum(i.qty * GREATEST(0, c.sell_price - n.price))::bigint AS pay
+  FROM inventory i JOIN catalog c ON c.item = i.item JOIN (VALUES ('egg', 1), ('egg_brown', 3), ('egg_dark', 7)) AS n(item, price) ON n.item = i.item
+  GROUP BY i.room_id) v
+WHERE v.room_id = r.id AND v.pay > 0;
+UPDATE catalog SET name = 'White eggs', sell_price = 1 WHERE item = 'egg';
+UPDATE catalog SET sell_price = 3 WHERE item = 'egg_brown';
+UPDATE catalog SET name = 'Black chicken eggs', sell_price = 7 WHERE item = 'egg_dark';
+
+-- fishing: worms (sold 10 for ₹1), three fish, and a rod per member (Level 1 to start, upgrades for sale).
+-- Fish prices: active fishing earns ~₹400/h with the Basic rod and ~₹950/h with the Fibre rod (a good start,
+-- but a full farm of chickens earns more, without anyone playing)
+ALTER TABLE catalog DROP CONSTRAINT catalog_kind_check;
+ALTER TABLE catalog ADD CONSTRAINT catalog_kind_check CHECK (kind IN ('animal', 'good', 'building', 'upgrade', 'gear'));
+INSERT INTO catalog (item, kind, name, icon, buy_price, sell_price, data, sort) VALUES
+  ('worms',       'good', 'Worms',              '🪱', NULL, NULL, '{"cap": 500}', 24),
+  ('worm_pack',   'good', 'Worms (10 per pack)','🪱', 1,    NULL, '{"pack": {"item": "worms", "n": 10}}', 25),
+  ('fish_small',  'good', 'Small fish',         '🐟', NULL, 2,    '{"cap": 40, "size": "small"}', 26),
+  ('fish_medium', 'good', 'Medium fish',        '🐠', NULL, 5,   '{"cap": 40, "size": "medium"}', 27),
+  ('fish_large',  'good', 'Large fish',         '🎏', NULL, 14,   '{"cap": 20, "size": "large"}', 28),
+  ('rod', 'gear', 'Fishing rod', '🎣', NULL, NULL, '{"levels": [{"level": 1, "price": 0}, {"level": 2, "price": 150}, {"level": 3, "price": 500}]}', 32);
+ALTER TABLE room_members ADD COLUMN rod_level SMALLINT NOT NULL DEFAULT 1 CHECK (rod_level BETWEEN 1 AND 3);
+
+-- every cast: what the server rolled for it, and how it ended (a cast pays out at most once)
+CREATE TABLE fishing_casts (
+  id        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  room_id   UUID NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
+  member_id UUID NOT NULL REFERENCES room_members(id) ON DELETE CASCADE,
+  spot      SMALLINT NOT NULL,
+  rod       SMALLINT NOT NULL,
+  fish      TEXT REFERENCES catalog(item),          -- NULL: nothing bites
+  weight    REAL NOT NULL DEFAULT 0,
+  seed      INTEGER NOT NULL,
+  pulls     SMALLINT NOT NULL DEFAULT 0,
+  cast_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  bite_at   TIMESTAMPTZ,
+  status    TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'caught', 'escaped', 'lost')),
+  ended_at  TIMESTAMPTZ
+);
+CREATE INDEX fishing_casts_room_idx ON fishing_casts (room_id, status);
+CREATE INDEX fishing_casts_member_idx ON fishing_casts (member_id, status);
+`,
+  },
 ];
 
 const LOCK_ID = 727001;   // advisory lock: two migrate runs never overlap

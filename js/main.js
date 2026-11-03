@@ -35,7 +35,9 @@ import { FarmPanel } from './farm/panel.js';
 import { FarmEconomy } from './farm/economy.js';
 import { Farmland } from './farm/farmland.js';
 import { FarmUI } from './farm/farmui.js';
-import { MARKET, STORE, STORAGE, PLOTS, FARM_CENTER, inFarm } from './farm/layout.js';
+import { MARKET, STORE, STORAGE, PLOTS, FARM_CENTER, FISH_MARKET, inFarm } from './farm/layout.js';
+import { FishingArea } from './fishing/area.js';
+import { Fishing } from './fishing/fishing.js';
 
 const $ = id => document.getElementById(id);
 
@@ -138,6 +140,7 @@ survival.g.farmHud = () => farmHud();
 // the farm itself: plots, shelters, animals and the market. The numbers come from the server (farmEco).
 const farmland = new Farmland(scene, world, { onMarket: () => farmUI.open('market'), onStore: () => farmUI.open('store'), onStorage: () => farmUI.open('storage'),
   onPlot: i => farmUI.open('plot', i), onShelter: b => farmUI.open('shelter', b), onFeed: b => farmUI.open('feed', b),
+  onCollect: b => farmUI.collect(b), eggsIn: b => (farmEco.ready ? farmEco.shelterInfo(b).ready : 0),
   // gates: move at once here and for the others (PeerJS), then the server keeps it (shared and saved)
   onGate: (b, open) => {
     farmland.setGate(b.id, open, true); audio.thud(open ? 120 : 90, 0.07);
@@ -149,7 +152,14 @@ net.on('farmGate', d => { if (d && typeof d.id === 'string') farmland.setGate(d.
 rig.clip = (t, d, dist) => (farm.active ? farmland.camClip(t, d, dist) : dist);
 const farmEco = new FarmEconomy({ net, toast: m => toast(m), onGone: msg => farm.gone(msg, true),
   onChange: st => { farmland.setState(st); farmUI.render(); farmUI.renderBar(farm.active); if (!overlay.classList.contains('hidden')) farmPanel.render(); } });
-const farmUI = new FarmUI({ eco: farmEco, materials, toast: m => toast(m), hooks: uiHooks });
+const farmUI = new FarmUI({ eco: farmEco, materials, toast: m => toast(m), hooks: uiHooks, onCollect: () => { farmEco.collected = true; audio.thud(300, 0.05); } });
+// fishing (Farm World): the Fish Market, the docks on the river and the mini-game; the server checks catches
+const fishArea = new FishingArea(scene, world);
+const fishing = new Fishing({ scene, area: fishArea, eco: farmEco, player, gear, remotes, input, audio, toast: m => toast(m), haptic: ms => app.haptic(ms),
+  beforeStart: () => { if (combat.out) combat.setOut(false); if (farmUI.isOpen) farmUI.close(); },
+  openMarket: () => farmUI.open('fish'), onCatch: () => { farmEco.fished = true; } });
+player.fishing = fishing;
+{ const base = player.netExtra; player.netExtra = () => ({ ...base(), ...fishing.netExtra() }); }
 
 function setupRV(r) { r.onMsg = m => toast(m); r.onCheckpoint = onCheckpoint; }
 setupRV(rv0);
@@ -188,7 +198,7 @@ player.worldActs = () => {
   l.push(...obstacles.acts(eq && eq.type));
   for (const a of crateActs) if (!a.c.taken) l.push(a);
   l.push(benchAct, boardAct, towerBenchAct, castleBenchAct, ...flagActs, ...survival.acts(), ...structures.acts());
-  if (farm.active) l.push(...farmland.acts());
+  if (farm.active) l.push(...farmland.acts(), ...fishing.acts());
   return l;
 };
 
@@ -221,10 +231,11 @@ const FARM_OBJ = [
   { text: 'Build a chicken coop: walk up to a plot sign', done: () => farmHas(s => s.buildings.some(b => b.type === 'coop')), at: () => PLOTS[0] },
   { text: 'Buy chickens (and feed) from the farmer at the Farm Store, across the road', done: () => farmHas(s => s.animals.some(a => a.type.startsWith('chicken'))), at: () => STORE },
   { text: 'Feed the chickens every 2 hours: open the pen gate, walk to the trough, press E', done: () => farmHas(s => s.animals.length > 0) && farmEco.fedOnce, at: () => PLOTS[0] },
-  { text: 'Fed chickens lay eggs, even while nobody plays — sell eggs at the Market', done: () => farmEco.sold, at: () => MARKET },
+  { text: 'Fed chickens lay an egg every few minutes — collect them at the nest boxes, then sell them at the Market', done: () => farmEco.sold, at: () => (farmEco.collected ? MARKET : PLOTS[0]) },
   { text: 'Grow the farm: goats need a goat shed, cows a barn, horses a stable', done: () => farmHas(s => s.buildings.length >= 3), at: () => FARM_CENTER },
   ...OBJ.slice(0, 8),
   { text: 'Explore north over the pass to Watchtower Valley (clear the road on the way)', done: nearValley, at: () => world.towerBenchPos },
+  { text: '🎣 Go fishing: buy worms at the Fish Market (east of the Market), follow the path to the river docks and land a fish', done: () => farmEco.fished || farmHas(s => !!(s.fishing && s.fishing.mine)), at: () => (farmEco.qty('worms') ? fishArea.spots[1].stand : FISH_MARKET) },
   { text: '🌾 Your world is saved online — any member can open it, together or alone', done: () => false, at: () => world.campPos },
 ];
 const objList = () => (survival.farm ? FARM_OBJ : OBJ);
@@ -254,6 +265,10 @@ function mapMarkers() {
   rvs.forEach((r, i) => { if (!(player.frame === 'rv' && player.rv === r)) markers.push({ x: r.root.position.x, z: r.root.position.z, icon: '🚐', label: rvs.length > 1 ? `RV ${i + 1}` : 'RV', edge: r === player.rv }); });
   remotes.each((r, p) => markers.push({ x: p.x, z: p.z, dot: r.color, label: (r.s.dn ? '⬇ ' : '') + r.s.n, edge: true }));
   for (const z of zombies.list) if (z.st !== 4) markers.push({ x: z.x, z: z.z, dot: '#e0362a' });
+  if (farm.active && fishArea.on) {
+    markers.push({ x: FISH_MARKET.x, z: FISH_MARKET.z, icon: '🐟', label: 'Fish Market' });
+    for (const sp of fishArea.spots) markers.push({ x: sp.stand.x, z: sp.stand.z, icon: '🎣', label: sp.i === 1 ? 'Fishing docks' : '' });
+  }
   if (drone.active) markers.push({ x: drone.pos.x, z: drone.pos.z, icon: '🚁' });
   const ol = objList(), t = ol[Math.min(objI, ol.length - 1)].at(); markers.push({ x: t.x, z: t.z, ring: true, edge: true });
   return markers;
@@ -633,6 +648,7 @@ async function enterFarm(L, status, isNew) {
   const r = await farm.enter(L, status);
   gear.netId = String(L.memberId || 'f').slice(0, 8) + Date.now().toString(36);   // ids of gear you set down
   farmland.enable();                   // clear the ground, put up the market, the store and the plots
+  fishArea.enable();                   // the Fish Market, the path and the docks on the river
   farmEco.start(L);
   startGame(r.role === 'host'
     ? (isNew || r.fresh ? `🌾 Welcome to ${L.roomName}! World code ${L.code} — invite friends from the menu (Esc)` : `🌾 Welcome back to ${L.roomName}`)
@@ -733,7 +749,7 @@ canvas.addEventListener('click', () => { if (started && !paused && !input.locked
 /* ---------- global keys ---------- */
 function globalKeys() {
   if (input.wasPressed('KeyV')) toast(rig.toggle(player));
-  if (input.wasPressed('KeyG')) combat.toggle();
+  if (input.wasPressed('KeyG') && !fishing.active) combat.toggle();
   if (input.wasPressed('KeyB')) voice.toggle();
   if (input.wasPressed('KeyK')) { toast(audio.toggleMute() ? 'Sound off' : 'Sound on'); sndLabel(); }
   if (input.wasPressed('KeyM')) minimap.toggleBig();
@@ -746,7 +762,7 @@ function globalKeys() {
   if (input.wasPressed('Tab')) hud.help.classList.toggle('hidden');
   if (input.wasPressed('KeyI') && farm.active) farmInvite();
   else if (input.wasPressed('KeyI') && net.online) copyText(inviteLink()).then(() => toast('📋 Invite link copied — send it to a friend'), () => toast('Press Esc to see the invite link'));
-  if (!drone.active && (player.mode === 'foot' || player.mode === 'inside')) for (let i = 1; i <= 6; i++) if (input.wasPressed('Digit' + i)) inv.equip(i - 1);
+  if (!drone.active && !fishing.active && (player.mode === 'foot' || player.mode === 'inside')) for (let i = 1; i <= 6; i++) if (input.wasPressed('Digit' + i)) inv.equip(i - 1);
 }
 
 /* ---------- main loop ---------- */
@@ -759,6 +775,7 @@ function step(dt) {
   const ctrl = player.update(dt, input, rig);
   gear.update(dt, input);
   combat.update(dt, input);
+  fishing.update(dt, input);
   for (const r of rvs) {
     if (r.isLocal(net)) r.update(dt, r === player.rv && player.mode === 'drive' && survival.canDrive(r) ? ctrl : null);
     else r.netUpdate(dt);
@@ -777,6 +794,7 @@ function step(dt) {
   survival.update(dt, input);
   if (farm.active) {
     farmland.update(dt, farmEco.serverNow(), player.mode === 'foot' ? player.pos : null);
+    fishArea.update(dt, player.mode === 'foot' ? player.pos : null);
     if ((plotInfoT -= dt) <= 0) { plotInfoT = 0.25; farmUI.renderInfo(player.mode === 'foot' ? farmland.plotAt(player.pos) : null); }
   } else if (plotInfoT !== 1) { plotInfoT = 1; farmUI.renderInfo(null); }
   structures.update(dt, camera.position);
@@ -788,7 +806,7 @@ function step(dt) {
   minimap.update(dt, whereAmI(), mapMarkers());
   session.tick();
   if (started && (saveT += dt) > 45) { saveT = 0; saveNow(); }
-  const tmode = drone.active ? 'drone' : player.mode === 'drive' ? 'drive' : (player.mode === 'seat' || player.mode === 'lie') ? 'seat' : 'foot';
+  const tmode = drone.active ? 'drone' : fishing.active ? 'fish' : player.mode === 'drive' ? 'drive' : (player.mode === 'seat' || player.mode === 'lie') ? 'seat' : 'foot';
   touch.setMode(tmode, combat.out ? 'gun' : !!inv.equippedItem());
   input.stickRun = tmode === 'foot';
   updateHUD(dt);
@@ -832,7 +850,7 @@ function debugStage(st, build) {
   if (build) { designer.show(build); designer._action('build'); designer.close(); }
   if (st === 'siege' || st === 'giants') survival._toStage(st);
 }
-window.__game = { debugStage, net, session, voice, structures, designer, giants, player, rvs, remotes, obstacles, bridgeWorld, materials, world, inv, gear, editor, input, rig, camera, zombies, survival, combat, applySave, collectSave, saveNow, get objI() { return objI; },
+window.__game = { debugStage, net, session, voice, structures, designer, giants, player, rvs, remotes, obstacles, bridgeWorld, materials, world, inv, gear, editor, input, rig, camera, zombies, survival, combat, applySave, collectSave, saveNow, farm, farmEco, farmUI, farmland, fishArea, fishing, get objI() { return objI; },
   // test hooks: advance the game n frames / pin the camera
   run: n => { for (let i = 0; i < n; i++) step(1 / 60); renderer.render(scene, camera); }, setCam: a => { freezeCam = a; } };
 

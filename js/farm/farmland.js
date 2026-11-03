@@ -15,11 +15,12 @@ import { FarmerNPC } from './npc.js';
 const MAX_PER_TYPE = 64;
 const SPEED = { chicken: 1.6, chicken_brown: 1.5, chicken_dark: 1.4, goat: 0.8, cow: 0.45, horse: 0.6 };
 const GATE_OPEN = Math.PI * 0.52;
+const NEST_AT = { x: 2.7, z: -0.9 };          // in the pen, by the coop's nest boxes (behind the back fence)
 const hash = s => { let h = 2166136261; for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619); return ((h >>> 0) % 100000) / 100000; };
 const v3 = (x, y, z) => new THREE.Vector3(x, y, z);
 
 export class Farmland {
-  // hooks: { onStore, onMarket, onStorage, onPlot(i), onShelter(bd), onFeed(bd), onGate(bd, open) }
+  // hooks: { onStore, onMarket, onStorage, onPlot(i), onShelter(bd), onFeed(bd), onGate(bd, open), onCollect(bd), eggsIn(bd) }
   constructor(scene, world, hooks) {
     this.scene = scene; this.world = world; this.hooks = hooks;
     this.on = false; this.st = null; this.built = new Map(); this.byPlot = new Map(); this.list = []; this.decor = [];
@@ -367,7 +368,7 @@ export class Farmland {
     if (!this._acts) {
       const plotActs = [];
       for (const P of PLOTS) {
-        const sw = toWorld(P, SIGN_AT.x, SIGN_AT.z + 0.6), gw = toWorld(P, 0, GATE.z), tw = toWorld(P, TROUGH_FEED.x, TROUGH_FEED.z - 1.1);
+        const sw = toWorld(P, SIGN_AT.x, SIGN_AT.z + 0.6), gw = toWorld(P, 0, GATE.z), tw = toWorld(P, TROUGH_FEED.x, TROUGH_FEED.z - 1.1), nw = toWorld(P, NEST_AT.x, NEST_AT.z);
         const bd = () => this.byPlot.get(P.i);
         plotActs.push(
           { pos: v3(sw.x, this.H(sw.x, sw.z), sw.z), r: 1.9, plot: P.i, label: () => this._plotLabel(P.i), act: () => { const b = bd(); if (b) this.hooks.onShelter(b); else this.hooks.onPlot(P.i); } },
@@ -376,6 +377,10 @@ export class Farmland {
           { pos: v3(tw.x, this.H(tw.x, tw.z), tw.z), r: 1.3, plot: P.i, needs: true,
             label: () => { const k = this.st.catalog[bd().type], a = this.st.catalog[k.animal]; return `🌾 Feed the ${a ? a.name.toLowerCase() + 's' : 'animals'} (trough)`; },
             act: () => this.hooks.onFeed(bd()) },
+          // a coop's nest boxes (by the back fence of the pen): collect the eggs
+          { pos: v3(nw.x, this.H(nw.x, nw.z), nw.z), r: 1.5, plot: P.i, needs: true, nests: true,
+            label: () => { const n = this.hooks.eggsIn(bd()); return n ? `🥚 Collect eggs from the nest boxes (${n} ready)` : '🪺 Nest boxes — no eggs ready yet'; },
+            act: () => this.hooks.onCollect(bd()) },
         );
       }
       this._plotActs = plotActs;
@@ -385,9 +390,11 @@ export class Farmland {
     if (this.storeSpot) l.push({ pos: this.storeSpot, r: 2.4, label: () => '🧑‍🌾 Talk to the farmer — Farm Store', act: () => this.hooks.onStore() });
     if (this.marketSpot) l.push({ pos: this.marketSpot, r: 2.8, label: () => '🛒 Market — sell eggs, milk and goods', act: () => this.hooks.onMarket() });
     if (this.storage) l.push({ pos: this.storage.front, r: 2.8, label: () => `📦 Farm storage (level ${this.storage.level}) — store logs & stones, upgrade`, act: () => this.hooks.onStorage() });
-    for (const a of this._plotActs) if (!a.needs || this.byPlot.has(a.plot)) l.push(a);
+    for (const a of this._plotActs) if (!a.needs || this.byPlot.has(a.plot)) if (!a.nests || this._nests(this.byPlot.get(a.plot))) l.push(a);
     return l;
   }
+  // chickens keep their eggs in nest boxes (servers before the nest update put eggs straight into storage)
+  _nests(bd) { const c = this.st && this.st.catalog, k = c && c[bd.type], a = k && c[k.animal]; return !!(a && a.nest); }
   _plotLabel(i) {
     const bd = this.byPlot.get(i), cat = this.st && this.st.catalog;
     if (!bd || !cat) return `🌱 Plot ${i + 1} — build a shelter here`;

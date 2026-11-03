@@ -107,6 +107,15 @@ export const audio = {
     og.gain.setValueAtTime(0.8 * vol, t); og.gain.exponentialRampToValueAtTime(0.001, t + 0.7);
     o.connect(og); og.connect(master); o.start(t); o.stop(t + 0.72);
   },
+  // water: a short hiss of filtered noise (a cast landing, a fish biting or jumping)
+  splash(vol = 1) {
+    if (!ctx || vol <= 0.02) return;
+    const t = ctx.currentTime, src = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+    src.buffer = noise(); f.type = 'bandpass'; f.Q.value = 0.8;
+    f.frequency.setValueAtTime(2200, t); f.frequency.exponentialRampToValueAtTime(500, t + 0.35);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.5 * vol, t + 0.03); g.gain.exponentialRampToValueAtTime(0.001, t + 0.38);
+    src.connect(f); f.connect(g); g.connect(master); src.start(t); src.stop(t + 0.4);
+  },
   // Named looping tones (drone buzz, chainsaw)
   hum(name, on, type = 'sawtooth', freq = 200, gain = 0.04) {
     if (!ctx) return;

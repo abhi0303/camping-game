@@ -20,16 +20,20 @@ export const ICON = {
   light: I('M9 18h6|M10 21h4|M12 3a6 6 0 0 0-3.5 10.9V16h7v-2.1A6 6 0 0 0 12 3z'),
   reset: I('M3 12a9 9 0 1 0 2.8-6.5|M3 4v5h5'),
   E: '<b style="font-size:20px">E</b>',
+  PULL: '<b style="font-size:17px;letter-spacing:.04em">PULL</b>',
+  leave: I('M15 4h4v16h-4|M10 8l-4 4 4 4|M6 12h10'),
 };
 const CANNON_SVG = '<svg class="gunIco" viewBox="0 0 64 22" aria-hidden="true"><path d="M16 4.5 L61 1.5 L61 12.5 L16 13.5 Z M10 6 h8 v8 h-8z" fill="currentColor"/><circle cx="20" cy="16" r="5.2" fill="none" stroke="currentColor" stroke-width="2.6"/></svg>';
 const BUTTONS = [
   // code, icon per mode ({mode: icon}), modes shown
   ['KeyF', { foot: 'punch', item: 'use', gun: 'fire' }, 'foot'],
   ['Space', { foot: 'jump', drive: 'brake', drone: 'up' }, 'foot drive drone'],
-  ['KeyE', { foot: 'E', drive: 'door', seat: 'stand', drone: 'back' }, 'foot drive seat drone'],
+  ['KeyE', { foot: 'E', drive: 'door', seat: 'stand', drone: 'back', fish: 'E' }, 'foot drive seat drone fish'],
+  ['KeyS', { fish: 'PULL' }, 'fish'],
+  ['KeyQ', { fish: 'leave' }, 'fish'],
   ['KeyC', { foot: 'crouch', drone: 'down' }, 'foot drone'],
   ['KeyG', { foot: 'GUN' }, 'foot'],
-  ['KeyV', { foot: 'eye', drive: 'eye', seat: 'eye', drone: 'eye' }, 'foot drive seat drone'],
+  ['KeyV', { foot: 'eye', drive: 'eye', seat: 'eye', drone: 'eye', fish: 'eye' }, 'foot drive seat drone fish'],
   ['KeyQ', { drive: 'sofa' }, 'drive'],
   ['KeyH', { drive: 'horn' }, 'drive'],
   ['KeyL', { drive: 'light', seat: 'light' }, 'drive seat'],
@@ -46,7 +50,7 @@ export class TouchUI {
     const root = this.root = document.createElement('div');
     root.id = 'touchUI';
     root.innerHTML = `<div id="tStick" class="hidden"><div id="tKnob"></div></div>
-      <div id="tBtns">${BUTTONS.map(([code, , modes], i) => `<button class="tb${i < 2 ? ' big' : ''}" data-code="${code}" data-modes="${modes}"></button>`).join('')}</div>`;
+      <div id="tBtns">${BUTTONS.map(([code, , modes], i) => `<button class="tb${i < 2 || code === 'KeyS' ? ' big' : ''}${code === 'KeyS' ? ' pull' : ''}" data-code="${code}" data-modes="${modes}"></button>`).join('')}</div>`;
     document.body.appendChild(root);
     this.base = root.querySelector('#tStick'); this.knob = root.querySelector('#tKnob');
     this.btns = [...root.querySelectorAll('.tb')];
@@ -88,7 +92,7 @@ export class TouchUI {
     document.addEventListener('gesturestart', e => e.preventDefault());
   }
 
-  // mode: foot | drive | seat | drone ; holding: true when an item is in hand, 'gun' with the shotgun out
+  // mode: foot | drive | seat | drone | fish ; holding: true when an item is in hand, 'gun' with the shotgun out
   setMode(mode, holding) {
     if (!this.enabled) return;
     const key = mode + '|' + holding + '|' + (this.weapon || '');

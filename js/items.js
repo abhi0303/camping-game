@@ -1,3 +1,4 @@
+import { buildRod } from './fishing/models.js';
 import * as THREE from 'three';
 import { GeoBuilder, MAT } from './utils.js';
 
@@ -40,6 +41,8 @@ export function droneBody(b, props = true) {
 }
 
 const BUILD = {
+  // fishing rods (other players' hands; the local player's rod bends — see js/fishing/models.js)
+  rod1: b => buildRod(b, 1), rod2: b => buildRod(b, 2), rod3: b => buildRod(b, 3),
   sledge: b => {
     b.cyl(0.02, 0.024, 0.78, 6, 0, 0, 0.28, 0x8a5a2b, H, 0, 0);
     b.box(0.09, 0.22, 0.09, 0, 0.0, 0.66, 0x4a4d52);

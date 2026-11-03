@@ -6,6 +6,18 @@ import { Character } from '../character.js';
 import { GeoBuilder, canvasTexture, dampAngle } from '../utils.js';
 
 const LINES = ['How can I help you?', 'Do you want to purchase or sell anything?'];
+const FARMER = {
+  jacket: 0xf1ede2, jacketLt: 0xddd6c6, shirt: 0xf7f3ea, jeans: 0x6b4a2e, jeansDk: 0x5a3d25, belt: 0x3a2412,
+  skin: 0xb98058, skinDk: 0xa06c48, hair: 0xd9d5ce, shoe: 0x4a3020, shoeGrey: 0x3a2618, sole: 0x2a1a10, watch: 0x6a5a3a,
+};
+// straw hat with a red band
+function strawHat(b) {
+  b.cyl(0.25, 0.27, 0.025, 12, 0, 0.29, -0.005, 0xd8b862);
+  b.cyl(0.29, 0.29, 0.012, 12, 0, 0.285, -0.005, 0xc8a650);
+  b.cyl(0.118, 0.135, 0.14, 10, 0, 0.36, -0.005, 0xe2c672);
+  b.cyl(0.137, 0.137, 0.035, 10, 0, 0.315, -0.005, 0x9a3a2a);
+  b.cyl(0.1, 0.118, 0.012, 10, 0, 0.432, -0.005, 0xd0b060);
+}
 const NEAR = 7;          // the bubble shows within this distance
 
 function bubbleTexture(text) {
@@ -26,26 +38,20 @@ function bubbleTexture(text) {
 }
 
 export class FarmerNPC {
-  // at: { x, y, z, yaw } — where he stands (y = floor height)
-  constructor(scene, at) {
-    this.char = new Character({
-      jacket: 0xf1ede2, jacketLt: 0xddd6c6, shirt: 0xf7f3ea, jeans: 0x6b4a2e, jeansDk: 0x5a3d25, belt: 0x3a2412,
-      skin: 0xb98058, skinDk: 0xa06c48, hair: 0xd9d5ce, shoe: 0x4a3020, shoeGrey: 0x3a2618, sole: 0x2a1a10, watch: 0x6a5a3a,
-    });
-    // straw hat with a red band
+  // at: { x, y, z, yaw } — where he stands (y = floor height). opts: { colors, hat(b), lines } for other
+  // shopkeepers (the Fish Market's fisherman)
+  constructor(scene, at, opts = {}) {
+    this.char = new Character(opts.colors || FARMER);
     const b = new GeoBuilder();
-    b.cyl(0.25, 0.27, 0.025, 12, 0, 0.29, -0.005, 0xd8b862);
-    b.cyl(0.29, 0.29, 0.012, 12, 0, 0.285, -0.005, 0xc8a650);
-    b.cyl(0.118, 0.135, 0.14, 10, 0, 0.36, -0.005, 0xe2c672);
-    b.cyl(0.137, 0.137, 0.035, 10, 0, 0.315, -0.005, 0x9a3a2a);
-    b.cyl(0.1, 0.118, 0.012, 10, 0, 0.432, -0.005, 0xd0b060);
+    (opts.hat || strawHat)(b);
     const hat = b.build(); hat.traverse(o => { if (o.isMesh) o.castShadow = true; });
     this.char.j.head.add(hat);
     this.root = this.char.root;
     this.root.position.set(at.x, at.y, at.z);
     this.home = at.yaw; this.yaw = at.yaw; this.root.rotation.y = at.yaw;
     scene.add(this.root);
-    this.tex = LINES.map(bubbleTexture);
+    this.lines = opts.lines || LINES;
+    this.tex = this.lines.map(bubbleTexture);
     this.bubble = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.tex[0], transparent: true, depthWrite: false, opacity: 0 }));
     this.bubble.scale.set(1.9, 0.56, 1);
     this.bubble.position.set(at.x, at.y + 2.35, at.z);
@@ -64,7 +70,7 @@ export class FarmerNPC {
     // the two greetings take turns while someone is near
     if (near) {
       this.lineT += dt;
-      if (this.lineT > 3.5) { this.lineT = 0; this.line = (this.line + 1) % LINES.length; this.bubble.material.map = this.tex[this.line]; }
+      if (this.lineT > 3.5) { this.lineT = 0; this.line = (this.line + 1) % this.lines.length; this.bubble.material.map = this.tex[this.line]; }
     }
     const m = this.bubble.material;
     m.opacity = Math.max(0, Math.min(1, m.opacity + (near ? dt * 6 : -dt * 3)));

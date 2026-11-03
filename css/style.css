@@ -541,6 +541,23 @@ body.touch #farmBar { font-size: 12px; padding: 2px 8px; gap: 9px; }
 .fi-r.bad b { color: #ff8a80; }
 .fi-warn { background: rgba(255,120,90,.16); color: #ffb08f; border-radius: 6px; padding: 4px 6px; margin: 3px 0; font-weight: 800; font-size: 12px; }
 .fi-note { opacity: .75; font-size: 12px; margin-top: 3px; }
+/* chicken farm: green laying · yellow an egg is almost there · blue eggs ready · red feed required */
+.fi-st { border-radius: 6px; padding: 4px 7px; margin: 3px 0 4px; font-weight: 800; font-size: 12.5px; }
+.fi-st.green { background: rgba(91,209,106,.16); color: #9be39f; }
+.fi-st.yellow { background: rgba(242,193,78,.18); color: #f6d27a; }
+.fi-st.blue { background: rgba(90,169,255,.18); color: #9cc9ff; }
+.fi-st.red { background: rgba(255,90,74,.18); color: #ff9a8f; }
+.fi-r.green b { color: #9be39f; } .fi-r.yellow b { color: #f6d27a; } .fi-r.blue b { color: #9cc9ff; }
+.fi-r.fi-wrap { flex-wrap: wrap; } .fi-r.fi-wrap b { white-space: normal; font-weight: 700; }
+.fi-warn.blue { background: rgba(90,169,255,.16); color: #9cc9ff; }
+.fu-go.collect { background: #5aa9ff; color: #0d1d33; }
+.fu-row.hen { border-left: 4px solid #5bd16a; }
+.fu-row.hen.yellow { border-left-color: #f2c14e; } .fu-row.hen.blue { border-left-color: #5aa9ff; } .fu-row.hen.red { border-left-color: #ff5a4a; }
+.fu-row.hen .hen-t { font-variant-numeric: tabular-nums; }
+.fu-row.hen.green .hen-t { color: #9be39f; } .fu-row.hen.yellow .hen-t { color: #f6d27a; } .fu-row.hen.blue .hen-t { color: #9cc9ff; } .fu-row.hen.red .hen-t { color: #ff9a8f; }
+.fu-name small { font-weight: 600; opacity: .65; }
+#farmBar .ready { color: #9cc9ff; }
+#farmInfo .fi-r b { font-variant-numeric: tabular-nums; }
 .fu-npc { display: flex; align-items: center; gap: 10px; background: #2b2a22; border: 1px solid #5b4a2a; border-radius: 10px; padding: 8px 10px; margin-bottom: 10px; font-size: 14px; }
 .fu-menu { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; margin-bottom: 8px; }
 .fu-menu button { pointer-events: auto; cursor: pointer; display: flex; align-items: center; gap: 8px; text-align: left; border: 0; border-radius: 10px; padding: 10px; background: #23273a; color: #eef; }
@@ -559,3 +576,47 @@ body.touch #farmInfo { top: 182px; right: 8px; width: 176px; font-size: 11px; pa
 .fu-hist small { opacity: .6; white-space: nowrap; }
 .fp-farm { background: #1f3a26; border: 1px solid rgba(140,230,150,.25); border-radius: 8px; padding: 6px 10px; font-size: 13px; }
 @media (max-height: 560px) { #farmInfo { top: 220px; } body.touch #farmInfo { top: 106px; width: 172px; font-size: 10.5px; padding: 5px 7px; } body.touch #farmInfo .fi-t { font-size: 11px; margin-bottom: 2px; } #farmInfo .fi-r { padding: 1px 0; } body.touch #farmInfo .fi-opt { display: none; } }
+
+/* ---------- fishing: HUD, result card, Fish Market screens ---------- */
+#fishHud { position: absolute; left: 50%; bottom: 128px; transform: translateX(-50%); width: min(360px, calc(100vw - 24px)); padding: 9px 12px; font-size: 13px; pointer-events: none; background: rgba(14,24,34,.86); }
+.fh-top { display: flex; justify-content: space-between; gap: 8px; font-weight: 700; font-size: 12px; opacity: .9; }
+.fh-status { font-weight: 900; font-size: 16px; margin: 5px 0 4px; text-align: center; }
+.fh-status.bite { color: #ffe08a; animation: fhPulse .5s infinite alternate; }
+.fh-status.bad { color: #ff9a8f; } .fh-status.good { color: #9be39f; }
+@keyframes fhPulse { from { transform: scale(1); } to { transform: scale(1.06); } }
+.fh-meter { position: relative; height: 14px; border-radius: 7px; overflow: hidden; display: flex; margin-top: 4px; }
+.fh-meter i { display: block; height: 100%; }
+.fh-meter .z1 { width: 55%; background: #3f9a52; } .fh-meter .z2 { width: 25%; background: #c9a23a; } .fh-meter .z3 { width: 20%; background: #c4473a; }
+.fh-meter b { position: absolute; top: -2px; width: 4px; height: 18px; margin-left: -2px; background: #fff; border-radius: 2px; box-shadow: 0 0 4px #000; transition: left .05s linear; }
+.fh-lbls { display: flex; justify-content: space-between; font-size: 11px; opacity: .85; margin: 2px 0 3px; }
+.fh-lbls .ok { color: #9be39f; } .fh-lbls .warn { color: #f6d27a; } .fh-lbls .bad { color: #ff9a8f; font-weight: 900; }
+.fh-row { display: flex; justify-content: space-between; gap: 8px; padding: 2px 0; border-top: 1px solid rgba(255,255,255,.07); font-variant-numeric: tabular-nums; }
+.fh-row span:last-child { font-weight: 800; }
+.fh-pull { height: 5px; background: #151824; border-radius: 3px; overflow: hidden; margin-top: 4px; } .fh-pull u { display: block; height: 100%; width: 0; background: #5aa9ff; }
+.fh-tip { font-size: 11.5px; opacity: .8; text-align: center; margin-top: 4px; }
+#fishCard { position: absolute; left: 50%; top: 18%; transform: translateX(-50%); width: min(300px, calc(100vw - 32px)); background: #1b2433; border: 2px solid #5aa9ff; border-radius: 14px; padding: 12px 14px; text-align: center; pointer-events: auto; box-shadow: 0 10px 30px rgba(0,0,0,.45); z-index: 4; }
+#fishCard.bad { border-color: #c4473a; pointer-events: none; }
+#fishCard img { width: 200px; max-width: 100%; height: auto; display: block; margin: 2px auto; }
+.fc-t { font-weight: 900; letter-spacing: .05em; text-transform: uppercase; font-size: 12px; opacity: .75; }
+.fc-big { font-size: 18px; font-weight: 900; margin: 4px 0 6px; color: #ffe08a; }
+.fc-r { display: flex; justify-content: space-between; font-size: 13px; padding: 3px 4px; border-top: 1px solid rgba(255,255,255,.07); }
+.fc-msg { font-size: 14px; margin-top: 6px; color: #ffcfc8; }
+.fc-ico { font-size: 54px; }
+.fu-npc.fish { background: #1f2f3a; border-color: #3d6578; }
+.fu-quick { display: flex; gap: 6px; flex-wrap: wrap; margin: -2px 0 8px; } .fu-quick .fu-go { flex: 1; }
+.fu-thumb { width: 44px; height: auto; display: block; }
+.fr-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px; margin-bottom: 8px; }
+.fr-card { background: #23273a; border-radius: 10px; padding: 8px; display: flex; flex-direction: column; gap: 3px; border: 2px solid transparent; }
+.fr-card.on { border-color: #6cc46a; } .fr-card.locked { opacity: .72; }
+.fr-card img { width: 100%; height: 92px; object-fit: contain; background: radial-gradient(#7d8fae, #3f4b66); border-radius: 8px; }
+.fr-name { font-weight: 900; font-size: 13.5px; } .fr-price { font-size: 12px; color: #ffe08a; font-weight: 800; }
+.fr-stat { display: flex; justify-content: space-between; align-items: center; font-size: 11.5px; opacity: .9; }
+.fr-fish { display: flex; justify-content: space-between; font-size: 12px; font-weight: 700; } .fr-fish .no { opacity: .35; }
+.fr-note { font-size: 11.5px; opacity: .8; }
+.fr-card .fu-go { margin-top: 4px; }
+.fr-tag { margin-top: 4px; text-align: center; padding: 8px; border-radius: 8px; background: #2e3450; font-weight: 800; font-size: 12.5px; } .fr-tag.on { background: #2f5a35; color: #bff0c2; } .fr-tag.lock { opacity: .8; }
+.fr-table td.on { color: #9be39f; font-weight: 800; }
+#tBtns .tb.pull { background: rgba(70,150,230,.55); }
+body.touch #fishHud { bottom: auto; top: 64px; width: min(300px, 46vw); font-size: 11.5px; padding: 6px 9px; }
+body.touch .fh-status { font-size: 14px; }
+@media (max-height: 560px) { #fishHud { bottom: 112px; } #fishCard { top: 8%; } #fishCard img { width: 150px; } }

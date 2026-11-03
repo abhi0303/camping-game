@@ -30,7 +30,7 @@ What it stores:
 | `POST /v1/rooms/:code/heartbeat` | host | every 15 s: online members + world snapshot when it changed; `release: true` when leaving |
 | `POST /v1/rooms/:code/verify` | host | check a joining player's ticket |
 | `GET /v1/rooms/:code/farm` | member | the farm: money, goods, shelters, animals, catalog (counts production up to now first) |
-| `POST /v1/rooms/:code/farm` | member | one action with a `requestId`: `buy {item, qty, shelter?}`, `sell {item, qty}`, `build {type, plot}`, `deposit {items: {wood, stone}}`, `feed {shelter, count \| all}`, `upgrade {target: 'storage', level}`, `gate {shelter, open}` |
+| `POST /v1/rooms/:code/farm` | member | one action with a `requestId`: `buy {item, qty, shelter?}`, `sell {item, qty}`, `build {type, plot}`, `deposit {items: {wood, stone}}`, `feed {shelter, count \| all}`, `upgrade {target: 'storage', level}`, `gate {shelter, open}`, `collect {shelter}`, `cast {spot}`, `reel {cast, log}`, `rod {level}` |
 | `GET /v1/rooms/:code/farm/history` | member | the last 30 purchases / sales / builds / feedings / upgrades, with who did them |
 | `POST /v1/admin/migrate` | admin secret | apply database migrations |
 
@@ -53,11 +53,14 @@ Opening the world on a second device moves your own session there. All timing us
 - **Production is counted lazily.** Whenever the farm is read or changed, the time since `rooms.produced_at` is simulated in steps of up to an hour (at most a week), and `produced_at` moves forward in the same transaction, so the same time is never counted twice. Each step:
   - animals produce only while fed (`fed_until`), scaled by their health, and heal;
   - an animal hungry for more than a day gets weak (never below 10 health);
-  - goods stop at the storage limit (catalog `cap` × the storage level's multiplier).
+  - goods stop at the storage limit (catalog `cap` × the storage level's multiplier);
+  - chickens (catalog `nest`) lay into their own nest box (`animals.ready`) instead; a full nest stops that chicken. `collect {shelter}` moves the eggs into storage (up to its limit) — with the row locked, two players collecting at once never get the same egg.
+- **Chicken timings** (minutes per egg, feeding minutes, feed per feeding, nest size) come from [`src/animals.js`](src/animals.js), applied over the catalog rows when the catalog is read. Changing them needs a deploy; prices stay in the catalog table.
 - **Unlocks:** `rooms.total_earned` counts money from sales; an animal with `unlock` in its catalog data can only be bought once the farm has earned that much.
 - **Storage upgrades:** the `storage` catalog row lists the levels (`mult`, cost in money / wood / stone). The client asks for a specific level, so two players upgrading at once upgrade once (the second gets `already_upgraded`).
 - **Gates:** `buildings.gate_open` keeps each pen's gate open or closed for everyone.
 - **Balancing:** change `buy_price`, `sell_price` or the `data` JSON (feed cost, feeding hours, rate, capacity, limits, unlocks, storage levels) in the `catalog` table. No deploy is needed.
+- **Fishing** ([`src/fishing.js`](src/fishing.js), rules shared with the game in [`../js/fishing/sim.js`](../js/fishing/sim.js)): `cast` takes a worm and rolls what bites from the member's rod (`room_members.rod_level`), stored in `fishing_casts` with `bite_at`. `reel` gets the player's pull / release log, replays it through the same challenge and only adds the fish if it lands — and not sooner than the time since `bite_at` allows (1.5 s slack), within 3 minutes. A cast is reeled once (`status` leaves `open` under a row lock). `rod {level}` buys the next level with the farm money (catalog `rod.levels`).
 - **Logs and stones from the world** are reported by the players and can't be checked by the server. Deposits are limited to 50 of each per request and 150 per member per minute.
 
 ## Set up and deploy

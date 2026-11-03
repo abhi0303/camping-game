@@ -87,33 +87,71 @@ export class FarmEconomy {
     const home = this.cat(k.shelter);
     return this.st.buildings.filter(b => b.type === k.shelter).reduce((t, b) => t + Math.max(0, home.capacity - this.animalsIn(b.id).length), 0);
   }
+  // one chicken's nest box right now, worked out from the server's numbers (ready, progress, fedUntil, health)
+  // and its clock — so the timers and egg counts move every second without asking the server:
+  // { ready (eggs waiting), nest (box size), nextMs (time to its next egg; Infinity if it isn't laying),
+  //   pct (how far the next egg is, 0..1), fed, fedMs (feeding left), full (nest full), eggMs (one egg's time) }
+  nestOf(a, now = this.serverNow()) {
+    const c = this.cat(a.type) || {}, at = Date.parse(this.st.at), fu = a.fedUntil ? Date.parse(a.fedUntil) : -Infinity;
+    const nest = c.nest || Infinity, per = (c.rate || 0) * (a.health / 100) / HOUR;
+    let ready = a.ready || 0, p = a.progress || 0;
+    if (ready < nest && per > 0) {
+      p += per * Math.max(0, Math.min(now, fu) - at);
+      const laid = Math.floor(p + 1e-9);
+      ready = Math.min(nest, ready + laid); p = ready >= nest ? 0 : p - laid;
+    }
+    const fed = fu > now, full = ready >= nest;
+    return { ready, nest, fed, full, fedMs: fed ? fu - now : 0, pct: full ? 1 : p, eggMs: per > 0 ? 1 / per : Infinity,
+      nextMs: fed && !full && per > 0 ? (1 - p) / per : Infinity };
+  }
   // a shelter's production right now, from the server's numbers (fedUntil, progress, health) and its clock:
-  // { count, fed, hungry, nextMs (next product), dueMs (first animal whose feed runs out; 0 = some are hungry),
-  //   feedHours, feedCost, products, paused (nobody fed), full (storage full) }
+  // { count, fed, hungry, nextMs (shortest timer: the next product), dueMs (first animal whose feed runs out;
+  //   0 = some are hungry), feedHours, feedCost, products, need (feed for the hungry ones), paused (nobody fed),
+  //   full (storage full), nests (chickens: eggs wait in nest boxes), ready / readyBy (eggs to collect),
+  //   nestsFull, kinds ({ type: count }), soon (next egg in under 30 s) }
   shelterInfo(bd) {
     const now = this.serverNow(), at = Date.parse(this.st.at), list = this.animalsIn(bd.id), k = this.cat(bd.type), home = this.cat(k.animal) || {};
-    const out = { count: list.length, fed: 0, hungry: 0, nextMs: Infinity, dueMs: Infinity, feedHours: home.feedHours || 2, feedCost: home.feedCost || 1, products: [], need: 0 };
+    const out = { count: list.length, fed: 0, hungry: 0, nextMs: Infinity, dueMs: Infinity, feedHours: home.feedHours || 2, feedCost: home.feedCost || 1, products: [], need: 0,
+      nests: !!home.nest, ready: 0, readyBy: {}, nestsFull: 0, kinds: {} };
     for (const a of list) {
       const c = this.cat(a.type), fu = a.fedUntil ? Date.parse(a.fedUntil) : -Infinity;
+      out.kinds[a.type] = (out.kinds[a.type] || 0) + 1;
       if (fu > now) { out.fed++; out.dueMs = Math.min(out.dueMs, fu - now); } else { out.hungry++; out.dueMs = 0; out.need += c.feedCost || 1; }
       if (!c.product || !c.rate) continue;
       if (!out.products.includes(c.product)) out.products.push(c.product);
+      if (c.nest) {                                   // chickens: every one has its own timer and nest box
+        const n = this.nestOf(a, now);
+        out.ready += n.ready; out.readyBy[c.product] = (out.readyBy[c.product] || 0) + n.ready;
+        if (n.full) out.nestsFull++;
+        if (n.nextMs <= n.fedMs + 1000) out.nextMs = Math.min(out.nextMs, n.nextMs);   // laid before its feed runs out
+        continue;
+      }
       const per = c.rate * (a.health / 100) / HOUR;
       if (!(fu > now) || per <= 0) continue;
       const p = a.progress + per * Math.max(0, Math.min(now, fu) - at), left = p >= 1 ? 0 : (1 - p) / per;
-      if (now + left <= fu + 30e3) out.nextMs = Math.min(out.nextMs, left);    // laid before this animal's feed runs out (a fed
-      // chicken lays its egg right at the end of its 2 h; 30 s covers rounding)
+      if (now + left <= fu + 30e3) out.nextMs = Math.min(out.nextMs, left);    // made before this animal's feed runs out
     }
     out.paused = out.count > 0 && out.fed === 0;
-    out.full = out.products.length > 0 && out.products.every(p => this.qty(p) >= (this.st.caps[p] || Infinity));
+    out.full = !out.nests && out.products.length > 0 && out.products.every(p => this.qty(p) >= (this.st.caps[p] || Infinity));
+    out.soon = out.nextMs < 30e3;
     return out;
   }
-  // the next moment the farm changes by itself (something is laid, an animal gets hungry)
+  // the next moment the farm changes by itself that this screen can't work out alone (milk is made straight
+  // into storage, an animal gets hungry). Eggs wait in the nests and are counted here, so a farm full of
+  // chickens doesn't make the game ask the server every few seconds.
   nextEventMs() {
     if (!this.st) return Infinity;
     let ms = Infinity;
-    for (const b of this.st.buildings) { const i = this.shelterInfo(b); ms = Math.min(ms, i.nextMs, i.dueMs > 0 ? i.dueMs : Infinity); }
+    for (const b of this.st.buildings) { const i = this.shelterInfo(b); ms = Math.min(ms, i.nests ? Infinity : i.nextMs, i.dueMs > 0 ? i.dueMs : Infinity); }
     return ms;
+  }
+  // eggs waiting in all nest boxes (by product)
+  eggsReady() {
+    const out = {};
+    if (!this.st) return out;
+    const now = this.serverNow();
+    for (const a of this.st.animals) { const c = this.cat(a.type); if (c && c.nest) out[c.product] = (out[c.product] || 0) + this.nestOf(a, now).ready; }
+    return out;
   }
   hungryCount() { const now = this.serverNow(); return this.st ? this.st.animals.filter(a => !(a.fedUntil && Date.parse(a.fedUntil) > now)).length : 0; }
   // products per hour while fed (used in the overview)

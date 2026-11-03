@@ -97,23 +97,45 @@ The main road splits it in two: **the farm** (plots and storage) on one side, **
   | 🐎 Horse stable | ₹600 · 60 wood · 20 stone | 2 horses |
 - **Pens and gates:** every shelter has a fenced pen with a dirt yard, a feed trough and a water trough. Press **E** at the gate to open or close it — a closed gate blocks the way, everyone sees it move, and it stays as you left it.
 - **Feeding:** animals only eat when you feed them. Open the gate, walk to the feed trough and press **E**: **Feed all** or **Feed selected** (the hungriest first). One feeding costs 1 🌾 feed per chicken (2 per goat or horse, 3 per cow) and keeps it fed — and producing — for **2 hours** (you can feed up to a day ahead). With too little feed only some animals get fed. New animals arrive fed for 2 hours.
-- **Production panel:** stand at a plot to see its numbers live — total animals, **next egg / milk in**, **feed due in**, feeding duration and what's in storage. When nobody is fed it says **Production Paused – Feed Required**. The timers come from the server's time stamps, and the farm refreshes by itself when an egg is laid.
-- **Chickens:**
+- **Production panel:** stand at a plot to see its numbers live — total animals, **next egg / milk in**, **feed due in**, feeding duration and what's in storage. When nobody is fed it says **Production Paused – Feed Required**. The timers come from the server's time stamps.
+- **Chickens:** every chicken has its own egg timer and its own nest box. Eggs wait in the nest (up to 24 per chicken) until someone **collects** them — at the nest boxes in the pen (**E**) or with **Collect** in the coop's panel. A full nest stops that chicken laying, so an untended farm never piles up endless eggs.
 
-  | Chicken | Price | Lays | Egg price | Unlocks |
+  | Chicken | Price | Lays (while fed) | Egg price | Unlocks |
   |---|---|---|---|---|
-  | 🐔 Chicken (white) | ₹40 | 1 egg an hour while fed | ₹6 | from the start |
-  | 🐓 Brown Desi chicken | ₹180 | 1 brown egg an hour while fed | ₹14 | after the farm earns ₹300 from sales |
-  | 🐦‍⬛ Dark Desi chicken | ₹450 | 1 dark egg an hour while fed | ₹35 | after the farm earns ₹1500 from sales |
+  | 🐔 Regular White | ₹40 | 1 egg every **5 min** | ₹1 | from the start |
+  | 🐓 Brown Desi | ₹180 | 1 brown egg every **7 min** | ₹3 | after the farm earns ₹300 from sales |
+  | 🐦‍⬛ Black | ₹450 | 1 black egg every **9 min** | ₹7 | after the farm earns ₹1500 from sales |
+
+  The timings live in one file, [`server/src/animals.js`](server/src/animals.js). A Regular White pays for itself in about 3½ hours, a Brown Desi in about 7 and a Black in about 10 — but a Black chicken earns the most per place in the coop. The **Chicken Farm panel** (stand at the coop, or open it from its sign) shows the varieties, **Next Egg In** (the shortest timer, ticking every second), the eggs ready to collect, the feeding left and the feed needed, in colours: 🟢 laying · 🟡 an egg is seconds away · 🔵 eggs ready · 🔴 feed required. The coop's panel also lists every chicken with its own timer.
 
   Each kind has its own look, and its eggs are kept separately. 🐐 Goats (₹150) give goat milk (₹30), 🐄 cows (₹400) cow milk (₹25), 🐴 horses (₹600) are for carts and riding later.
 - **Health:** an animal left hungry for a day gets weak (it never dies). Fed again it recovers.
 - **Farm Store** (across the road): talk to the farmer behind the counter (**E**). His menu: purchase animals, sell farm products, purchase animal feed (₹2), farming supplies (coming with crop fields) and construction materials (🪵 wood ₹6, 🪨 stone ₹8). You can walk inside.
+- **Fish Market** (east of the Market, set back from the road; follow the 🐟 sign): talk to the fisherman (**E**) to buy worms, buy or upgrade your fishing rod, sell fish and see the farm's fish collection. See [Fishing](#fishing) below.
 - **Market** (next to the store): the selling hall — sell eggs, milk, wood and stone, see the price board and the farm's trade log (who bought, sold, built or upgraded what).
 - **Farm storage** (end of the walkway): store the logs and stones you collect (chopping trees, rockfalls, crates) — logs become 🪵 wood. It also sets how much the farm can hold: level 1 holds 60 of each egg, 30 of each milk, 500 feed / wood / stone. **Upgrade to level 2** (₹600 · 80 wood · 40 stone) for twice as much and a bigger storehouse. Two players pressing Upgrade at once upgrade it only once.
 - **While nobody plays:** fed animals keep producing until their feed runs out. When anyone opens the world, the server works out what happened since, using its own clock, for up to a week of absence. Goods stop at the storage limit, so sell before it fills up.
 - **Safe for a group:** every purchase, sale, feeding, build, gate and upgrade is checked by the server against the shared money and goods. Two members buying at the same moment can't spend the same money; a double click or a retry after a lost connection never does anything twice.
 - The money bar above the hotbar and the Esc menu show the money, the goods, the animals and how many are hungry. Animals walk around their pens the same way on every player's screen.
+
+### Fishing
+
+A stone path with lanterns leads from behind the Fish Market north through the jungle to **three wooden docks** on the river. Fish swim around the docks and jump now and then.
+
+- **Worms:** 10 for ₹1 at the Fish Market. Each cast puts one worm on the hook (an escaped fish keeps it). No worms, no fishing.
+- **Fishing:** walk to the end of a dock — **E – Start Fishing**. Your character casts; wait and watch the float. Not every cast gets a bite.
+- **The tug of war:** when a fish bites (*“A fish has bitten! Pull now!”*) hold **S** (phones: the **PULL** button). Then the fish takes turns: while it **fights**, let go — pulling raises the line tension and at 100 % the line snaps. When it's **tired**, hold S until the pull is reeled in. Small fish need 2–3 pulls, medium 4–5, large 6–8. The panel shows the tension (safe · tension · danger), the pulls, how hard the fish resists and what to do. Miss a tired spell too often and the line goes slack — *“The fish escaped! Try again.”*
+- **A catch** shows the fish, its weight and selling value (*“You caught a Medium Fish! Selling Value: ₹5”*) and goes into the farm storage. **E** casts again; **Q** or walking away leaves the dock.
+- **Rods:** each player has their own rod, bought with the farm money and kept with your name. Every rod looks different:
+
+  | Rod | Price | Catches | Also |
+  |---|---|---|---|
+  | 🎣 Level 1 · Basic Wooden | starter | small, some medium | short time to set the hook, 1 missed pull allowed |
+  | 🎣 Level 2 · Steel Grip | ₹150 | small, more medium | steadier line, 2 missed pulls |
+  | 🎣 Level 3 · Advanced Fibre | ₹500 | small, medium and **large** | lowest tension, longest hook time, big fish land in fewer pulls |
+
+- **Fish:** 🐟 small ₹2 · 🐠 medium ₹5 · 🎏 large ₹14 (the storage holds 40 / 40 / 20 at level 1). Fishing earns roughly ₹400 an hour with the basic rod and ₹950 with the best one — a quick start, while a full farm of chickens earns more without anyone playing.
+- **Together:** players fish at the same time at different docks and see each other's rod, line, float and catches; a dock someone is using is taken. **No cheating:** the server decides what bites, and a catch only counts if the server replays your pull / release presses through the same challenge and the fish lands — never faster than real time. Each cast pays out once.
 
 The shared world is everything the zombie save holds except your personal backpack: road blocks, crates, materials, the bridge, the RV's checkpoint, the RV storages and the objective.
 
@@ -226,6 +248,7 @@ Global: **M** map, **K** sound, **B** mic on / off (co-op), **R** RV back to the
 - `js/minimap.js` – minimap and full map
 - `js/app.js`, `sw.js`, `manifest.webmanifest`, `icons/` – installable app: service worker (offline cache), install button / iOS hint, full screen, wake lock, back button
 - `js/farm/` – Farm World: server address (`config.js`), API calls (`api.js`), logins kept on this device (`logins.js`), the session that hosts / joins / saves / hands over the world (`farm.js`), start-menu screens (`menu.js`), Esc-menu members panel (`panel.js`); the farm: plot / store layout (`layout.js`), small props (`props.js`), models (`models.js`), the farmer (`npc.js`), farm in the world + animals + gates (`farmland.js`), shared money, goods and production timers (`economy.js`), store / market / storage / plot / shelter / feeding popups, the production panel and the money bar (`farmui.js`)
+- `js/fishing/` – fishing: the challenge rules shared with the server (`sim.js`), rods / fish / docks / Fish Market models (`models.js`), the docks, path and water life in the world (`area.js`), the mini-game, HUD and other players' lines (`fishing.js`), the Fish Market screens (`marketui.js`) and their 3D pictures (`thumbs.js`)
 - `server/` – the Farm World server (Cloudflare Worker + NeonDB): API, migrations, tests, setup and deploy steps in [`server/README.md`](server/README.md)
 
 ## Performance

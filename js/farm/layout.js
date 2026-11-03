@@ -27,10 +27,13 @@ export const LAMPS = [uv(-8, 9), uv(8, 9), uv(13, 10), uv(22, 10)];
 export const ROAD_U = { x: RT.x, z: RT.z }, ROAD_V = { x: RN.x, z: RN.z };
 export const SIGN = { x: -114.5, z: -149 };                       // by the road on the farm side, pointing to the farm
 export const STORE_SIGN = uv(-6.5, 7.6);                          // by the road on the store side
+export const FISH_MARKET = uv(29, 31);    // east of the Market, set back from the road; the docks path leaves behind it
+export const FISH_SIGN = uv(35.5, 19.5, 2.7512 + 0.6);                  // by the road, pointing to the Fish Market
 export const CLEAR = [
   { x0: -116, x1: -42, z0: -196, z1: -161 },                      // the farm
   { x0: -122, x1: -106, z0: -163, z1: -139 },                     // path from the road
   { x0: -141, x1: -80, z0: -134, z1: -99 },                       // store, market, goat field
+  { x0: -101, x1: -72, z0: -112, z1: -83 },                       // the Fish Market
 ];
 export const FARM_CENTER = { x: -82, z: -178 };
 export const STORE_CENTER = { x: STORE.x, z: STORE.z };
