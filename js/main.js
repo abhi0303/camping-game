@@ -448,7 +448,7 @@ function farmHud() {
 }
 async function farmInvite() {
   if (!farm.isOwner) { toast('Only the owner of this world can invite new members'); return; }
-  try { const r = await farm.createInvite(); await copyText(r.link); toast('📋 Invite link copied — send it to your friend (works once, 72 h)'); }
+  try { const r = await farm.createInvite(); await copyText(r.message); toast(`📋 Invite copied — world code ${r.code}, invite code ${r.pretty} (works once, 72 h)`); }
   catch (e) { toast('⚠ ' + (e.message || e)); }
 }
 // mic button (top bar + pause menu) — B toggles it too

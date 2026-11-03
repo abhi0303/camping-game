@@ -69,7 +69,11 @@ All paths are relative, so the game works from the repo sub-folder. `.nojekyll` 
 A permanent world for a group of up to 4 friends. It's saved on the Farm World server (a small Cloudflare Worker + NeonDB, see [`server/`](server/README.md)), so it remembers everything when nobody is playing, and you can continue from any device.
 
 - **Create a world** (Farm World tab → *Create a new world*): your name, a world name and a **PIN** (4–6 digits). You become the world's **owner** and get a 6-character world code.
-- **Invite friends:** Esc menu → **➕ Invite a friend** (owner only) makes a one-time link, valid for 72 hours. Your friend opens it, picks a name and a PIN, and is a member from then on. A world has at most **4 members**; knowing the code alone doesn't let anyone in.
+- **Invite friends:** Esc menu → **➕ Invite a friend** (owner only) makes a one-time invite, valid for 72 hours. **Copy** copies a message with the link *and* two codes: the **world code** and the **invite code**. Your friend can either:
+  - open the link in the browser, pick a name and a PIN; or
+  - in the installed app (which can't open links): **Farm World → New here? Join with an invite**, type the world code and invite code (or paste the whole message), a name and a PIN.
+
+  Either way they are a member from then on and log in later with world code + name + PIN. A world has at most **4 members**; knowing the world code alone doesn't let anyone in.
 - **Play any time:** any member opens the world, from the saved list (*▶ Play*) or with *Open a world you belong to* (code + name + PIN, also on a new device). Any 1–4 members can play together; offline members keep their place.
 - **Members vs. online:** the Esc menu shows both, e.g. *Members 4/4 · Online 2/4*, with who is playing now and when the others were last seen.
 - **Who hosts:** the first member to open the world hosts the live game; the others join them. If the host leaves or their browser crashes, one of the remaining players takes over automatically and play goes on.

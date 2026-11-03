@@ -15,7 +15,7 @@ export class FarmPanel {
   // ctx: { farm, session, net, toast, copy(text) -> Promise, syncLabel(), after() (fills the mic button) }
   constructor(el, ctx) {
     this.el = el; this.c = ctx;
-    this.link = ''; this.delOpen = false; this.delText = ''; this.msg = '';
+    this.inv = null; this.delOpen = false; this.delText = ''; this.msg = '';
     el.addEventListener('click', e => this._click(e));
     el.addEventListener('input', e => { if (e.target.matches('.fdel input')) this.delText = e.target.value; });
   }
@@ -51,7 +51,9 @@ export class FarmPanel {
       ${this._farmLine()}
       ${rows}
       ${canInvite ? `<button class="fbtn go" data-f="invite">➕ Invite a friend</button>` : L.isOwner ? '<div class="fmsg">All 4 places are taken. Remove a member to invite someone new.</div>' : '<div class="fmsg">Want to add a friend? The owner can invite them from this menu.</div>'}
-      ${this.link ? `<div class="finv"><input readonly value="${esc(this.link)}" /><button class="fbtn" data-f="copyinv">Copy</button></div><div class="fmsg">Send this link to your friend · works once · valid for 72 hours</div>` : ''}
+      ${this.inv ? `<div class="finv"><input readonly value="${esc(this.inv.link)}" /><button class="fbtn" data-f="copyinv">Copy</button></div>
+        <div class="fcodes"><span>In the app: <b>Join with an invite</b></span><span>World code <code>${esc(this.inv.code)}</code></span><span>Invite code <code>${esc(this.inv.pretty)}</code></span></div>
+        <div class="fmsg">Copy sends the link and both codes · works once · valid for ${this.inv.hours} hours</div>` : ''}
       ${this.msg ? `<div class="fmsg">${esc(this.msg)}</div>` : ''}
       <button class="micBtn wide" data-mic="1"></button>
       <button class="syncBtn wide" data-sync="1">${esc(this.c.syncLabel())}</button>
@@ -76,8 +78,8 @@ export class FarmPanel {
     e.preventDefault(); e.stopPropagation();
     const { farm: f, toast } = this.c, act = b.dataset.f;
     const busy = async fn => { b.disabled = true; try { await fn(); } catch (er) { this.msg = '⚠ ' + (er.message || er); } b.disabled = false; this.render(); };
-    if (act === 'invite') await busy(async () => { const r = await f.createInvite(); this.link = r.link; this.msg = ''; this.c.copy(r.link).then(() => toast('📋 Invite link copied — send it to your friend'), () => {}); });
-    else if (act === 'copyinv') this.c.copy(this.link).then(() => toast('📋 Invite link copied'), () => { const i = this.el.querySelector('.finv input'); if (i) { i.focus(); i.select(); } });
+    if (act === 'invite') await busy(async () => { const r = await f.createInvite(); this.inv = r; this.msg = ''; this.c.copy(r.message).then(() => toast('📋 Invite copied (link + codes) — send it to your friend'), () => {}); });
+    else if (act === 'copyinv') this.c.copy(this.inv.message).then(() => toast('📋 Invite copied (link + codes)'), () => { const i = this.el.querySelector('.finv input'); if (i) { i.focus(); i.select(); } });
     else if (act === 'remove') {
       if (!b.dataset.sure) { b.dataset.sure = '1'; b.textContent = 'Sure?'; b.classList.add('sure'); setTimeout(() => { if (b.isConnected) { delete b.dataset.sure; b.textContent = 'Remove'; b.classList.remove('sure'); } }, 2500); return; }
       await busy(async () => { const r = await f.removeMember(b.dataset.id); this.msg = ''; toast(`🚫 ${r ? r.name : b.dataset.name} is no longer a member of this world`); });

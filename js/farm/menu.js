@@ -6,6 +6,9 @@ import { Logins } from './logins.js';
 const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const cleanCode = v => String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
+const cleanInvite = v => String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12);
+// an invite link pasted anywhere: ...?farm=CODE&invite=XXXX -> { code, invite }
+const fromLink = v => { const m = /farm=([A-Za-z0-9]+)/i.exec(v || ''), i = /invite=([A-Za-z0-9-]+)/i.exec(v || ''); return m ? { code: cleanCode(m[1]), invite: i ? cleanInvite(i[1]) : '' } : null; };
 const PIN = /^\d{4,6}$/;
 const SUBS = {
   zombie: 'Drive through the jungle, clear the trail, rebuild the bridge and reach the hilltop camp — alone or with friends.',
@@ -18,14 +21,19 @@ export class FarmMenu {
     this.enter = enter; this.busy = false;
     this.ui = { saved: $('fSaved'), status: $('fStatus'), invite: $('fInvite') };
     const name = defaultName() || '';
-    for (const id of ['fcName', 'fjName', 'fiName']) $(id).value = name;
-    for (const id of ['fcPin', 'fjPin', 'fiPin']) $(id).addEventListener('input', e => { e.target.value = e.target.value.replace(/\D/g, '').slice(0, 6); });
-    $('fjCode').addEventListener('input', e => { const v = e.target.value; e.target.value = /farm=/i.test(v) ? cleanCode((/farm=([A-Za-z0-9]+)/i.exec(v) || [])[1]) : cleanCode(v); });
+    for (const id of ['fcName', 'fjName', 'fiName', 'fnName']) $(id).value = name;
+    for (const id of ['fcPin', 'fjPin', 'fiPin', 'fnPin']) $(id).addEventListener('input', e => { e.target.value = e.target.value.replace(/\D/g, '').slice(0, 6); });
+    // a pasted invite link fills the world code and the invite code (the installed app can't open links)
+    const pasted = v => { const l = fromLink(v); if (!l) return false; $('fnCode').value = l.code; if (l.invite) $('fnInvite').value = l.invite; return true; };
+    $('fjCode').addEventListener('input', e => { const v = e.target.value, l = fromLink(v); e.target.value = l ? l.code : cleanCode(v); if (l && l.invite) { pasted(v); this.status('That was an invite link: it is filled in under “Join with an invite”.'); $('fnName').focus(); } });
+    $('fnCode').addEventListener('input', e => { const v = e.target.value; if (!pasted(v)) e.target.value = cleanCode(v); });
+    $('fnInvite').addEventListener('input', e => { const v = e.target.value; if (!pasted(v)) e.target.value = cleanInvite(v); });
+    $('fnGo').onclick = () => this.joinCode();
     $('fcGo').onclick = () => this.create();
     $('fjGo').onclick = () => this.login();
     $('fiGo').onclick = () => this.joinInvite();
     const enterKey = (ids, btn) => ids.forEach(id => $(id).addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); $(btn).click(); } }));
-    enterKey(['fcName', 'fcWorld', 'fcPin'], 'fcGo'); enterKey(['fjCode', 'fjName', 'fjPin'], 'fjGo'); enterKey(['fiName', 'fiPin'], 'fiGo');
+    enterKey(['fcName', 'fcWorld', 'fcPin'], 'fcGo'); enterKey(['fjCode', 'fjName', 'fjPin'], 'fjGo'); enterKey(['fiName', 'fiPin'], 'fiGo'); enterKey(['fnCode', 'fnInvite', 'fnName', 'fnPin'], 'fnGo');
     this.ui.saved.addEventListener('click', e => this._savedClick(e));
     // ?farm=CODE&invite=XXXX (invite link) or ?farm=CODE
     const q = new URLSearchParams(location.search);
@@ -149,6 +157,21 @@ export class FarmMenu {
       this._rememberName(name);
       this._dropInviteFromUrl();
       this.ui.invite.classList.add('hidden');
+      await this._open(Logins.save(r), true);
+    });
+  }
+  // join with the world code + invite code typed in (same as the link, for the installed app)
+  joinCode() {
+    const code = cleanCode($('fnCode').value), invite = cleanInvite($('fnInvite').value), name = $('fnName').value.trim(), pin = $('fnPin').value;
+    if (code.length !== 6) { this.status('Type the 6-letter world code from your invite.', true); $('fnCode').focus(); return; }
+    if (invite.length < 6) { this.status('Type the invite code from your invite (8 letters and numbers).', true); $('fnInvite').focus(); return; }
+    if (!name) { this.status('Type your name.', true); $('fnName').focus(); return; }
+    if (!PIN.test(pin)) { this.status('Choose a PIN of 4 to 6 digits (you need it to log in on other devices).', true); $('fnPin').focus(); return; }
+    this._run(async () => {
+      this.status('Joining the world…');
+      const r = await api.join(code, invite, name, pin);
+      this._rememberName(name);
+      for (const id of ['fnCode', 'fnInvite', 'fnPin']) $(id).value = '';
       await this._open(Logins.save(r), true);
     });
   }
