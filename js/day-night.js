@@ -520,9 +520,10 @@ export class DayNight {
   /* ---------- for the HUD ---------- */
   clockText() {
     const p = zoneParts(this._t ?? this.now()), h = p.h % 12 || 12;
-    const icon = { morning: '🌅', day: '☀️', afternoon: '☀️', evening: '🌇', night: '🌙' }[this.phase] || '☀️';
-    return `${icon} ${h}:${String(p.mi).padStart(2, '0')} ${p.h < 12 ? 'AM' : 'PM'}`;
+    return `${h}:${String(p.mi).padStart(2, '0')} ${p.h < 12 ? 'AM' : 'PM'}`;
   }
+  // the icon for the time of day (js/icons.js)
+  phaseIcon() { return { morning: 'sunrise', day: 'sun', afternoon: 'sun', evening: 'sunset', night: 'moon' }[this.phase] || 'sun'; }
   // test helper: where things stand
   state() {
     const p = zoneParts(this._t ?? this.now());

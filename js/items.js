@@ -1,25 +1,26 @@
 import { buildRod } from './fishing/models.js';
+import { icon } from './icons.js';
 import * as THREE from 'three';
 import { GeoBuilder, MAT } from './utils.js';
 
 // use: what happens when you press F / click with the item in hand
 // hold: how the character holds it (see Character hold poses)
 export const ITEMS = {
-  drone: { name: 'Drone', icon: '🚁', use: 'drone', hold: 'carry', desc: 'Fly it outside and look around through its camera.' },
-  chainsaw: { name: 'Chainsaw', icon: '🪚', use: 'chop', power: 2, hold: 'saw', desc: 'Cuts fallen trees and jungle trees into logs fast. Loud!' },
-  axe: { name: 'Axe', icon: '🪓', use: 'chop', power: 1, hold: 'tool', desc: 'Chop fallen trees and jungle trees for logs.' },
-  sledge: { name: 'Sledgehammer', icon: '⚒️', use: 'smash', hold: 'tool', desc: 'Smash rocks blocking the trail (gives stones).' },
-  hammer: { name: 'Hammer', icon: '🔨', use: 'swing', hold: 'tool', desc: 'Stakes down the tent — and repairs the RV after zombie attacks (press F next to it).' },
-  rope: { name: 'Rope', icon: '🪢', use: 'info', hold: 'carry', desc: 'Guy lines — needed to pitch the tent.' },
-  flashlight: { name: 'Flashlight', icon: '🔦', use: 'light', hold: 'aim', desc: 'Toggle a light beam. Great at night.' },
-  binoculars: { name: 'Binoculars', icon: '🔭', use: 'zoom', hold: 'carry', desc: 'Zoom in on far-away things.' },
-  tent: { name: 'Tent', icon: '⛺', use: 'deploy', hold: 'carry', desc: 'Pitch it outside (needs hammer + rope) and rest inside.' },
-  chair: { name: 'Camping chair', icon: '🪑', use: 'deploy', hold: 'carry', desc: 'Unfold it anywhere outside and sit.' },
-  sleepingbag: { name: 'Sleeping bag', icon: '🛌', use: 'deploy', hold: 'carry', desc: 'Roll it out and sleep under the stars.' },
-  lantern: { name: 'Lantern', icon: '🏮', use: 'deploy', hold: 'carry', desc: 'Glows while carried. Place it on the ground.' },
-  water: { name: 'Water bottle', icon: '💧', use: 'consume', hold: 'carry', desc: 'Drink: +25 health and a burst of energy (run faster).' },
-  sandwich: { name: 'Sandwich', icon: '🥪', use: 'consume', hold: 'carry', desc: 'Eat: +25 health and a burst of energy (run faster).' },
-  soda: { name: 'Soda', icon: '🥤', use: 'consume', hold: 'carry', desc: 'Sugar rush! +25 health and you run faster for a while.' },
+  drone: { name: 'Drone', icon: icon('drone'), use: 'drone', hold: 'carry', desc: 'Fly it outside and look around through its camera.' },
+  chainsaw: { name: 'Chainsaw', icon: icon('chainsaw'), use: 'chop', power: 2, hold: 'saw', desc: 'Cuts fallen trees and jungle trees into logs fast. Loud!' },
+  axe: { name: 'Axe', icon: icon('axe'), use: 'chop', power: 1, hold: 'tool', desc: 'Chop fallen trees and jungle trees for logs.' },
+  sledge: { name: 'Sledgehammer', icon: icon('sledge'), use: 'smash', hold: 'tool', desc: 'Smash rocks blocking the trail (gives stones).' },
+  hammer: { name: 'Hammer', icon: icon('hammer'), use: 'swing', hold: 'tool', desc: 'Stakes down the tent — and repairs the RV after zombie attacks (press F next to it).' },
+  rope: { name: 'Rope', icon: icon('rope'), use: 'info', hold: 'carry', desc: 'Guy lines — needed to pitch the tent.' },
+  flashlight: { name: 'Flashlight', icon: icon('flashlight'), use: 'light', hold: 'aim', desc: 'Toggle a light beam. Great at night.' },
+  binoculars: { name: 'Binoculars', icon: icon('binoculars'), use: 'zoom', hold: 'carry', desc: 'Zoom in on far-away things.' },
+  tent: { name: 'Tent', icon: icon('tent'), use: 'deploy', hold: 'carry', desc: 'Pitch it outside (needs hammer + rope) and rest inside.' },
+  chair: { name: 'Camping chair', icon: icon('chair'), use: 'deploy', hold: 'carry', desc: 'Unfold it anywhere outside and sit.' },
+  sleepingbag: { name: 'Sleeping bag', icon: icon('sleepingbag'), use: 'deploy', hold: 'carry', desc: 'Roll it out and sleep under the stars.' },
+  lantern: { name: 'Lantern', icon: icon('lantern'), use: 'deploy', hold: 'carry', desc: 'Glows while carried. Place it on the ground.' },
+  water: { name: 'Water bottle', icon: icon('water'), use: 'consume', hold: 'carry', desc: 'Drink: +25 health and a burst of energy (run faster).' },
+  sandwich: { name: 'Sandwich', icon: icon('sandwich'), use: 'consume', hold: 'carry', desc: 'Eat: +25 health and a burst of energy (run faster).' },
+  soda: { name: 'Soda', icon: icon('soda'), use: 'consume', hold: 'carry', desc: 'Sugar rush! +25 health and you run faster for a while.' },
 };
 
 export const GLOW = new THREE.MeshLambertMaterial({ vertexColors: true, emissive: 0xffd890, emissiveIntensity: 1.3 });

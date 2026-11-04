@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { iconImage } from './icons.js';
 import { X0, X1, Z1, SX, SZ, START, CAMP, BRIDGE, RIVER_HALF, NORTH, VALLEY, TOWER_ZONE, GIANT } from './terrain.js';
 
 const RES = 512, RESZ = Math.round(RES * SZ / SX), VIEW = 110;   // base map pixels (width x height), minimap radius in metres
@@ -76,8 +77,14 @@ export class MiniMap {
       return;
     }
     if (m.ring) { c.strokeStyle = '#ffd34d'; c.lineWidth = 3; c.beginPath(); c.arc(x, y, size * 0.75 + Math.sin(performance.now() / 200) * 2, 0, 7); c.stroke(); if (!m.icon) return; }
-    c.font = `${size}px system-ui`; c.textAlign = 'center'; c.textBaseline = 'middle';
-    c.fillText(m.icon, x, y);
+    c.textAlign = 'center'; c.textBaseline = 'middle';
+    const im = iconImage(m.icon);                  // the game's icon on a small dark badge
+    if (im) {
+      const r = size * 0.62;
+      c.fillStyle = 'rgba(16,18,26,.72)'; c.strokeStyle = 'rgba(255,255,255,.7)'; c.lineWidth = 1.2;
+      c.beginPath(); c.arc(x, y, r, 0, 7); c.fill(); c.stroke();
+      c.drawImage(im, x - r * 0.78, y - r * 0.78, r * 1.56, r * 1.56);
+    }
     if (labels && m.label) {
       c.font = 'bold 12px system-ui'; const w = c.measureText(m.label).width + 10;
       c.fillStyle = 'rgba(20,22,30,.75)'; c.fillRect(x - w / 2, y + size * 0.6, w, 17);

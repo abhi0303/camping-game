@@ -3,6 +3,7 @@
 // players are told over PeerJS that the farm changed, and they fetch it too. A refresh every minute
 // shows what the animals produced in the meantime.
 import { api, LOGIN_GONE } from './api.js';
+import { itemIcon, noEmoji } from '../icons.js';
 
 const REFRESH_MS = 60000, HOUR = 3600e3;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -30,6 +31,8 @@ export class FarmEconomy {
   }
   _apply(st) {
     if (!st || (this.st && st.at < this.st.at)) return;          // an older answer that arrived late
+    // the server's catalog has emoji icons: show the game's own pictures instead (js/icons.js)
+    for (const [id, k] of Object.entries(st.catalog || {})) { k.icon = itemIcon(id); k.name = noEmoji(k.name); }
     this.st = st; this.loadedAt = Date.now();
     this.g.onChange(st);
     // when an egg / milk is due or an animal's feed runs out before the next refresh, ask again just after it

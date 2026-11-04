@@ -93,13 +93,14 @@ export class TouchUI {
   }
 
   // mode: foot | drive | seat | drone | fish ; holding: true when an item is in hand, 'gun' with the shotgun out
+  // (this.farm: Farm World — the gun button is left out)
   setMode(mode, holding) {
     if (!this.enabled) return;
-    const key = mode + '|' + holding + '|' + (this.weapon || '');
+    const key = mode + '|' + holding + '|' + (this.weapon || '') + '|' + !!this.farm;
     if (key === this.mode) return;
     this.mode = key;
     this.btns.forEach((b, i) => {
-      const def = BUTTONS[i], show = def[2].split(' ').includes(mode);
+      const def = BUTTONS[i], show = def[2].split(' ').includes(mode) && !(this.farm && def[0] === 'KeyG');   // Farm World: no gun
       b.style.display = show ? '' : 'none';
       const lab = (holding === 'gun' && def[1].gun) || (holding === true && def[1].item) || def[1][mode] || def[1].foot || '';
       b.innerHTML = lab === 'GUN' ? (this.weapon === 'cannon' ? CANNON_SVG : GUN_SVG) : (ICON[lab] || '');

@@ -273,7 +273,7 @@ export class Designer {
       g.fillStyle = '#ffd34d'; g.fillText('BUILD BOUNDARY', c.x, c.y - R - 10);
       g.fillStyle = 'rgba(255,90,70,.9)'; g.fillText('▲ giants come from here ▲', c.x - R * 0.5, 16);
       const rd = this._s(14, -26); g.fillStyle = '#9a8158'; g.beginPath(); g.moveTo(c.x, c.y); g.lineTo(rd.x + 18, rd.y + 40); g.lineTo(rd.x + 50, rd.y + 40); g.closePath(); g.fill();
-      g.fillStyle = '#fff'; g.fillText('🚐 RV', c.x, c.y);
+      g.fillStyle = '#fff'; g.fillText('RV', c.x, c.y);
       const d = this.c, probs = castleProblems(d), th = wallThick(d) * v.k;
       for (const s of wallSegs(d)) {
         const A = this._s(s.ax, s.az), B = this._s(s.bx, s.bz);
@@ -281,7 +281,7 @@ export class Designer {
         if (s.i === this.selEdge) g.strokeStyle = '#ffd34d';
         if (s.len < 3 || (s.gate && s.len < 5)) g.strokeStyle = '#ff5a4a';
         g.beginPath(); g.moveTo(A.x, A.y); g.lineTo(B.x, B.y); g.stroke();
-        g.fillStyle = '#fff'; g.font = '11px system-ui'; g.fillText(s.gate ? '🚪 gate' : `${s.len.toFixed(1)} m`, (A.x + B.x) / 2, (A.y + B.y) / 2 - 12); g.font = 'bold 13px system-ui';
+        g.fillStyle = '#fff'; g.font = '11px system-ui'; g.fillText(s.gate ? 'gate' : `${s.len.toFixed(1)} m`, (A.x + B.x) / 2, (A.y + B.y) / 2 - 12); g.font = 'bold 13px system-ui';
       }
       d.pts.forEach((q, i) => { const s = this._s(q[0], q[1]); g.fillStyle = i === this.sel ? '#ffd34d' : '#fff'; g.strokeStyle = '#222'; g.lineWidth = 2; g.beginPath(); g.arc(s.x, s.y, d.turrets ? 9 : 7, 0, 7); g.fill(); g.stroke(); });
       if (probs.length) { g.fillStyle = '#ff8a80'; g.fillText(probs[0], W / 2, H - 14); }

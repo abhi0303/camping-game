@@ -38,8 +38,17 @@ import { FarmUI } from './farm/farmui.js';
 import { MARKET, STORE, STORAGE, PLOTS, FARM_CENTER, FISH_MARKET, inFarm } from './farm/layout.js';
 import { FishingArea } from './fishing/area.js';
 import { Fishing } from './fishing/fishing.js';
+import { Notebook } from './farm/notebook.js';
+import { Ambience } from './ambience.js';
+import { Birds } from './birds.js';
+import { icon, startIconizer } from './icons.js';
+import { RIVER_HALF } from './terrain.js';
 
 const $ = id => document.getElementById(id);
+// icons instead of emoji: fill the placeholders in the page, then keep every emoji written later out of sight
+for (const el of document.querySelectorAll('i[data-ic]')) el.outerHTML = icon(el.dataset.ic);
+$('hpText').insertAdjacentHTML('beforebegin', icon('heart', 'hpIco'));
+startIconizer();
 
 /* ---------- renderer ---------- */
 const canvas = $('game');
@@ -151,14 +160,20 @@ const farmland = new Farmland(scene, world, { onMarket: () => farmUI.open('marke
 net.on('farmGate', d => { if (d && typeof d.id === 'string') farmland.setGate(d.id, !!d.open); });
 rig.clip = (t, d, dist) => (farm.active ? farmland.camClip(t, d, dist) : dist);
 const farmEco = new FarmEconomy({ net, toast: m => toast(m), onGone: msg => farm.gone(msg, true),
-  onChange: st => { farmland.setState(st); farmUI.render(); farmUI.renderBar(farm.active); if (!overlay.classList.contains('hidden')) farmPanel.render(); } });
+  onChange: st => { farmland.setState(st); farmUI.render(); farmUI.renderBar(farm.active); notebook.render(); if (!overlay.classList.contains('hidden')) farmPanel.render(); } });
 // day and night (js/day-night.js): Farm World follows the real time in India by the farm server's clock, the
 // same for every member, so the sun, sky and lamps match on every screen without any messages
 world.dayNight.clock = () => farmEco.serverNow();
 world.dayNight.synced = () => farmEco.syncAt > 0;
 const PHASE_MSG = { evening: '🌇 Evening — the sun is going down; the lamps come on at dusk', night: '🌙 Night has fallen — lanterns, windows and torches light the farm', morning: '🌅 Sunrise — a new day on the farm' };
 world.dayNight.onPhase = ph => { if (started && survival.farm && PHASE_MSG[ph]) toast(PHASE_MSG[ph]); };
-const farmUI = new FarmUI({ eco: farmEco, materials, toast: m => toast(m), hooks: uiHooks, onCollect: () => { farmEco.collected = true; audio.thud(300, 0.05); } });
+const farmUI = new FarmUI({ eco: farmEco, materials, toast: m => toast(m), hooks: uiHooks, onCollect: () => { farmEco.collected = true; audio.thud(300, 0.05); },
+  beforeOpen: () => notebook.close() });
+// the bag (Farm Notebook) and the order slip: floating buttons, N / O
+const notebook = new Notebook({ eco: farmEco, materials, hooks: uiHooks, worldName: () => (farm.L ? farm.L.roomName : ''),
+  dateText: () => new Date(farmEco.serverNow()).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' }),
+  beforeOpen: () => { if (farmUI.isOpen) farmUI.close(); } });
+farmUI.book = notebook;
 // fishing (Farm World): the Fish Market, the docks on the river and the mini-game; the server checks catches
 const fishArea = new FishingArea(scene, world);
 const fishing = new Fishing({ scene, area: fishArea, eco: farmEco, player, gear, remotes, input, audio, toast: m => toast(m), haptic: ms => app.haptic(ms),
@@ -167,6 +182,11 @@ const fishing = new Fishing({ scene, area: fishArea, eco: farmEco, player, gear,
   freeMouse: () => { if (document.pointerLockElement) document.exitPointerLock(); },
   lockMouse: () => { if (started && !paused && !input.locked) input.requestLock(); } });
 player.fishing = fishing;
+// birds in the trees and the sky; the jungle's sounds (crickets, toads, birdsong, the river, footsteps)
+const birds = new Birds(scene, world);
+const ambience = new Ambience();
+const listener = { x: 0, z: 0, fx: 0, fz: 1 }, _fwd = new THREE.Vector3();
+fishArea.onJump = (x, z, landing) => ambience.onFishJump(x, z, landing, listener, fishing.active);
 { const base = player.netExtra; player.netExtra = () => ({ ...base(), ...fishing.netExtra() }); }
 
 function setupRV(r) { r.onMsg = m => toast(m); r.onCheckpoint = onCheckpoint; }
@@ -192,7 +212,7 @@ const crateActs = world.crates.map((c, i) => ({ c, pos: c.pos, r: 2.2, label: ()
   if (c.taken) return;
   c.taken = true; audio.thud(140, 0.1);
   if (net.isGuest) net.send('crate', { i }, true); else { materials.addAll(c.give); session.dirty = true; }
-  toast('Got ' + Object.entries(c.give).map(([k, n]) => `+${n} ${MAT_INFO[k].name.toLowerCase()} ${MAT_INFO[k].icon}`).join(', '));
+  toast('Got ' + Object.entries(c.give).map(([k, n]) => `+${n} ${MAT_INFO[k].name.toLowerCase()}`).join(', '));
 } }));
 const benchAct = { pos: bridgeWorld.workbenchPos, r: 2.6, label: () => 'Use the workbench (craft planks · design the bridge)', act: () => editor.show() };
 const towerBenchAct = { pos: world.towerBenchPos, r: 2.6, label: () => (survival.at('tbuild') ? (structures.tDesign ? 'Tower workbench (built ✓ · craft planks)' : 'Use the Tower workbench (design + build towers)') : 'Tower workbench — opens when you reach the valley'),
@@ -227,14 +247,14 @@ const OBJ = [
   { text: 'Drive on to the Giant Plateau', done: () => survival.at('cbuild'), at: () => world.castleBenchPos },
   { text: 'Build a stone castle wall at the Castle workbench before the giants come (stone: crates, rock piles)', done: () => survival.at('giants'), at: () => world.castleBenchPos },
   { text: 'Defeat the 10 giants with your cannons (G, then click / F)', done: () => survival.at('won'), at: () => giants.list.find(x => x.st !== 4) || world.castleBenchPos },
-  { text: '🏆 You won! Press Esc for the scoreboard', done: () => false, at: () => world.castleBenchPos },
+  { text: 'You won! Press Esc for the scoreboard', done: () => false, at: () => world.castleBenchPos },
 ];
 const STAGE_OBJ = { tbuild: 9, siege: 10, trail2: 11, cbuild: 12, giants: 13, won: 14 };
 // Farm World: the same trail to clear, then the north is yours to explore (no siege, no giants)
 const nearValley = () => anyRV(r => Math.hypot(r.root.position.x - VALLEY.x, r.root.position.z - VALLEY.z) < 70) || Math.hypot(player.pos.x - VALLEY.x, player.pos.z - VALLEY.z) < 70;
 const farmHas = fn => farmEco.ready && fn(farmEco.st);
 const FARM_OBJ = [
-  { text: 'Walk to the farm east of the trailhead (follow the 🌾 FARM sign by the road)', done: () => inFarm(whereAmI().x, whereAmI().z) || farmHas(s => s.buildings.length > 0), at: () => FARM_CENTER },
+  { text: 'Walk to the farm east of the trailhead (follow the FARM sign by the road)', done: () => inFarm(whereAmI().x, whereAmI().z) || farmHas(s => s.buildings.length > 0), at: () => FARM_CENTER },
   { text: 'Get 20 wood: chop trees and store the logs at the farm storage — or buy wood at the Farm Store across the road', done: () => farmHas(s => s.inventory.wood >= 20 || s.buildings.length > 0), at: () => STORAGE },
   { text: 'Build a chicken coop: walk up to a plot sign', done: () => farmHas(s => s.buildings.some(b => b.type === 'coop')), at: () => PLOTS[0] },
   { text: 'Buy chickens (and feed) from the farmer at the Farm Store, across the road', done: () => farmHas(s => s.animals.some(a => a.type.startsWith('chicken'))), at: () => STORE },
@@ -243,8 +263,8 @@ const FARM_OBJ = [
   { text: 'Grow the farm: goats need a goat shed, cows a barn, horses a stable', done: () => farmHas(s => s.buildings.length >= 3), at: () => FARM_CENTER },
   ...OBJ.slice(0, 8),
   { text: 'Explore north over the pass to Watchtower Valley (clear the road on the way)', done: nearValley, at: () => world.towerBenchPos },
-  { text: '🎣 Go fishing: buy worms at the Fish Market (east of the Market), follow the path to the river docks and land a fish', done: () => farmEco.fished || farmHas(s => !!(s.fishing && s.fishing.mine)), at: () => (farmEco.qty('worms') ? fishArea.spots[1].stand : FISH_MARKET) },
-  { text: '🌾 Your world is saved online — any member can open it, together or alone', done: () => false, at: () => world.campPos },
+  { text: 'Go fishing: buy worms at the Fish Market (east of the Market), follow the path to the river docks and land a fish', done: () => farmEco.fished || farmHas(s => !!(s.fishing && s.fishing.mine)), at: () => (farmEco.qty('worms') ? fishArea.spots[1].stand : FISH_MARKET) },
+  { text: 'Your world is saved online — any member can open it, together or alone', done: () => false, at: () => world.campPos },
 ];
 const objList = () => (survival.farm ? FARM_OBJ : OBJ);
 function updateObjective() {
@@ -254,30 +274,36 @@ function updateObjective() {
   objI = Math.min(objI, list.length - 1);
   while (objI < list.length - 1 && list[objI].done()) { objI++; changed = true; }
   if (changed) { toast('✔ Objective complete!'); session.dirty = true; saveNow(); }
-  hud.objective.textContent = '🎯 ' + touchText(list[objI].text);
+  const txt = touchText(list[objI].text);
+  if (txt !== lastObj) {
+    if (lastObj) openObjective(6);              // a new goal: show it in full for a moment (phones)
+    lastObj = txt; hud.objective.innerHTML = `${icon('target')}<span>${escapeHTML(txt)}</span>`;
+  }
 }
+let lastObj = '', objT = 0;
+function openObjective(sec) { hud.objective.classList.add('open'); clearTimeout(objT); objT = setTimeout(() => hud.objective.classList.remove('open'), sec * 1000); }
 
 /* ---------- map markers ---------- */
 const markers = [];
 function mapMarkers() {
   markers.length = 0;
-  markers.push({ x: START.x, z: START.z, icon: '🚩', label: 'Trailhead' });
-  markers.push({ x: bridgeWorld.workbenchPos.x, z: bridgeWorld.workbenchPos.z, icon: '🛠️', label: 'Workbench' });
-  markers.push({ x: BRIDGE.mx, z: BRIDGE.mz, icon: bridgeWorld.state === 'built' ? '🌉' : '⚠️', label: bridgeWorld.state === 'built' ? 'Bridge' : 'Broken bridge' });
-  for (const o of obstacles.list) if (o.state === 'blocking') markers.push({ x: o.pos.x, z: o.pos.z, icon: o.type === 'tree' ? '🌲' : '🪨', label: o.type === 'tree' ? 'Fallen tree' : o.type === 'rock' ? 'Rockfall' : '' });
-  for (const c of world.crates) if (!c.taken) markers.push({ x: c.pos.x, z: c.pos.z, icon: '📦' });
-  markers.push({ x: CAMP.x, z: CAMP.z, icon: '🏕️', label: 'Hilltop Camp' });
-  markers.push({ x: VALLEY.x, z: VALLEY.z, icon: '🗼', label: 'Watchtower Valley' });
-  markers.push({ x: GIANT.x, z: GIANT.z, icon: '🏰', label: 'Giant Plateau' });
-  for (const gi of giants.list) if (gi.st !== 4) markers.push({ x: gi.x, z: gi.z, icon: '🗿', edge: true });
-  rvs.forEach((r, i) => { if (!(player.frame === 'rv' && player.rv === r)) markers.push({ x: r.root.position.x, z: r.root.position.z, icon: '🚐', label: rvs.length > 1 ? `RV ${i + 1}` : 'RV', edge: r === player.rv }); });
-  remotes.each((r, p) => markers.push({ x: p.x, z: p.z, dot: r.color, label: (r.s.dn ? '⬇ ' : '') + r.s.n, edge: true }));
+  markers.push({ x: START.x, z: START.z, icon: 'flag', label: 'Trailhead' });
+  markers.push({ x: bridgeWorld.workbenchPos.x, z: bridgeWorld.workbenchPos.z, icon: 'tools', label: 'Workbench' });
+  markers.push({ x: BRIDGE.mx, z: BRIDGE.mz, icon: bridgeWorld.state === 'built' ? 'bridge' : 'warn', label: bridgeWorld.state === 'built' ? 'Bridge' : 'Broken bridge' });
+  for (const o of obstacles.list) if (o.state === 'blocking') markers.push({ x: o.pos.x, z: o.pos.z, icon: o.type === 'tree' ? 'tree' : 'rock', label: o.type === 'tree' ? 'Fallen tree' : o.type === 'rock' ? 'Rockfall' : '' });
+  for (const c of world.crates) if (!c.taken) markers.push({ x: c.pos.x, z: c.pos.z, icon: 'crate' });
+  markers.push({ x: CAMP.x, z: CAMP.z, icon: 'camp', label: 'Hilltop Camp' });
+  markers.push({ x: VALLEY.x, z: VALLEY.z, icon: 'tower', label: 'Watchtower Valley' });
+  markers.push({ x: GIANT.x, z: GIANT.z, icon: 'castle', label: 'Giant Plateau' });
+  for (const gi of giants.list) if (gi.st !== 4) markers.push({ x: gi.x, z: gi.z, icon: 'giant', edge: true });
+  rvs.forEach((r, i) => { if (!(player.frame === 'rv' && player.rv === r)) markers.push({ x: r.root.position.x, z: r.root.position.z, icon: 'rv', label: rvs.length > 1 ? `RV ${i + 1}` : 'RV', edge: r === player.rv }); });
+  remotes.each((r, p) => markers.push({ x: p.x, z: p.z, dot: r.color, label: (r.s.dn ? 'DOWN · ' : '') + r.s.n, edge: true }));
   for (const z of zombies.list) if (z.st !== 4) markers.push({ x: z.x, z: z.z, dot: '#e0362a' });
   if (farm.active && fishArea.on) {
-    markers.push({ x: FISH_MARKET.x, z: FISH_MARKET.z, icon: '🐟', label: 'Fish Market' });
-    for (const sp of fishArea.spots) markers.push({ x: sp.stand.x, z: sp.stand.z, icon: '🎣', label: sp.i === 1 ? 'Fishing docks' : '' });
+    markers.push({ x: FISH_MARKET.x, z: FISH_MARKET.z, icon: 'fish_medium', label: 'Fish Market' });
+    for (const sp of fishArea.spots) markers.push({ x: sp.stand.x, z: sp.stand.z, icon: 'rod', label: sp.i === 1 ? 'Fishing docks' : '' });
   }
-  if (drone.active) markers.push({ x: drone.pos.x, z: drone.pos.z, icon: '🚁' });
+  if (drone.active) markers.push({ x: drone.pos.x, z: drone.pos.z, icon: 'drone' });
   const ol = objList(), t = ol[Math.min(objI, ol.length - 1)].at(); markers.push({ x: t.x, z: t.z, ring: true, edge: true });
   return markers;
 }
@@ -383,14 +409,14 @@ addEventListener('resize', () => {
 
 /* ---------- HUD ---------- */
 const hud = { objective: $('objective'), room: $('room'), droneHud: $('droneHud'), binoHud: $('binoHud'), dAlt: $('dAlt'), dDist: $('dDist'), dSpd: $('dSpd'), dBat: $('dBat'), dWarn: $('dWarn'),
-  prompt: $('prompt'), toast: $('toast'), gunSlot: $('gunSlot'), speedo: $('speedBadge'), speed: $('speed'), gear: $('gear'), lights: $('icoLights'), help: $('help'), helpBody: $('helpBody'), fps: $('fps') };
+  prompt: $('prompt'), toast: $('toast'), gunSlot: $('gunSlot'), vitals: $('vitals'), speedo: $('speedBadge'), speed: $('speed'), gear: $('gear'), lights: $('icoLights'), help: $('help'), helpBody: $('helpBody'), fps: $('fps') };
 const GUN_SVG = $('gunSlot').querySelector('svg').outerHTML, CANNON_SVG = '<svg class="gunIco" viewBox="0 0 64 22" aria-hidden="true"><path d="M16 4.5 L61 1.5 L61 12.5 L16 13.5 Z M10 6 h8 v8 h-8z" fill="currentColor"/><circle cx="20" cy="16" r="5.2" fill="none" stroke="currentColor" stroke-width="2.6"/></svg>';
 let shownWeapon = 'shotgun';
 let scoreT = 0, lastScore = '', pingAt = 0, toastT = 0, lastPrompt = '', lastHelp = '', hudT = 0, promptKey = 'E';
 function toast(msg) { hud.toast.textContent = touchText(msg); hud.toast.classList.remove('hidden'); toastT = 2.6; }
 // phones have no keyboard: turn key hints into tap wording
 const TOUCH_TEXT = [
-  [/W\/S to drive/g, 'the left stick to drive'], [/click \/ F to (shoot|fire)/g, 'tap ◎ to $1'], [/\(G, then click \/ F\)/g, '(gun button, then ◎)'],
+  [/\s+\[Q\] Leave/g, ''], [/W\/S to drive/g, 'the left stick to drive'], [/click \/ F to (shoot|fire)/g, 'tap ◎ to $1'], [/\(G, then click \/ F\)/g, '(gun button, then ◎)'],
   [/ · G to put it away/g, ''], [/G to put it away/g, ''], [/Shotgun: G/g, 'Shotgun: gun button'], [/\(G\)/g, ''], [/\(B to mute\)/g, '(tap the mic button to mute)'],
   [/press B again/g, 'tap the mic button again'], [/\(hold E[^)]*\)/gi, '(tap the prompt)'], [/Hold E — /g, ''], [/hold E next to (them|you)/gi, 'tap the prompt next to $1'],
   [/\(X\)/g, '(tap “Carry”)'], [/ · X to put down/g, ' · tap the prompt to put down'], [/\(E at the ladder\)/g, '(tap the prompt at the ladder)'], [/climb with E/gi, 'climb by tapping the prompt'],
@@ -399,6 +425,7 @@ const TOUCH_TEXT = [
 ];
 function touchText(t) { if (!input.touch || !t) return t; for (const [a, b] of TOUCH_TEXT) t = t.replace(a, b); return t; }
 const HELP = {
+  farm: [['WASD', 'move'], ['Shift', 'run'], ['Space', 'jump'], ['F / Click', 'use item / punch'], ['1 - 6', 'hold an item'], ['E', 'interact'], ['N', 'farm notebook'], ['O', 'order slip'], ['M', 'map'], ['V', '1st / 3rd person'], ['R', 'RV to last checkpoint'], ['B', 'mic on / off'], ['I', 'invite a friend']],
   foot: [['WASD', 'move'], ['Shift', 'run'], ['Space', 'jump'], ['G', 'shotgun / cannon'], ['F / Click', 'shoot / use item / punch'], ['1 - 6', 'hold an item'], ['E', 'interact (hold: revive)'], ['X', 'carry a downed teammate'], ['E', 'climb towers / walls'], ['M', 'map'], ['V', '1st / 3rd person'], ['R', 'RV to last checkpoint'], ['B', 'mic on / off (co-op voice)'], ['I', 'copy invite link (co-op)']],
   drone: [['WASD', 'fly'], ['Space / Shift', 'up / down'], ['Mouse', 'turn + tilt camera'], ['V', 'drone cam / chase'], ['E', 'bring the drone back']],
   zoom: [['Mouse', 'look around'], ['F', 'lower binoculars']],
@@ -465,10 +492,12 @@ function renderFarmRoster() {
 }
 let farmInfoT = 0;
 function farmHud() {
-  const L = farm.L;
-  if (!L) return '🌾 Farm World';
+  const L = farm.L, dn = world.dayNight;
+  const name = `<span class="cy-n">${icon('sprout')}<span>${escapeHTML(L ? L.roomName : 'Farm World')}</span></span>`;
+  if (!L) return name;
   const on = net.online && !session.rejoining ? Math.max(1, session.players.size) : 1, mem = farm.info ? farm.info.members.length : 0;
-  return `🌾 ${L.roomName} · ${world.dayNight.clockText()} · 🟢 ${on}/4 online${mem ? ` · 👥 ${mem}/4 members` : ''}`;
+  return `${name}<i class="cy-sep"></i><span class="cy-t">${icon(dn.phaseIcon())}${dn.clockText()}</span><i class="cy-sep"></i>`
+    + `<span class="cy-o" title="${on} playing now${mem ? ` · ${mem} of 4 members` : ''}">${icon('users')}${on}<small>/4</small></span>`;
 }
 async function farmInvite() {
   if (!farm.isOwner) { toast('Only the owner of this world can invite new members'); return; }
@@ -477,22 +506,23 @@ async function farmInvite() {
 }
 // mic button (top bar + pause menu) — B toggles it too
 function renderVoice() {
-  const on = voice.micOn, txt = on ? (voice.meTalking ? '🎙 Talking…' : '🎙 Mic on') : '🔇 Mic off';
+  const on = voice.micOn, txt = on ? (voice.meTalking ? 'Talking…' : 'Mic on') : 'Mic off';
   const btn = $('micBtn');
   btn.classList.toggle('hidden', !net.online || session.rejoining);
   btn.classList.toggle('on', on); btn.classList.toggle('talk', on && voice.meTalking);
-  btn.innerHTML = `${txt}<span class="k">B</span>`;
+  const mh = `${icon(on ? 'mic' : 'micOff')}<span class="lbl">${txt}</span><span class="k">B</span>`;
+  if (btn.dataset.h !== mh) { btn.dataset.h = mh; btn.innerHTML = mh; }
   // 🔄 next to the mic: guests reconnect, the host syncs everyone
   const sb = $('syncBtn');
   sb.classList.toggle('hidden', !net.online || session.rejoining);
   const lbl = net.isHost ? 'Sync' : 'Reconnect';
   if (sb.dataset.lbl !== lbl) {
     sb.dataset.lbl = lbl;
-    sb.innerHTML = `🔄<span class="lbl">${lbl}</span>`;
+    sb.innerHTML = `${icon('refresh')}<span class="lbl">${lbl}</span>`;
     sb.title = net.isHost ? 'Sync everyone: fresh copy of the game for all players, restart voice, reconnect players with a weak link'
       : 'Reconnect & sync: press it if a teammate is missing or frozen, or the voice breaks';
   }
-  for (const b of document.querySelectorAll('#pauseRoom .micBtn')) { b.classList.toggle('on', on); b.textContent = on ? '🎙 Mic is ON — click to mute (B)' : '🔇 Mic is off — click to talk to your team (B)'; }
+  for (const b of document.querySelectorAll('#pauseRoom .micBtn')) { b.classList.toggle('on', on); const h = on ? `${icon('mic')} Mic is ON — click to mute (B)` : `${icon('micOff')} Mic is off — click to talk to your team (B)`; if (b.dataset.h !== h) { b.dataset.h = h; b.innerHTML = h; } }
 }
 const escapeHTML = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const inviteLink = () => `${location.origin}${location.pathname}?room=${net.code}`;
@@ -560,7 +590,9 @@ $('pauseRoom').addEventListener('click', e => {
 });
 hud.prompt.addEventListener('click', e => { if (!input.touch) return; input.tap(e.target.closest('.alt') ? 'KeyX' : 'Key' + promptKey); });
 $('minimap').addEventListener('click', () => minimap.toggleBig());
-$('gunSlot').addEventListener('click', e => { e.stopPropagation(); combat.toggle(); });
+$('gunSlot').addEventListener('click', e => { e.stopPropagation(); if (!farm.active) combat.toggle(); });
+// phones: the goal line shows one line; tap it to read all of it
+hud.objective.addEventListener('click', e => { e.stopPropagation(); if (hud.objective.classList.contains('open')) { hud.objective.classList.remove('open'); clearTimeout(objT); } else openObjective(8); });
 $('bigmap').addEventListener('click', () => minimap.toggleBig(false));
 
 function updateHUD(dt) {
@@ -581,6 +613,7 @@ function updateHUD(dt) {
   if (hudT > 0) return;
   hudT = 0.12; // DOM writes ~8x per second only
   hud.gunSlot.classList.toggle('sel', combat.out);
+  hud.vitals.classList.toggle('hidden', farm.active && player.hp >= 100 && !player.downed && !player.dead);
   if (combat.weapon !== shownWeapon) {   // shotgun <-> cannon (giant stage)
     shownWeapon = combat.weapon;
     hud.gunSlot.innerHTML = `<span class="n">G</span>${shownWeapon === 'cannon' ? CANNON_SVG : GUN_SVG}`;
@@ -591,7 +624,7 @@ function updateHUD(dt) {
   if (started && !overlay.classList.contains('hidden') && (scoreT -= 0.12) <= 0) {
     scoreT = 1;
     const rows = farm.active ? [] : survival.scoreRows();      // no zombie scoreboard in Farm World
-    const html = rows.length ? `<div class="phead">🏆 Scoreboard</div><table class="stable"><thead><tr><th>#</th><th>Player</th><th>🧟</th><th>🗿</th><th>💚</th><th>☠</th><th>Points</th></tr></thead><tbody>${rows.map((r, i) => `<tr><td>${i + 1}</td><td><i style="background:${PLAYER_COLORS[r[1] % PLAYER_COLORS.length].css}"></i>${escapeHTML(r[0])}</td><td>${r[2]}</td><td>${r[3]}</td><td>${r[4]}</td><td>${r[5]}</td><td><b>${r[6]}</b></td></tr>`).join('')}</tbody></table>` : '';
+    const html = rows.length ? `<div class="phead">🏆 Scoreboard</div><table class="stable"><thead><tr><th>#</th><th>Player</th><th title="Zombies">Zombies</th><th title="Giants">Giants</th><th title="Revives">Revives</th><th title="Deaths">Deaths</th><th>Points</th></tr></thead><tbody>${rows.map((r, i) => `<tr><td>${i + 1}</td><td><i style="background:${PLAYER_COLORS[r[1] % PLAYER_COLORS.length].css}"></i>${escapeHTML(r[0])}</td><td>${r[2]}</td><td>${r[3]}</td><td>${r[4]}</td><td>${r[5]}</td><td><b>${r[6]}</b></td></tr>`).join('')}</tbody></table>` : '';
     if (html !== lastScore) { lastScore = html; $('pauseScore').innerHTML = html; }
   }
   // connection quality
@@ -626,7 +659,7 @@ function updateHUD(dt) {
     hud.dBat.textContent = `BATT ${Math.round(drone.battery * 100)}%`;
     hud.dWarn.textContent = drone.warn;
   }
-  const key = drone.active ? 'drone' : gear.zooming ? 'zoom' : player.mode === 'tween' ? lastHelp : (player.mode === 'foot' ? 'foot' : player.mode);
+  const key = drone.active ? 'drone' : gear.zooming ? 'zoom' : player.mode === 'tween' ? lastHelp : (player.mode === 'foot' ? (farm.active ? 'farm' : 'foot') : player.mode);
   if (key && key !== lastHelp && HELP[key]) { lastHelp = key; hud.helpBody.innerHTML = HELP[key].map(([k, v]) => `<div><b>${k}</b>${v}</div>`).join(''); }
   const driving = player.mode === 'drive', rv = player.rv;
   hud.speedo.classList.toggle('hidden', !driving);
@@ -656,6 +689,7 @@ if (flash) { if (farmMenu.mode === 'farm') farmMenu.status('⚠ ' + flash, true)
 async function enterFarm(L, status, isNew) {
   const r = await farm.enter(L, status);
   gear.netId = String(L.memberId || 'f').slice(0, 8) + Date.now().toString(36);   // ids of gear you set down
+  document.body.classList.add('farm');  // (CSS: no gun button, the floating bag + order slip)
   farmland.enable();                   // clear the ground, put up the market, the store and the plots
   fishArea.enable();                   // the Fish Market, the path and the docks on the river
   farmEco.start(L);
@@ -732,13 +766,14 @@ overlay.addEventListener('click', e => { if (e.target === overlay && started) re
 $('menuBtn').addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); openMenu(); });
 document.addEventListener('pointerlockchange', () => {
   // Esc frees the mouse -> pause menu
-  if (!document.pointerLockElement && started && !input.dragging && !inv.isOpen && !farmUI.isOpen && !editor.open && !designer.open && !fishing.cardOpen) openMenu();
+  if (!document.pointerLockElement && started && !input.dragging && !inv.isOpen && !farmUI.isOpen && !notebook.isOpen && !editor.open && !designer.open && !fishing.cardOpen) openMenu();
 });
 // installable app: back button (Android) closes the open popup or shows the menu
 app.init({
   toast: m => toast(m),
   onBack: () => {
     if (farmUI.isOpen) farmUI.close();
+    else if (notebook.isOpen) notebook.close();
     else if (inv.isOpen) inv.closeStorage();
     else if (designer.open) designer.close();
     else if (editor.open) editor.close();
@@ -750,7 +785,8 @@ app.init({
 survival.g.haptic = ms => app.haptic(ms);
 // menu settings: sound + graphics (on phones the graphics setting lives here instead of the top-right corner)
 const sndBtn = $('sndBtn');
-const sndLabel = () => { sndBtn.textContent = audio.muted ? '🔇 Sound off' : '🔊 Sound on'; };
+const sndLabel = () => { sndBtn.innerHTML = `${icon(audio.muted ? 'speakerOff' : 'speaker')} ${audio.muted ? 'Sound off' : 'Sound on'}`; };
+sndLabel();
 sndBtn.addEventListener('click', e => { e.stopPropagation(); audio.toggleMute(); sndLabel(); });
 if (input.touch) { const l = document.createElement('label'); l.className = 'qlab'; l.textContent = 'Graphics '; l.appendChild(qSel); $('qualSlot').appendChild(l); }
 canvas.addEventListener('click', () => { if (started && !paused && !input.locked) input.requestLock(); });
@@ -758,7 +794,11 @@ canvas.addEventListener('click', () => { if (started && !paused && !input.locked
 /* ---------- global keys ---------- */
 function globalKeys() {
   if (input.wasPressed('KeyV')) toast(rig.toggle(player));
-  if (input.wasPressed('KeyG') && !fishing.active) combat.toggle();
+  if (input.wasPressed('KeyG') && !fishing.active && !farm.active) combat.toggle();
+  if (farm.active && !fishing.active) {
+    if (input.wasPressed('KeyN')) notebook.toggle('book');
+    if (input.wasPressed('KeyO')) notebook.toggle('slip');
+  }
   if (input.wasPressed('KeyB')) voice.toggle();
   if (input.wasPressed('KeyK')) { toast(audio.toggleMute() ? 'Sound off' : 'Sound on'); sndLabel(); }
   if (input.wasPressed('KeyM')) minimap.toggleBig();
@@ -814,13 +854,32 @@ function step(dt) {
   world.update(dt, focus, camera);
   flags.update(dt);
   minimap.update(dt, whereAmI(), mapMarkers());
+  sounds(dt);
   session.tick();
   if (started && (saveT += dt) > 45) { saveT = 0; saveNow(); }
   const tmode = drone.active ? 'drone' : fishing.active ? 'fish' : player.mode === 'drive' ? 'drive' : (player.mode === 'seat' || player.mode === 'lie') ? 'seat' : 'foot';
+  touch.farm = farm.active;
   touch.setMode(tmode, combat.out ? 'gun' : !!inv.equippedItem());
   input.stickRun = tmode === 'foot';
   updateHUD(dt);
   input.endFrame();
+}
+
+// birds and the jungle's sounds follow the player (and the camera, for left / right)
+function sounds(dt) {
+  const dn = world.dayNight, dark = dn.dark ?? world.night;
+  birds.update(dt, focus, dark);
+  camera.getWorldDirection(_fwd);
+  listener.x = camera.position.x; listener.z = camera.position.z; listener.fx = _fwd.x; listener.fz = _fwd.z;
+  let walk = null;
+  const m = player.mode;
+  if ((m === 'foot' || m === 'inside') && player.grounded && !fishing.active && !player.downed && !player.dead) {
+    const x = player.pos.x, z = player.pos.z;
+    const surface = m === 'inside' || player.pos.y > world.heightAt(x, z) + 0.3 ? 'wood' : world.T.roadDistAt(x, z) < 3.6 ? 'gravel' : 'grass';
+    walk = { speed: player.vel.length(), surface };
+  }
+  ambience.update(dt, { dark, phase: dn.phase, water: Math.max(0, world.T.riverDistAt(pw.x, pw.z) - RIVER_HALF), fishing: fishing.active,
+    muffled: player.frame === 'rv', walk, listener, birds: birds.perched() });
 }
 
 function frame(now) {
@@ -860,7 +919,7 @@ function debugStage(st, build) {
   if (build) { designer.show(build); designer._action('build'); designer.close(); }
   if (st === 'siege' || st === 'giants') survival._toStage(st);
 }
-window.__game = { debugStage, net, session, voice, structures, designer, giants, player, rvs, remotes, obstacles, bridgeWorld, materials, world, inv, gear, editor, input, rig, camera, zombies, survival, combat, applySave, collectSave, saveNow, farm, farmEco, farmUI, farmland, fishArea, fishing, dayNight: world.dayNight, get objI() { return objI; },
+window.__game = { debugStage, net, session, voice, birds, ambience, notebook, structures, designer, giants, player, rvs, remotes, obstacles, bridgeWorld, materials, world, inv, gear, editor, input, rig, camera, zombies, survival, combat, applySave, collectSave, saveNow, farm, farmEco, farmUI, farmland, fishArea, fishing, dayNight: world.dayNight, get objI() { return objI; },
   // test hooks: advance the game n frames / pin the camera
   run: n => { for (let i = 0; i < n; i++) step(1 / 60); renderer.render(scene, camera); }, setCam: a => { freezeCam = a; } };
 

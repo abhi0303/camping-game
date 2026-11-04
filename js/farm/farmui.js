@@ -1,4 +1,4 @@
-// Farm screens: the money bar above the hotbar, the small production panel shown at a plot, and the popups:
+// Farm screens: the floating bag / order buttons (drawn by notebook.js), the small production panel shown at a plot, and the popups:
 // the Farm Store (the farmer's menu), the Market (selling hall + prices + trade log), the farm storage
 // (store logs/stones, upgrade), a plot (build), a shelter (animals and timers), the feeding trough and the
 // Fish Market (its screens are in js/fishing/marketui.js).
@@ -40,10 +40,10 @@ const STORE_MENU = [
 const VEHICLES_UNLOCKED = false;      // (vehicles are not sold yet — the menu shows them once they are)
 
 export class FarmUI {
-  // g: { eco, materials, toast, hooks: { onOpen, onClose } }
+  // g: { eco, materials, toast, hooks: { onOpen, onClose }, beforeOpen() } · this.book: the notebook (floating buttons)
   constructor(g) {
     this.g = g; this.isOpen = false; this.view = null; this.tab = null; this.qty = {}; this.msg = ''; this.msgErr = false; this.busy = false; this.hist = null;
-    this.root = $('farmUI'); this.title = $('fuTitle'); this.body = $('fuBody'); this.bar = $('farmBar'); this.info = $('farmInfo');
+    this.root = $('farmUI'); this.title = $('fuTitle'); this.body = $('fuBody'); this.info = $('farmInfo');
     $('fuClose').addEventListener('click', () => this.close());
     this.root.addEventListener('click', e => { if (e.target === this.root) this.close(); else this._click(e); });
     document.addEventListener('keydown', e => { if (this.isOpen && (e.code === 'Escape' || e.code === 'KeyE' || e.code === 'Tab')) { e.preventDefault(); this.close(); } });
@@ -53,6 +53,7 @@ export class FarmUI {
 
   open(view, arg) {
     if (!this.eco.ready) { this.g.toast('🌾 The farm is still loading…'); this.eco.load(); return; }
+    if (this.g.beforeOpen) this.g.beforeOpen();
     this.view = view; this.arg = arg; this.msg = ''; this.qty = {}; this.hist = null; this._confirm = null;
     this.tab = view === 'market' ? 'orders' : null;
     if (!this.isOpen) { this.isOpen = true; this.root.classList.remove('hidden'); this.g.hooks.onOpen && this.g.hooks.onOpen(); }
@@ -64,27 +65,10 @@ export class FarmUI {
     this.g.hooks.onClose && this.g.hooks.onClose();
   }
 
-  /* ---------- HUD: money and goods ---------- */
+  /* ---------- HUD: the floating bag (money) and order-slip buttons (js/farm/notebook.js) ---------- */
   renderBar(active) {
-    const e = this.eco;
     this._barOn = active;
-    if (!active || !e.ready) { this.bar.classList.add('hidden'); return; }
-    const hungry = e.hungryCount();
-    const parts = [`<span title="Farm money (shared)">💰 ₹${e.money}</span>`,
-      `<span title="Animal feed in the farm storage${hungry ? ` — ${hungry} animal${hungry > 1 ? 's' : ''} hungry` : ''}" class="${hungry ? 'low' : ''}">🌾 ${e.qty('feed')}${hungry ? ` <small>${hungry} hungry</small>` : ''}</span>`];
-    for (const k of ['egg', 'egg_brown', 'egg_dark', 'goat_milk', 'cow_milk', 'wood', 'stone', 'worms', 'fish_small', 'fish_medium', 'fish_large']) {
-      const n = e.qty(k), c = e.cat(k);
-      if (c && (n || e.makesPerHour(k) > 0)) parts.push(`<span title="${esc(c.name)}">${c.icon} ${n}</span>`);
-    }
-    const ord = e.orderNow();
-    if (ord.ready) parts.push(`<span title="An order is waiting at the Market" class="order">📜 <small>order ₹${ord.ready.pay}</small></span>`);
-    const offer = (e.rentals() || []).find(r => r.status === 'offer' && Date.parse(r.expiresAt) > e.serverNow());
-    if (offer) parts.push(`<span title="A customer wants to rent horses — at the Market" class="order">🐎 <small>rent ₹${offer.pay}</small></span>`);
-    const nests = Object.values(e.eggsReady()).reduce((t, v) => t + v, 0);
-    if (nests) parts.push(`<span title="Eggs waiting in the nest boxes — collect them at the coops" class="ready">🪺 ${nests} <small>ready</small></span>`);
-    const html = parts.join('');
-    if (html !== this._bar) { this._bar = html; this.bar.innerHTML = html; }
-    this.bar.classList.remove('hidden');
+    if (this.book) this.book.renderFabs(active);
   }
   // the small production panel while standing at a plot with a shelter (plot: from farmland.plotAt)
   renderInfo(plot) {
@@ -106,11 +90,11 @@ export class FarmUI {
     if (this._infoBd) this.renderInfo({ bd: this._infoBd });
     if (this.isOpen) for (const el of this.body.querySelectorAll('.fi-live')) {
       const bd = this.eco.st.buildings.find(b => b.id === el.dataset.b);
-      if (bd) { const h = this._infoBox(bd); if (el.innerHTML !== h) el.innerHTML = h; }
+      if (bd) { const h = this._infoBox(bd); if (el._h !== h) { el._h = h; el.innerHTML = h; } }
     }
     if (this.isOpen) for (const el of this.body.querySelectorAll('.fu-animals')) {
       const bd = this.eco.st.buildings.find(b => b.id === el.dataset.b);
-      if (bd) { const h = this._animalRows(bd); if (el.innerHTML !== h) el.innerHTML = h; }
+      if (bd) { const h = this._animalRows(bd); if (el._h !== h) { el._h = h; el.innerHTML = h; } }
     }
     if (this.isOpen) {
       let due = false;

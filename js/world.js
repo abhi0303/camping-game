@@ -109,6 +109,14 @@ export class World {
     };
     if (this.lite) for (const k in types) types[k].n = Math.round(types[k].n * 0.55);   // phones: lighter jungle
     const T = this.T, m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
+    // the highest points of each tree's crown, in the tree's own space (birds sit there: js/birds.js)
+    this.treeTops = {};
+    for (const key of ['jungle', 'tall']) {
+      const pos = types[key].geo.attributes.position, pts = [];
+      for (let i = 0; i < pos.count; i++) pts.push([pos.getX(i), pos.getY(i), pos.getZ(i)]);
+      pts.sort((a, b) => b[1] - a[1]);
+      this.treeTops[key] = pts.filter((v, i) => pts.findIndex(w => Math.hypot(w[0] - v[0], w[2] - v[2]) < 0.4 && Math.abs(w[1] - v[1]) < 0.4) === i).slice(0, 4);
+    }
     for (const key in types) {
       const t = types[key], chunks = Array.from({ length: CHX * CHZ }, () => []);
       let placed = 0, tries = 0;
@@ -124,10 +132,11 @@ export class World {
         if (!t.small && rd > 40 && rand() > 0.6) continue;          // denser jungle along the trail
         if (t.river && wd > 45 && rand() > 0.35) continue;
         const sc = t.rock ? rand(0.4, 1.9) : rand(0.8, 1.3);
-        p.set(x, T.heightAt(x, z) - 0.1, z); q.setFromAxisAngle(up, rand(0, Math.PI * 2)); s.set(sc, sc * (t.small ? rand(0.8, 1.2) : 1), sc);
+        const yaw = rand(0, Math.PI * 2);
+        p.set(x, T.heightAt(x, z) - 0.1, z); q.setFromAxisAngle(up, yaw); s.set(sc, sc * (t.small ? rand(0.8, 1.2) : 1), sc);
         const ci = clamp(Math.floor((x - X0) / (SX / CHX)), 0, CHX - 1) + CHX * clamp(Math.floor((z - Z0) / (SZ / CHZ)), 0, CHZ - 1);
         chunks[ci].push(m.compose(p, q, s).clone());
-        if (t.r) this.addCollider({ x, z, r: t.r * sc, tree: !!t.tree });
+        if (t.r) this.addCollider({ x, z, r: t.r * sc, tree: !!t.tree, kind: key, yaw, sc, y: p.y });   // (kind, yaw, sc, y: birds perch on the crowns)
         else if (t.rock && sc > 0.9) this.addCollider({ x, z, r: 0.9 * sc, rock: true });
         placed++;
       }

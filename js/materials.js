@@ -1,6 +1,7 @@
+import { icon } from './icons.js';
 // Building materials (stack counts, separate from the 6-slot backpack)
 export const MAT_INFO = {
-  logs: { icon: '🪵', name: 'Logs' }, planks: { icon: '🟫', name: 'Planks' }, rope: { icon: '🪢', name: 'Rope' }, stone: { icon: '🪨', name: 'Stones' },
+  logs: { icon: icon('wood'), name: 'Logs' }, planks: { icon: icon('planks'), name: 'Planks' }, rope: { icon: icon('rope'), name: 'Rope' }, stone: { icon: icon('stone'), name: 'Stones' },
 };
 
 export class Materials {

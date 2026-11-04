@@ -49,7 +49,7 @@ export class Farmland {
     this.world.clearArea(CLEAR);
     for (const P of PLOTS) { this._marker(P); this._sign(P.i, null); }
     // the farm sign by the road
-    const s1 = signboard('🌾 FARM', 'plots · storage', { w: 2.0, h: 0.8, lift: 0.9, bg: '#41622c' });
+    const s1 = signboard('FARM', 'plots · storage', { w: 2.0, h: 0.8, lift: 0.9, bg: '#41622c' });
     this.place(s1, { ...SIGN, yaw: 0 });
     this._storeSide();
     this._lamps();

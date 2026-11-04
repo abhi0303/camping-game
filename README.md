@@ -83,7 +83,7 @@ A permanent world for a group of up to 4 friends. It's saved on the Farm World s
 
 ### The farm
 
-The farm is in a clearing just east of the trailhead (follow the **🌾 FARM** sign by the road). Everything on it belongs to the whole group: one shared money balance (💰, starts at ₹500), one store of goods, the same shelters and animals for every member, online or not.
+The farm is in a clearing just east of the trailhead (follow the **FARM** sign by the road). Everything on it belongs to the whole group: one shared money balance (💰, starts at ₹500), one store of goods, the same shelters and animals for every member, online or not.
 
 The main road splits it in two: **the farm** (plots and storage) on one side, **the Farm Store and the Market** on the other.
 
@@ -126,7 +126,8 @@ The main road splits it in two: **the farm** (plots and storage) on one side, **
 - **Farm storage** (end of the walkway): store the logs and stones you collect (chopping trees, rockfalls, crates) — logs become 🪵 wood. It also sets how much the farm can hold: level 1 holds 60 of each egg, 30 of each milk, 500 feed / wood / stone. **Upgrade to level 2** (₹600 · 80 wood · 40 stone) for twice as much and a bigger storehouse. Two players pressing Upgrade at once upgrade it only once.
 - **While nobody plays:** fed animals keep producing until their feed runs out. When anyone opens the world, the server works out what happened since, using its own clock, for up to a week of absence. Goods stop at the storage limit, so sell before it fills up.
 - **Safe for a group:** every purchase, sale, feeding, build, gate and upgrade is checked by the server against the shared money and goods. Two members buying at the same moment can't spend the same money; a double click or a retry after a lost connection never does anything twice.
-- The money bar above the hotbar and the Esc menu show the money, the goods, the animals and how many are hungry. Animals walk around their pens the same way on every player's screen.
+- **The bag and the order slip:** two floating buttons (under the map on phones, bottom-right on computers). The **bag** shows the farm's money on its badge (a dot means animals are hungry or eggs are waiting) and opens the **Farm Notebook** (**N**) — a spiral notebook listing the money, feed, produce, wood and stone, the animals, your rod and worms, the fish and the team's materials. The **order slip** (**O**) is a paper copy of today's order, so you don't have to walk back to the Market: what you already have enough of is ticked and crossed out, what's still missing stays on top with how many more you need; its badge counts the missing items (a green tick when everything is ready to deliver). Horse rental requests are on it too. The Esc menu shows the same summary. Animals walk around their pens the same way on every player's screen.
+- **No gun in Farm World:** there are no zombies on the farm, so the shotgun button and **G** are left out. The health bar only shows when you're hurt.
 
 ### Fishing
 
@@ -134,7 +135,7 @@ A stone path with lanterns leads from behind the Fish Market north through the j
 
 - **Worms:** 10 for ₹1 at the Fish Market. Each cast puts one worm on the hook (an escaped fish keeps it). No worms, no fishing.
 - **Fishing:** walk to the end of a dock — **E – Start Fishing**. Your character casts; wait and watch the float. Not every cast gets a bite.
-- **The tug of war:** when a fish bites (*“A fish has bitten! Pull now!”*) hold **S** (phones: the **PULL** button). Then the fish takes turns: while it **fights**, let go — pulling raises the line tension and at 100 % the line snaps. When it's **tired**, hold S until the pull is reeled in. Small fish need 2–3 pulls, medium 4–5, large 6–8. The panel shows the tension (safe · tension · danger), the pulls, how hard the fish resists and what to do. Miss a tired spell too often and the line goes slack — *“The fish escaped! Try again.”*
+- **The tug of war:** when a fish bites (*“A fish has bitten! Pull now!”*) hold **S** (phones: the **PULL** button). Then the fish takes turns: while it **fights**, let go — pulling raises the line tension and at 100 % the line snaps. When it's **tired**, hold S until the pull is reeled in. Small fish need 2–3 pulls, medium 4–5, large 6–8. While you fish, one soft line of white text says what's happening (*“Waiting for a fish bite…”*, *“It's fighting — let go!”*), with a slim tension bar and the pulls while a fish is on the line — nothing else covers the water. Your rod and worms are in the Farm Notebook. Miss a tired spell too often and the line goes slack — *“The fish escaped! Try again.”*
 - **A catch** shows the fish, its weight and selling value (*“You caught a Medium Fish! Selling Value: ₹5”*) and goes into the farm storage. **E** casts again; **Q** or walking away leaves the dock.
 - **Rods:** each player has their own rod, bought with the farm money and kept with your name. Every rod looks different:
 
@@ -151,13 +152,15 @@ The shared world is everything the zombie save holds except your personal backpa
 
 ### Day and night (real India time)
 
-Farm World follows the **real time in India (IST)**. The sun's position comes from the date, the time and the world's place on Earth (the Maikal hills of central India), so sunrise and sunset move with the seasons — in early November about 6:10 AM and 5:25 PM, in June about 5:20 AM and 6:50 PM. The time is on the top bar (🌅 6:42 AM).
+Farm World follows the **real time in India (IST)**. The sun's position comes from the date, the time and the world's place on Earth (the Maikal hills of central India), so sunrise and sunset move with the seasons — in early November about 6:10 AM and 5:25 PM, in June about 5:20 AM and 6:50 PM. The time is on the top bar, with a sunrise, sun, sunset or moon icon.
 
 - **Morning:** soft golden light from the east, long shadows to the west, a warm horizon.
 - **Day / afternoon:** a bright blue sky; the sun moves across it, and the shadows turn and shorten toward midday.
 - **Evening:** orange and pink light from the west, long shadows to the east, the sky darkening.
 - **Night:** stars and a moon, cool moonlight. Lamps come on one by one from sunset and go off after sunrise: lanterns at the Farm Store, the Market and the Fish Market, lit windows, lamps at every pen gate and shelter, street lamps along the walkway and the fish path, and flickering **torches** (flambeaux) at the farm's sign, the walkway, the Market, the Fish Market, the trailhead and the camp. Inside the Farm Store the ceiling lamps light the room.
 - **Together:** everyone in a world sees the same sky — it uses the farm server's clock (the same one the animals use), not each computer's clock, and nothing extra is sent over the network. Opening the game later shows the right time of day at once.
+
+**Sounds and wildlife** (`js/ambience.js`, `js/birds.js`, all synthesized — no audio files): at night a cricket chorus with single crickets close by, toads trilling (more near the river) and now and then a distant owl; in the morning lots of birdsong, fewer birds later in the day. Two or three birds circle high over you and a few sit on the tops of nearby jungle trees (now and then one flies to another tree); they roost at night. Near the river you hear the water; at the docks while fishing the water laps, little bubbles rise and fish splash as they jump. Footsteps are soft: grass, gravel on the road, hollow knocks on the docks and the RV floor. Inside the RV the outside sounds are muffled. The RV itself sounds like a big diesel van: the starter cranks, then a deep, low rumble that rises with speed and load.
 
 Zombie Trail keeps its zombie nights (the campaign decides when it is dark); they now have stars, a moon and lit torches too.
 
@@ -234,10 +237,12 @@ The road ends at the **Giant Plateau**. It's daytime, with no zombies: you get *
 | Space | jump | Space | handbrake |
 | C | crouch | H | horn |
 | 1–6 | hold an item | L | headlights |
-| G | weapon out / away (shotgun / cannon) | V | chase / cockpit view |
+| G | weapon out / away (shotgun / cannon; not in Farm World) | V | chase / cockpit view |
 | F / click | shoot / use item / punch | E | get out (when slow) |
 | E (hold) | interact / climb towers & walls / revive a teammate | Q | walk to the back |
 | X | carry a teammate / pack up gear | | |
+
+Farm World: **N** farm notebook, **O** order slip.
 
 Global: **M** map, **K** sound, **B** mic on / off (co-op), **R** RV back to the last checkpoint, **Tab** hide help, **Esc** pause (co-op: player list, ping, mic, kick).
 
@@ -271,8 +276,10 @@ Global: **M** map, **K** sound, **B** mic on / off (co-op), **R** RV back to the
 - `js/structures.js`, `js/designer.js` – towers and castle walls (build, climb, damage, repair) and their workbench designer
 - `js/combat.js` – shotgun and cannon
 - `js/minimap.js` – minimap and full map
+- `js/icons.js` – the game's icons (small SVG pictures for items, animals, places and the HUD); emoji written anywhere in the page are swapped for these icons, so no emoji is ever shown
+- `js/ambience.js`, `js/birds.js` – the jungle's sounds (crickets, toads, birdsong, the river, bubbles, fish jumps, footsteps) and the birds in the trees and the sky
 - `js/app.js`, `sw.js`, `manifest.webmanifest`, `icons/` – installable app: service worker (offline cache), install button / iOS hint, full screen, wake lock, back button
-- `js/farm/` – Farm World: server address (`config.js`), API calls (`api.js`), logins kept on this device (`logins.js`), the session that hosts / joins / saves / hands over the world (`farm.js`), start-menu screens (`menu.js`), Esc-menu members panel (`panel.js`); the farm: plot / store layout (`layout.js`), small props (`props.js`), models (`models.js`), the farmer (`npc.js`), farm in the world + animals + gates (`farmland.js`), shared money, goods and production timers (`economy.js`), store / market / storage / plot / shelter / feeding popups, the production panel and the money bar (`farmui.js`)
+- `js/farm/` – Farm World: server address (`config.js`), API calls (`api.js`), logins kept on this device (`logins.js`), the session that hosts / joins / saves / hands over the world (`farm.js`), start-menu screens (`menu.js`), Esc-menu members panel (`panel.js`); the farm: plot / store layout (`layout.js`), small props (`props.js`), models (`models.js`), the farmer (`npc.js`), farm in the world + animals + gates (`farmland.js`), shared money, goods and production timers (`economy.js`), store / market / storage / plot / shelter / feeding popups, the production panel (`farmui.js`), the floating bag / order-slip buttons, the Farm Notebook and the Order Slip (`notebook.js`)
 - `js/fishing/` – fishing: the challenge rules shared with the server (`sim.js`), rods / fish / docks / Fish Market models (`models.js`), the docks, path and water life in the world (`area.js`), the mini-game, HUD and other players' lines (`fishing.js`), the Fish Market screens (`marketui.js`) and their 3D pictures (`thumbs.js`)
 - `server/` – the Farm World server (Cloudflare Worker + NeonDB): API, migrations, tests, setup and deploy steps in [`server/README.md`](server/README.md)
 

@@ -7,6 +7,7 @@ import * as THREE from 'three';
 import { RODS, FISH, WHY, STEP, SAFE, DANGER, startChallenge, step } from './sim.js';
 import { rodRig, bobberModel, fishModel, rodTip } from './models.js';
 import { thumb } from './thumbs.js';
+import { noEmoji } from '../icons.js';
 
 const FISH_NAME = { fish_small: 'Small Fish', fish_medium: 'Medium Fish', fish_large: 'Large Fish' };
 const FISH_CODE = { fish_small: 1, fish_medium: 2, fish_large: 3 }, CODE_FISH = { 1: 'fish_small', 2: 'fish_medium', 3: 'fish_large' };
@@ -118,7 +119,7 @@ export class Fishing {
       if (this.phase !== 'cast') return;
       this.phase = 'ready'; this.bobber.visible = false; this.line.visible = false;
       const m = er.code === 'bad_input' && /Unknown farm action/.test(er.message || '') ? 'Fishing isn\'t switched on on the server yet.' : (er.message || String(er));
-      this._say('⚠ ' + m, true); this.g.toast('⚠ ' + m);
+      this._say(m, true); this.g.toast('⚠ ' + m);
     } finally { this.busy = false; }
   }
 
@@ -161,7 +162,7 @@ export class Fishing {
       this._showCatch(r.fish);
       this.g.area.splash(this.bob.x, this.bob.z, 16, 1.2); this.g.audio.splash(1); this.g.haptic([60, 40, 60]);
       const msg = `You caught a ${FISH_NAME[r.fish]}! Selling Value: ₹${r.value}`;
-      this._say('🎉 ' + msg); this.g.toast('🎣 ' + msg);
+      this._say(msg); this.g.toast(msg);
       this._card(this.result);
       this.g.onCatch && this.g.onCatch(r);
     } else {
@@ -169,7 +170,7 @@ export class Fishing {
       this.result = { ok: false, why: r ? r.why : 'error' };
       this.bobber.visible = false; this.line.visible = false;
       const msg = r && r.why === 'nothing' ? why : `The fish escaped! Try again. ${why}`;
-      this._say('💨 ' + msg, true); this.g.toast('💨 ' + msg);
+      this._say(msg, true); this.g.toast(msg);
       this._card(this.result, msg);
     }
   }
@@ -271,7 +272,7 @@ export class Fishing {
   holdPose() { return this.phase ? this.pose || 'rod' : null; }
   prompt() {
     const ph = this.phase;
-    if (ph === 'ready') return { key: 'E', text: `Cast (🪱 ${this.worms()} worms)    [Q] Leave` };
+    if (ph === 'ready') return { key: 'E', text: 'Cast    [Q] Leave' };
     if (ph === 'wait') return { key: 'E', text: 'Reel in    [Q] Leave' };
     if (ph === 'fight') return { key: 'S', text: 'Hold to pull · let go when the fish fights' };
     if (ph === 'result') return { key: 'E', text: this.result && this.result.ok ? 'Collect & cast again    [Q] Leave' : 'Cast again    [Q] Leave' };
@@ -336,58 +337,45 @@ export class Fishing {
   }
   _hideCatch() { for (const f of this.caught.values()) f.visible = false; }
 
-  /* ---------- HUD: rod, worms, bite, tension, pulls, resistance, instructions; the result card ---------- */
+  /* ---------- HUD: one soft line of white text (and a slim tension bar while a fish fights); the result card.
+     The rod and the worms are in the Farm Notebook (the bag button). ---------- */
   _hud() {
     const hud = $('hud'), box = document.createElement('div');
-    box.id = 'fishHud'; box.className = 'panel hidden';
-    box.innerHTML = `<div class="fh-top"><span id="fhRod"></span><span id="fhWorms"></span></div>
-      <div id="fhStatus" class="fh-status"></div>
-      <div id="fhFight" class="hidden">
+    box.id = 'fishHud'; box.className = 'hidden';
+    box.innerHTML = `<div id="fhStatus" class="fh-status"></div>
+      <div id="fhFight" class="fh-fight hidden">
         <div class="fh-meter"><i class="z1"></i><i class="z2"></i><i class="z3"></i><b id="fhNeedle"></b></div>
-        <div class="fh-lbls"><span>Tension</span><span id="fhTension"></span></div>
-        <div class="fh-row"><span>Pulls</span><span id="fhPulls"></span></div>
-        <div class="fh-row"><span>Fish</span><span id="fhRes"></span></div>
-        <div class="fh-pull"><u id="fhPP"></u></div>
-      </div>
-      <div id="fhTip" class="fh-tip"></div>`;
+        <div id="fhPulls" class="fh-pulls"></div>
+      </div>`;
     hud.appendChild(box);
     const card = document.createElement('div');
     card.id = 'fishCard'; card.className = 'hidden';
     hud.appendChild(card);
     card.addEventListener('click', e => { if (e.target.closest('[data-x="collect"]')) { this._card(null); this._hideCatch(); if (this.phase === 'result') this.phase = 'ready'; } });
-    this.el = { box, card, rod: $('fhRod'), worms: $('fhWorms'), status: $('fhStatus'), fight: $('fhFight'), needle: $('fhNeedle'), tension: $('fhTension'), pulls: $('fhPulls'), res: $('fhRes'), pp: $('fhPP'), tip: $('fhTip') };
+    this.el = { box, card, status: $('fhStatus'), fight: $('fhFight'), needle: $('fhNeedle'), pulls: $('fhPulls') };
     this._txt = {};
   }
   _show(on) { this.el.box.classList.toggle('hidden', !on); }
-  _say(m, bad = false) { this.msg = m; this.msgBad = bad; }
+  _say(m, bad = false) { this.msg = noEmoji(m); this.msgBad = bad; }
   _set(k, v, prop = 'textContent') { if (this._txt[k] !== v) { this._txt[k] = v; this.el[k][prop] = v; } }
   _hudUpdate() {
-    const s = this.ch, ph = this.phase, R = RODS[this.rodLevel];
-    this._set('rod', `🎣 ${R.name} · Lv ${this.rodLevel}`);
-    this._set('worms', `🪱 ${this.worms()} worms`);
-    let status = this.msg, tip = '', cls = this.msgBad ? 'bad' : '';
-    if (ph === 'wait') { status = '🎣 Waiting for a bite…'; tip = 'Watch the float. When a fish bites, hold S (PULL) at once!'; cls = ''; }
+    const s = this.ch, ph = this.phase;
+    let status = this.msg, cls = this.msgBad ? 'bad' : '';
+    if (ph === 'wait') { status = 'Waiting for a fish bite…'; cls = ''; }
     if (ph === 'fight') {
-      if (s.phase === 'hook') { status = '🐟 A fish has bitten! Pull now!'; tip = 'Hold S / PULL to set the hook'; cls = 'bite'; }
-      else if (s.phase === 'resist') { status = '💥 The fish is fighting — RELEASE!'; tip = 'Let go of S while it fights, or the line snaps'; cls = 'bad'; }
-      else { status = '💪 The fish is tired — PULL!'; tip = 'Hold S / PULL until the pull is reeled in'; cls = 'good'; }
+      if (s.phase === 'hook') { status = 'A fish bit — pull!'; cls = 'bite'; }
+      else if (s.phase === 'resist') { status = 'It\'s fighting — let go!'; cls = 'bite'; }
+      else { status = 'It\'s tired — pull!'; cls = ''; }
     }
-    if (ph === 'ready') tip = 'E: cast (uses 1 worm) · Q or move: leave';
-    if (ph === 'result') tip = this.result && this.result.ok ? 'E: collect & cast again · Q: leave' : 'E: cast again · Q: leave';
     this._set('status', status);
     if (this._cls !== cls) { this._cls = cls; this.el.status.className = 'fh-status ' + cls; }
-    this._set('tip', tip);
     const fighting = ph === 'fight' && s;
     if (fighting !== this._fighting) { this._fighting = fighting; this.el.fight.classList.toggle('hidden', !fighting); }
     if (fighting) {
       const t = Math.min(1, s.tension);
       this.el.needle.style.left = (t * 100).toFixed(1) + '%';
-      this._set('tension', t < SAFE ? 'safe' : t < DANGER ? 'tension' : 'DANGER');
-      this.el.tension.className = t < SAFE ? 'ok' : t < DANGER ? 'warn' : 'bad';
-      this._set('pulls', '●'.repeat(s.pulls) + '○'.repeat(Math.max(0, s.need - s.pulls)) + `  ${s.pulls} / ${s.need}`);
-      const size = { fish_small: 'small', fish_medium: 'medium', fish_large: 'LARGE' }[this.cur ? this.cur.fish : ''] || '';
-      this._set('res', s.phase === 'resist' ? `🔴 ${size} · resisting — high` : s.phase === 'hook' ? `🟡 ${size} · on the hook` : `🟢 ${size} · tired — low`);
-      this.el.pp.style.width = (s.phase === 'tired' ? Math.min(1, s.pp) * 100 : 0).toFixed(0) + '%';
+      this.el.needle.className = t < SAFE ? '' : t < DANGER ? 'warn' : 'bad';
+      this._set('pulls', '<i class="on"></i>'.repeat(s.pulls) + '<i></i>'.repeat(Math.max(0, s.need - s.pulls)), 'innerHTML');
     }
   }
   // the result card (ok: the fish, its weight and value, and a Collect button), or a short failure note

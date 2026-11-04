@@ -707,7 +707,7 @@ export class Survival {
     const S = g.structures, towers = S.towers.length ? ` · 🗼 ${S.towers.filter(t => t.alive).length}/${S.towers.length}` : '', walls = S.walls.length ? ` · 🏰 ${Math.round(100 * S.walls.reduce((a, w) => a + w.hp, 0) / Math.max(1, S.walls.reduce((a, w) => a + w.max, 0)))}%` : '';
     const L = this.level, lv = L ? ` · ⚔ Lv ${L}` : '';
     let txt, cls = '';
-    if (this.stage === 'farm') { txt = this.g.farmHud ? this.g.farmHud() : '🌾 Farm World'; cls = 'farm'; }
+    if (this.stage === 'farm') { txt = this.g.farmHud ? this.g.farmHud() : 'Farm World'; cls = 'farm'; }
     else if (this.over === 'won') { txt = `🏆 Victory! All ${GTOTAL} giants defeated`; cls = 'won'; }
     else if (this.over === 'lost') { txt = '💀 Game over'; cls = 'night'; }
     else if (this.stage === 'tbuild') { txt = `🛠 Build your towers! The horde comes in ${fmt(this.t)}${towers}`; cls = 'build'; }
@@ -717,12 +717,12 @@ export class Survival {
     else if (this.ph === 'night') { txt = `🌙 Night ${this.n} · dawn in ${fmt(this.t)} · 🧟 ${g.zombies.aliveCount()}${rvTxt}${lv}`; cls = 'night'; }
     else { txt = `☀ Day ${this.n + 1} · 🌙 zombies in ${fmt(this.t)}${rvTxt}${lv}`; cls = this.t < 30 ? 'soon' : ''; }
     const key = txt + cls;
-    if (key !== this.uiKey) { this.uiKey = key; u.cycle.textContent = txt; u.cycle.className = 'panel ' + cls; }
+    if (key !== this.uiKey) { this.uiKey = key; u.cycle.innerHTML = txt; u.cycle.className = 'panel ' + cls; }
     // your health
     const hp = Math.round(p.hp);
     u.hpFill.style.width = hp + '%';
     u.hpFill.className = hp > 50 ? '' : hp > 25 ? 'mid' : 'low';
-    u.hpText.textContent = p.dead ? '☠' : p.downed ? 'DOWN' : '❤ ' + hp;
+    u.hpText.textContent = p.dead ? '☠' : p.downed ? 'DOWN' : hp;
     // downed overlay / spectator bar
     if (p.downed !== this._dn) { this._dn = p.downed; u.downed.classList.toggle('hidden', !p.downed); document.body.classList.toggle('downed', p.downed); }
     if (p.downed) {

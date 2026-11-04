@@ -1,5 +1,6 @@
 import { ITEMS, itemModel, placeInSlot, STORE_ROT } from './items.js';
 import { audio } from './audio.js';
+import { icon } from './icons.js';
 
 const BACKPACK_SIZE = 6;
 const TOUCH = () => document.body.classList.contains('touch');
@@ -39,10 +40,10 @@ export class Inventory {
   // every RV has its own locker / fridge / storage bay
   addRV(rv) {
     const set = [
-      { id: 'locker', name: 'Gear Locker', icon: '🧰', doors: ['lockerA', 'lockerB'], slotPos: lockerSlots(),
+      { id: 'locker', name: 'Gear Locker', icon: icon('locker'), doors: ['lockerA', 'lockerB'], slotPos: lockerSlots(),
         slots: fill(10, ['chainsaw', 'axe', 'drone', 'sledge', 'hammer', 'flashlight', 'rope', 'binoculars']) },
-      { id: 'fridge', name: 'Fridge', icon: '🧊', doors: ['fridge'], slotPos: fridgeSlots(), slots: fill(6, ['water', 'soda', 'sandwich', 'water']) },
-      { id: 'bay', name: 'Outdoor Storage Bay', icon: '🏕️', doors: ['bay'], slotPos: baySlots(), slots: fill(6, ['tent', 'chair', 'sleepingbag', 'lantern']) },
+      { id: 'fridge', name: 'Fridge', icon: icon('fridge'), doors: ['fridge'], slotPos: fridgeSlots(), slots: fill(6, ['water', 'soda', 'sandwich', 'water']) },
+      { id: 'bay', name: 'Outdoor Storage Bay', icon: icon('camp'), doors: ['bay'], slotPos: baySlots(), slots: fill(6, ['tent', 'chair', 'sleepingbag', 'lantern']) },
     ];
     set.forEach(st => { st.rv = rv; st.rvIndex = rv.index; st.meshes = st.slots.map(() => null); this.syncVisuals(st); });
     this.sets[rv.index] = set;
@@ -177,7 +178,7 @@ export class Inventory {
     const st = this.openSt, u = this.ui;
     if (!st) return;
     const used = st.slots.filter(Boolean).length;
-    u.title.textContent = `${st.icon} ${st.name}`;
+    u.title.innerHTML = `${st.icon} ${st.name}`;
     const verb = TOUCH() ? 'tap' : 'click';
     u.sCap.textContent = `Storage ${used}/${st.slots.length} — ${verb} to take`;
     u.bCap.textContent = `Backpack ${BACKPACK_SIZE - this.freeSlots()}/${BACKPACK_SIZE} — ${verb} to put back`;

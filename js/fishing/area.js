@@ -74,7 +74,7 @@ export class FishingArea {
     for (let x = -W / 2; x <= W / 2; x += 1) for (let z = -D / 2; z <= D / 2; z += 1) hi = Math.max(hi, mh(x, z));
     const floor = hi + FISH_MARKET_DIM.floor;
     this.place(fishMarketModel(floor, mh), M, mb);
-    const sign = wallSign('FISH MARKET', 'fresh catch · worms · rods', 3.6, 0.9, '🐟', '#1f4a63');
+    const sign = wallSign('FISH MARKET', 'fresh catch · worms · rods', 3.6, 0.9, '', '#1f4a63');
     sign.position.set(0, floor + 3.78, D / 2 + 0.03);
     this.place(new THREE.Group().add(sign), M, mb);
     this.place(signboard('FISH MARKET', 'worms · rods · sell fish', { w: 2.0, h: 0.8, lift: 0.9, bg: '#1f4a63', hAt: this.hAt(FISH_SIGN) }), FISH_SIGN);
@@ -215,11 +215,11 @@ export class FishingArea {
       const c = f.sp.water, x = c.x + Math.cos(f.a) * f.r, z = c.z + Math.sin(f.a) * f.r * 0.7;
       let y = W - 0.13, pitch = 0;
       f.next -= dt;
-      if (f.jump < 0 && f.next <= 0) { f.jump = 0; this.splash(x, z, 6, 0.6); }
+      if (f.jump < 0 && f.next <= 0) { f.jump = 0; this.splash(x, z, 6, 0.6); this.onJump && this.onJump(x, z, false); }
       if (f.jump >= 0) {
         f.jump += dt / 0.8;
         y = W - 0.1 + Math.sin(Math.min(1, f.jump) * Math.PI) * 0.75; pitch = (0.5 - f.jump) * 2.2;
-        if (f.jump >= 1) { f.jump = -1; f.next = 7 + Math.random() * 10; this.splash(x, z, 8, 0.7); }
+        if (f.jump >= 1) { f.jump = -1; f.next = 7 + Math.random() * 10; this.splash(x, z, 8, 0.7); this.onJump && this.onJump(x, z, true); }
       }
       const yaw = Math.atan2(-Math.sin(f.a) * f.w, Math.cos(f.a) * 0.7 * f.w);
       this._e.set(pitch, yaw, 0); this._q.setFromEuler(this._e);
