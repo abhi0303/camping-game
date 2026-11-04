@@ -55,6 +55,15 @@ export class RV {
     this._place(1, true);
   }
 
+  // Park at a spot (x, z: the same reference point reset() uses) facing a heading (Farm World: in front of the store)
+  parkAt(x, z, heading) {
+    const fx = Math.sin(heading), fz = Math.cos(heading);
+    this.heading = heading; this.speed = 0; this.steer = 0; this.vy = 0; this.stuck = false;
+    this.rear.set(x + fx * AXLE_R, 0, z + fz * AXLE_R);
+    this.y = this.world.groundAt(x, z); this.tPitch = 0; this.tRoll = 0;
+    this._place(1, true);
+  }
+
   _ground(lx, lz) {
     const f = this.forward, x = this.rear.x + f.x * (lz - AXLE_R) + f.z * lx, z = this.rear.z + f.z * (lz - AXLE_R) - f.x * lx;
     return this.world.groundAt(x, z, this.y + 0.5 + (lz - AXLE_R) * Math.sin(this.tPitch));

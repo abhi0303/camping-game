@@ -35,7 +35,7 @@ import { FarmPanel } from './farm/panel.js';
 import { FarmEconomy } from './farm/economy.js';
 import { Farmland } from './farm/farmland.js';
 import { FarmUI } from './farm/farmui.js';
-import { MARKET, STORE, STORAGE, PLOTS, FARM_CENTER, FISH_MARKET, inFarm } from './farm/layout.js';
+import { MARKET, STORE, STORAGE, PLOTS, FARM_CENTER, FISH_MARKET, ROAD_U, ROAD_V, inFarm } from './farm/layout.js';
 import { FishingArea } from './fishing/area.js';
 import { Fishing } from './fishing/fishing.js';
 import { Notebook } from './farm/notebook.js';
@@ -425,7 +425,7 @@ const TOUCH_TEXT = [
 ];
 function touchText(t) { if (!input.touch || !t) return t; for (const [a, b] of TOUCH_TEXT) t = t.replace(a, b); return t; }
 const HELP = {
-  farm: [['WASD', 'move'], ['Shift', 'run'], ['Space', 'jump'], ['F / Click', 'use item / punch'], ['1 - 6', 'hold an item'], ['E', 'interact'], ['N', 'farm notebook'], ['O', 'order slip'], ['M', 'map'], ['V', '1st / 3rd person'], ['R', 'RV to last checkpoint'], ['B', 'mic on / off'], ['I', 'invite a friend']],
+  farm: [['WASD', 'move'], ['Shift', 'run'], ['Space', 'jump'], ['F / Click', 'use item / punch'], ['1 - 6', 'hold an item'], ['E', 'interact'], ['N', 'farm notebook'], ['O', 'order slip'], ['M', 'map'], ['V', '1st / 3rd person'], ['R', 'RV back to the Farm Store'], ['B', 'mic on / off'], ['I', 'invite a friend']],
   foot: [['WASD', 'move'], ['Shift', 'run'], ['Space', 'jump'], ['G', 'shotgun / cannon'], ['F / Click', 'shoot / use item / punch'], ['1 - 6', 'hold an item'], ['E', 'interact (hold: revive)'], ['X', 'carry a downed teammate'], ['E', 'climb towers / walls'], ['M', 'map'], ['V', '1st / 3rd person'], ['R', 'RV to last checkpoint'], ['B', 'mic on / off (co-op voice)'], ['I', 'copy invite link (co-op)']],
   drone: [['WASD', 'fly'], ['Space / Shift', 'up / down'], ['Mouse', 'turn + tilt camera'], ['V', 'drone cam / chase'], ['E', 'bring the drone back']],
   zoom: [['Mouse', 'look around'], ['F', 'lower binoculars']],
@@ -686,8 +686,24 @@ try { flash = sessionStorage.getItem('rv-flash') || ''; sessionStorage.removeIte
 // Farm World screens (tabs: Zombie Trail / Farm World)
 const farmMenu = new FarmMenu({ enter: enterFarm, defaultName: () => { try { return localStorage.getItem('rv-name') || ''; } catch (e) { return ''; } } });
 if (flash) { if (farmMenu.mode === 'farm') farmMenu.status('⚠ ' + flash, true); else M.status.textContent = '⚠ ' + flash; }
+// Farm World: the RV parks on the store's side of the road, right in front of the Farm Store, its side door
+// facing the store, and you stand outside it (looking at the store). Extra RVs park behind it.
+function parkAtStore() {
+  const heading = Math.atan2(ROAD_U.x, ROAD_U.z);           // along the road: the side door faces the store
+  rvs.forEach((r, i) => {
+    const u = 1.5 - i * 10, v = -17;                         // the store-side lane (the store's steps reach ~9 m from the road's middle)
+    r.parkAt(STORE.x + ROAD_U.x * u + ROAD_V.x * v, STORE.z + ROAD_U.z * u + ROAD_V.z * v, heading);
+  });
+}
+function standAtStore() {
+  player.rv = rvs[0];
+  player.spawnBesideRV();
+  player.yaw = rvs[0].heading - Math.PI / 2;                 // facing the store
+  rig.yaw = player.yaw + Math.PI + 0.9;                     // the camera off to one side: the van, you and the store in view
+}
 async function enterFarm(L, status, isNew) {
   const r = await farm.enter(L, status);
+  if (r.role === 'host') { parkAtStore(); standAtStore(); }  // (guests stand beside the host's RV, already parked here)
   gear.netId = String(L.memberId || 'f').slice(0, 8) + Date.now().toString(36);   // ids of gear you set down
   document.body.classList.add('farm');  // (CSS: no gun button, the floating bag + order slip)
   farmland.enable();                   // clear the ground, put up the market, the store and the plots
@@ -805,7 +821,8 @@ function globalKeys() {
   if (input.wasPressed('Escape') && minimap.bigOpen) minimap.toggleBig(false);
   if (input.wasPressed('KeyR')) {
     const r = player.rv;
-    if (player.mode === 'drive' || r.isLocal(net)) { r.reset(); toast(`RV ${rvs.length > 1 ? r.index + 1 + ' ' : ''}moved to the last checkpoint`); }
+    if (farm.active && (player.mode === 'drive' || r.isLocal(net))) { parkAtStore(); toast('RV parked in front of the Farm Store'); }
+    else if (player.mode === 'drive' || r.isLocal(net)) { r.reset(); toast(`RV ${rvs.length > 1 ? r.index + 1 + ' ' : ''}moved to the last checkpoint`); }
     else toast('Only the driver can reset this RV');
   }
   if (input.wasPressed('Tab')) hud.help.classList.toggle('hidden');
