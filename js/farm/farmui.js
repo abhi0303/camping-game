@@ -217,7 +217,8 @@ export class FarmUI {
       const bd = e.st.buildings.find(b => b.id === this.arg.id);
       if (!bd) { this.close(); return; }
       const k = e.cat(bd.type);
-      this.title.textContent = this.view === 'feed' ? `🌾 Feeding trough · plot ${bd.plot + 1}` : `${k.icon} ${k.name} · plot ${bd.plot + 1}`;
+      // (k.icon is an SVG picture: the title is HTML here)
+      this.title.innerHTML = this.view === 'feed' ? `🌾 Feeding trough · plot ${bd.plot + 1}` : `${k.icon} ${esc(k.name)} · plot ${bd.plot + 1}`;
       html = head + (this.view === 'feed' ? this._feed(bd) : this._shelter(bd));
     }
     this.body.innerHTML = html + `<div class="fu-msg ${this.msgErr ? 'err' : 'ok'}">${esc(this.msg)}</div>`;
