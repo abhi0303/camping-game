@@ -126,3 +126,16 @@ export function football() {
   g.setAttribute('color', new THREE.BufferAttribute(col, 3)); g.deleteAttribute('uv');
   return g;
 }
+// a hurricane lantern, hanging from its handle at (0, 0, 0): chimney, glowing glass in wire guards, a red tank
+export function lantern(b) {
+  const M = 0x3a3d40, D = 0x26282a;
+  b.box(0.012, 0.06, 0.012, 0, -0.03, 0, M);
+  b.box(0.13, 0.012, 0.012, 0, -0.005, 0, M);
+  for (const s of [-1, 1]) b.box(0.012, 0.09, 0.012, s * 0.065, -0.05, 0, M);
+  b.cyl(0.028, 0.032, 0.035, 8, 0, -0.075, 0, D);
+  b.cyl(0.04, 0.072, 0.035, 8, 0, -0.1, 0, M);
+  b.cyl(0.05, 0.056, 0.12, 8, 0, -0.18, 0, 0xffd27a, 0, 0, 0, 'lampGlass');
+  for (let k = 0; k < 4; k++) { const a = k / 4 * Math.PI * 2 + 0.4; b.box(0.008, 0.13, 0.008, Math.cos(a) * 0.062, -0.18, Math.sin(a) * 0.062, M); }
+  b.cyl(0.074, 0.08, 0.055, 8, 0, -0.27, 0, 0x9a2a1e);
+  b.cyl(0.082, 0.082, 0.012, 8, 0, -0.3, 0, D);
+}

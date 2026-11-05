@@ -73,6 +73,7 @@ function carryPose(T, st, m) {
   else if (c === 3) { T[P.shRx] = -2.25; T[P.shRz] = -0.05; T[P.elR] = -1.95; }
   else if (c === 4) { T[P.shLx] = -0.45; T[P.elL] = -1.35; T[P.shLz] = 0.05; }
   else if (c === 6) { T[P.shLx] = sw * 0.15; T[P.shLz] = 0.2; T[P.elL] = -0.18; }
+  else if (c === 7 && st.act !== 'raise') { T[P.shLx] = -0.42 + sw * 0.06; T[P.shLz] = 0.16; T[P.elL] = -0.9; }   // a lantern held out in front
   if (!moving && m === 'act') return;
   const it = st.item;
   if (it === 3) { T[P.shRx] = sw * 0.12; T[P.shRz] = -0.24; T[P.elR] = -0.1; }
@@ -207,6 +208,14 @@ function act(T, st, S, t, sd, child, elder) {
       st.lift = (st.lift || 0) + up * 0.16 * S.k; return 18;
     }
     case 'watch': { stand(T, t, sd); cheer(T, t, sd, 1); return; }
+    case 'raise': {
+      // the night watchman stops: lantern held up, looking round, the stick tapped on the ground
+      stand(T, t, sd); T[P.spread] = 0.08;
+      T[P.shLx] = -1.4 + Math.sin(t * 0.7) * 0.05; T[P.shLz] = 0.22; T[P.elL] = -0.28;
+      T[P.headY] = Math.sin(tau * 0.75) * 0.8; T[P.neckX] = -0.05;
+      T[P.shRx] = -0.32 - Math.max(0, Math.sin(tau * 2.6)) * 0.22; T[P.elR] = -0.3; T[P.shRz] = -0.05;
+      return 10;
+    }
     case 'catch': { stand(T, t, sd); T[P.shLx] = -0.9; T[P.shRx] = -0.9; T[P.elL] = -0.6; T[P.elR] = -0.6; T[P.spineX] = 0.2; T[P.knL] = 0.3; T[P.knR] = 0.3; T[P.hipLx] = -0.25; T[P.hipRx] = -0.25; return; }
     default: stand(T, t, sd);
   }

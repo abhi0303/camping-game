@@ -17,7 +17,7 @@ export const FLAG = { SKIRT: 0, KURTA: 1, SHORT: 2, SHORTS: 3, VEST: 4, SCARF: 5
 export const HAIR = { crop: 0, quiff: 1, bald: 2, braid: 3, bun: 4, pigtails: 5, spiky: 6, bob: 7, none: 8, long: 9 };
 export const HAT = { none: 0, turban: 1, cap: 2, straw: 3, veil: 4, scarf: 5, ballcap: 6 };
 export const ITEM = { none: 0, hoe: 1, can: 2, bucket: 3, broom: 4, axe: 5, stick: 6, cup: 7, ladle: 8, fork: 9 };
-export const CARRY = { none: 0, basket: 1, pot: 2, wood: 3, bowl: 4, hay: 5, handBasket: 6 };
+export const CARRY = { none: 0, basket: 1, pot: 2, wood: 3, bowl: 4, hay: 5, handBasket: 6, lantern: 7 };   // (the lantern is its own model: js/village/ai.js)
 const V = { hair: i => 32 + i, hat: i => 64 + i, item: i => 96 + i, carry: i => 128 + i, on: f => 160 + f, off: f => 192 + f };
 
 // skeletons: where the joints are (the adult matches the players' Character)

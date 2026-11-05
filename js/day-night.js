@@ -118,6 +118,7 @@ const KINDS = {
   ceiling: { color: 0xffd9a0, power: 5, range: 10, halo: 0.55 },
   flame: { color: 0xff9338, power: 8, range: 14, halo: 1.7, flame: true, smoke: true, flicker: true },
   fire: { color: 0xff8a30, power: 0, range: 0, halo: 3.4, smoke: true, flicker: true, always: 0.3 },
+  lantern: { color: 0xffb35a, power: 4.5, range: 9, halo: 0.75, flicker: true },       // a hurricane lantern somebody carries
 };
 const POOL = { low: 2, medium: 4, high: 6 };
 const hash = (x, y, z) => { const s = Math.sin(x * 12.9898 + y * 78.233 + z * 37.719) * 43758.5453; return s - Math.floor(s); };
@@ -426,6 +427,13 @@ export class DayNight {
     });
     if (changed) this._layout();
   }
+  // a lamp that moves (a lantern somebody carries, js/village/ai.js): `owner` is its model in the scene (hidden:
+  // the lamp is off), and whoever carries it moves lamp.p every frame — the halo and the real light follow it
+  addMovingLamp(owner, kind = 'lantern') {
+    const K = KINDS[kind] || KINDS.lamp, l = { owner, p: new THREE.Vector3(), kind, K, color: new THREE.Color(K.color), power: K.power, range: K.range, seed: 0.37, th: 0.04, level: 0, vis: true, fl: 1, moving: true };
+    this.lamps.push(l); this._layout();
+    return l;
+  }
   // (re)build the halo, flame and smoke instances for the lamps
   _layout() {
     const n = this.lamps.length, flames = this.lamps.filter(l => l.K.flame), smokes = this.lamps.filter(l => l.K.smoke);
@@ -453,9 +461,11 @@ export class DayNight {
   _lampsFrame(dt, focus) {
     const t = this.time, ld = this.lampDark, lamps = this.lamps;
     if (!this.glows) return;
-    // each lamp's level: on one by one through the dusk
+    // each lamp's level: on one by one through the dusk (a carried lantern's halo goes where it is)
+    let moved = false;
     for (let i = 0; i < lamps.length; i++) {
       const l = lamps[i];
+      if (l.moving) { this._m.compose(l.p, this._q.identity(), this._s.setScalar(l.K.halo)); this.glows.setMatrixAt(i, this._m); moved = true; }
       let o = l.owner; l.vis = true;
       while (o) { if (!o.visible) { l.vis = false; break; } o = o.parent; }
       l.level = Math.max(l.K.always || 0, smoothstep(l.th, l.th + 0.22, ld));
@@ -464,6 +474,7 @@ export class DayNight {
       this.glows.setColorAt(i, this._c.copy(l.color).multiplyScalar(k));
     }
     this.glows.instanceColor.needsUpdate = true;
+    if (moved) this.glows.instanceMatrix.needsUpdate = true;
     // torch flames (hidden while unlit)
     const F = this.flameList || [];
     F.forEach((l, i) => {
@@ -513,6 +524,7 @@ export class DayNight {
     for (const s of this.slots) {
       const l = s.lamp;
       if (l && !s.out) s.k = Math.min(1, s.k + dt * 2.5);
+      if (l && l.moving) s.light.position.copy(l.p);
       s.light.intensity = l ? l.power * l.level * l.fl * s.k * this.lightScale : 0;
     }
   }

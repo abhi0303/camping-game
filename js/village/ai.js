@@ -14,10 +14,11 @@
 //     players and each other, turning the head toward a player close by, the smoothing of turns and poses.
 //   - Far from the village nothing is updated; the further away, the less often poses are worked out.
 import * as THREE from 'three';
-import { MAT } from '../utils.js';
+import { MAT, GeoBuilder } from '../utils.js';
+import { bubbleTexture } from '../farm/npc.js';
 import { bench } from '../farm/props.js';
-import { charpai, goal, football } from './props.js';
-import { Crowd, SKEL, makeLook, ITEM, CARRY } from './characters.js';
+import { charpai, goal, football, lantern } from './props.js';
+import { Crowd, SKEL, makeLook, pivots, ITEM, CARRY, FLAG, HAT, HAIR } from './characters.js';
 import { Animator, targetPose, stepLength } from './animations.js';
 import { Nav, along, dist2 } from './navigation.js';
 import { DAY, H, istClock, rng, dayTimes, weights, DURATION, ELDER_SIT, SPEED } from './schedule.js';
@@ -40,8 +41,15 @@ const ADULTS = [['m', 'keeper'], ['f', 'keeper'], ['m', 'farmer'], ['f', 'farmer
 const PREFS = {
   farmer: { garden: 2.6, hay: 1.4, animals: 1.1 }, keeper: { animals: 3.2, hay: 1.6, garden: 0.8 }, wood: { wood: 3, hay: 1.3, stroll: 1.2 },
   water: { well: 3, line: 1.6, cook: 1.4, sweep: 1.2 }, home: { sweep: 2, line: 2, cook: 2.2, shop: 1.6, garden: 0.9 }, vendor: { shop: 0, visit: 1.4, sit: 1.3 },
+  watch: { sit: 1.7, visit: 1.4, stroll: 1.2, garden: 0.5, wood: 0.4, animals: 0.4, sweep: 0, line: 0, cook: 0, well: 0.5 },
 };
 const STALL_HOURS = [[H(8.25), H(12)], [H(15), H(18.5)]];
+const PATROL_V = 0.8;                       // the night watchman's pace (m/s)
+const IST_S = 19800;
+// rotations of a point p about o (the same as the villager shader's joints)
+const rotX = (p, o, a) => { const c = Math.cos(a), s = Math.sin(a), y = p[1] - o[1], z = p[2] - o[2]; p[1] = o[1] + c * y - s * z; p[2] = o[2] + s * y + c * z; };
+const rotY = (p, o, a) => { const c = Math.cos(a), s = Math.sin(a), x = p[0] - o[0], z = p[2] - o[2]; p[0] = o[0] + c * x + s * z; p[2] = o[2] - s * x + c * z; };
+const rotZ = (p, o, a) => { const c = Math.cos(a), s = Math.sin(a), x = p[0] - o[0], y = p[1] - o[1]; p[0] = o[0] + c * x - s * y; p[1] = o[1] + s * x + c * y; };
 
 export class Villagers {
   constructor(village) { this.V = village; this.W = village.world; this.T = village.world.T; this.extra = []; this.day = null; this.visible = true; this.frame = 0; }
@@ -60,6 +68,7 @@ export class Villagers {
     this.nav.finish();
     this._prune();
     this._roster();
+    this._patrolRoute();
   }
   _house(Hs, i) {
     const S = Hs.spec, round = S.shape === 'round', d2 = round ? S.r : S.d / 2, pd = S.porch ? S.porch.d : 0, g = Hs.garden;
@@ -372,9 +381,14 @@ export class Villagers {
     for (let i = 0; i < 6; i++) people.push({ age: 'elder', female: i % 2 === 1, role: 'elder', home: order[i < 3 ? (i * 2) % nA : (nA + i - 3) % order.length] });
     const fam = [1, 3, 5, 6, 0, 2, 8, 9];
     for (let i = 0; i < 8; i++) people.push({ age: 'child', female: i % 2 === 1, role: 'child', home: order[fam[i] % nA] });
+    // the night watchman (chowkidar): an empty house if there is one
+    const used = new Set(people.map(p => p.home));
+    people.push({ age: 'adult', female: false, role: 'watch', home: order.find(h => !used.has(h)) || order[order.length - 1] });
     const counts = { adult: 0, child: 0 };
     this.npcs = people.map((p, i) => {
       const R = rng(5003, i), L = makeLook(p.age, p.female, R), kind = p.age === 'child' ? 'child' : 'adult';
+      if (p.role === 'watch') Object.assign(L, { top: 0x8a7a52, bottom: 0xece4d0, accent: 0x6e5a48, accent2: 0x5a2a1e, hat: HAT.turban, hair: HAIR.crop, stick: true, sx: 1.06, sy: 1.0, shoes: 0x3a2a1a,
+        flags: (1 << FLAG.KURTA) | (1 << FLAG.MOUSTACHE) | (1 << FLAG.SHAWL) });
       const pref = { ...(PREFS[p.role] || {}) };
       if (p.age === 'elder') { pref.stroll = R(0.7, 1.6); pref.sit = R(0.8, 1.5); pref.garden = R(0.5, 1.4); }
       if (p.age === 'child') { pref.run = R(0.7, 1.5); pref.hop = R(0.5, 1.4); pref.watch = R(0.6, 1.5); }
@@ -396,13 +410,26 @@ export class Villagers {
     this.ballRot = new THREE.Quaternion(); this._q = new THREE.Quaternion(); this._ax = new THREE.Vector3();
     this.lastBall = null;
     this._o = {}; this._a = {};
+    this.piv = { adult: pivots(SKEL.adult), child: pivots(SKEL.child) };
+    // the watchman's lantern (a moving lamp: js/day-night.js) and his call
+    const lb = new GeoBuilder(); lantern(lb);
+    this.lanternObj = lb.build(); this.lanternObj.visible = false;
+    add(this.lanternObj);
+    this.lamp = this.W.dayNight.addMovingLamp(this.lanternObj, 'lantern');
+    this.bubble = new THREE.Sprite(new THREE.SpriteMaterial({ map: bubbleTexture('Jaagte raho!'), transparent: true, depthWrite: false, opacity: 0 }));
+    this.bubble.scale.set(1.6, 0.47, 1); this.bubble.renderOrder = 5; this.bubble.visible = false;
+    add(this.bubble);
   }
 
   /* ================= planning a day ================= */
   _buildDay(day) {
     this.day = day;
     const npcs = this.npcs;
-    const times = npcs.map((n, i) => ({ age: n.age, home: this.houses.indexOf(n.home), ...dayTimes(n.age, rng(day, i, 11)) }));
+    this.dayAbs = day * DAY - IST_S;
+    const times = npcs.map((n, i) => {
+      const R = rng(day, i, 11);
+      return { age: n.age, home: this.houses.indexOf(n.home), ...(n.role === 'watch' ? { wake: H(13.4) + R(0, 1500), bed: H(18.6) + R(0, 600), lunch: [H(23.5), 60] } : dayTimes(n.age, R)) };
+    });
     const C = { npcs: times, field: this.field && this.field.node >= 0 ? { ...this.field, area: this.areas.find(A => A.field) } : null,
       talkSpots: this.talkSpots, squareSpots: this.squareSpots.length ? this.squareSpots : this.talkSpots, gates: this.gates, benchPairs: this.pairs, fieldSeats: this.fieldSeats, playAreas: this.areas, nav: this.nav };
     const plans = this.plans = planDay(C, day);
@@ -415,13 +442,89 @@ export class Villagers {
     }
     const st = npcs.map((n, i) => ({ i, n, d: times[i], t: times[i].wake, segs: [{ k: 'in', t0: 0, t1: times[i].wake, house: n.home }], pos: n.home.I.slice(), node: n.home.D, inside: n.home, plans: [], pi: 0, lunched: false, R: rng(day, i, 977), done: false }));
     plans.forEach(P => P.members.forEach((m, j) => st[m].plans.push({ P, j })));
+    // the watchman: still on his round after midnight; home at the end of the round after 5:24 AM, to sleep
+    const Wm = this.watchman, PR = this.patrol;
+    if (Wm) {
+      const s = st[Wm.i], h = Wm.home, N = this.nav.nodes[h.G];
+      const pEnd = Math.ceil((this.dayAbs + H(5.4)) / PR.period) * PR.period - this.dayAbs;
+      s.segs = [{ k: 'patrol', t0: 0, t1: pEnd, carry: CARRY.lantern, item: ITEM.stick }];
+      s.t = pEnd; s.pos = [N.x, N.z]; s.node = h.G; s.inside = null;
+      this._home(s, times[Wm.i].wake, { carry: CARRY.lantern });
+    }
     for (let guard = 0; guard < 40000; guard++) {
       let s = null;
       for (const x of st) if (!x.done && (!s || x.t < s.t)) s = x;
       if (!s) break;
       this._step(s);
     }
+    // the watchman's evening: supper at home, then out to his gate with the lantern lit, and the round all night
+    if (Wm) {
+      const s = st[Wm.i], last = s.segs[s.segs.length - 1], h = Wm.home, N = this.nav.nodes[h.G];
+      if (last.k === 'in') {
+        s.pos = h.I.slice(); s.node = h.D; s.inside = h;
+        const toGate = this._wt(s, h.G, null, Wm.speed), desired = Math.max(last.t0 + 900, H(19.25));
+        const tP = Math.ceil((this.dayAbs + desired + toGate + 20) / PR.period) * PR.period - this.dayAbs, out = tP - toGate - s.R(8, 20);
+        if (tP < DAY - 60 && out > last.t0 + 60) {
+          last.t1 = out; s.t = out;
+          this._walk(s, h.G, null, { carry: CARRY.lantern, item: ITEM.stick });
+          if (s.t < tP) this._act(s, 'stand', tP - s.t, { x: N.x, z: N.z, yaw: h.yaw, carry: CARRY.lantern, item: ITEM.stick });
+          s.segs.push({ k: 'patrol', t0: Math.max(tP, s.t), t1: DAY, carry: CARRY.lantern, item: ITEM.stick });
+        }
+      }
+    }
     this.timeline = st.map(s => s.segs);
+  }
+  // the watchman's round: from his gate along every lane to its end and back, past the square and the green,
+  // stopping at each end to look round with the lantern up (and blow his whistle). It repeats all night; where he
+  // is depends only on the clock, so the round goes on unbroken past midnight and every player sees him in the
+  // same place.
+  _patrolRoute() {
+    const Wm = this.npcs.find(n => n.role === 'watch');
+    if (!Wm) return;
+    const nav = this.nav, start = Wm.home.G, targets = new Set();
+    for (const L of LANES) for (const pt of [L.pts[0], L.pts[L.pts.length - 1]]) {
+      const id = nav.nearestLane(pt[0], pt[1], 3);
+      if (id >= 0 && inClear(nav.nodes[id].x, nav.nodes[id].z) && nav.reachable(start, id)) targets.add(id);
+    }
+    if (this.ring.length && nav.reachable(start, this.ring[0])) targets.add(this.ring[0]);
+    if (this.field && this.field.node >= 0 && nav.reachable(start, this.field.node)) targets.add(this.field.node);
+    targets.delete(start);
+    const order = [start], left = [...targets];
+    let cur = start;
+    while (left.length) { left.sort((a, b) => nav.dist(cur, a) - nav.dist(cur, b) || a - b); cur = left.shift(); order.push(cur); }
+    order.push(start);
+    const legs = [];
+    let period = 0;
+    for (let i = 0; i < order.length - 1; i++) {
+      const pts = [];
+      for (const id of nav.route(order[i], order[i + 1])) { const N = nav.nodes[id], L = pts[pts.length - 1]; if (!L || dist2(L[0], L[1], N.x, N.z) > 0.05) pts.push([N.x, N.z, 0]); }
+      if (pts.length < 2) continue;
+      const cum = [0];
+      for (let k = 1; k < pts.length; k++) cum.push(cum[k - 1] + dist2(pts[k - 1][0], pts[k - 1][1], pts[k][0], pts[k][1]));
+      const len = cum[cum.length - 1], last = i === order.length - 2, A = pts[pts.length - 2], B = pts[pts.length - 1];
+      legs.push({ line: { pts, cum, len }, walk: len / PATROL_V, pause: last ? 0 : 14 + (i * 7) % 12, face: Math.atan2(B[0] - A[0], B[1] - A[1]) });
+      period += len / PATROL_V + legs[legs.length - 1].pause;
+    }
+    if (!legs.length || period < 60) return;
+    this.patrol = { legs, period };
+    this.watchman = Wm;
+  }
+  // where the watchman is on his round at absolute time T (seconds)
+  _patrolAt(T, out) {
+    const R = this.patrol, P = R.period;
+    let ph = T - Math.floor(T / P) * P;
+    out.loop = Math.floor(T / P);
+    for (let i = 0; i < R.legs.length; i++) {
+      const L = R.legs[i];
+      if (ph < L.walk + L.pause || i === R.legs.length - 1) {
+        out.leg = i;
+        if (ph < L.walk) { const a = along(L.line, ph * PATROL_V, this._a); out.x = a.x; out.z = a.z; out.face = Math.atan2(a.tx, a.tz); out.pause = -1; }
+        else { const B = L.line.pts[L.line.pts.length - 1]; out.x = B[0]; out.z = B[1]; out.face = L.face; out.pause = Math.min(ph - L.walk, L.pause); }
+        return out;
+      }
+      ph -= L.walk + L.pause;
+    }
+    return out;
   }
   _reserve(id, a, b) { if (id === -1 || id === undefined) return; let L = this.res.get(id); if (!L) this.res.set(id, L = []); L.push([a, b]); }
   _isFree(S, a, b) { if (!S.cap) return true; const L = this.res.get(S.id); return !L || !L.some(([x, y]) => b + 2 > x && a - 2 < y); }
@@ -669,7 +772,7 @@ export class Villagers {
     const { day, sod } = istClock(ms);
     if (day !== this.day) this._buildDay(day);
     const near = viewers.some(p => dist2(p.x, p.z, SQUARE.x, SQUARE.z) < 230);
-    if (!near) { if (this.visible) { this.crowd.setVisible(false); this.ball.visible = false; for (const n of this.npcs) this._collider(n, false); this.visible = false; } return; }
+    if (!near) { if (this.visible) { this.crowd.setVisible(false); this.ball.visible = false; if (this.lanternObj) { this.lanternObj.visible = false; this.bubble.visible = false; } for (const n of this.npcs) this._collider(n, false); this.visible = false; } return; }
     if (!this.visible) { this.crowd.setVisible(true); this.ball.visible = true; this.visible = true; }
     this.frame++;
     this.shopNow = false;
@@ -679,8 +782,9 @@ export class Villagers {
     for (const n of this.npcs) {
       const seg = this._seg(n.i, sod);
       this._state(n, seg, sod, o);
-      if (!o.vis) { if (n.shown) { this.crowd.hide(n.kind, n.idx); this._collider(n, false); n.shown = false; n.init = false; } continue; }
-      this._show(n, o, dt, sod, viewers);
+      if (!o.vis) { if (n.shown) { this.crowd.hide(n.kind, n.idx); this._collider(n, false); n.shown = false; n.init = false; } }
+      else this._show(n, o, dt, sod, viewers);
+      if (n === this.watchman) this._lantern(n, o, viewers, dt);
     }
     this.crowd.commit();
   }
@@ -693,8 +797,15 @@ export class Villagers {
   // where a villager is and what they're doing at this moment of their plan
   _state(n, seg, sod, o) {
     const tau = sod - seg.t0;
-    o.vis = true; o.y = null; o.mode = null; o.act = 'stand'; o.tau = tau; o.item = seg.item || 0; o.carry = seg.carry || 0; o.seatH = 0; o.look = null; o.kick = 0; o.talk = 0; o.talkRole = 0; o.talkSeed = 0; o.run = false; o.face = null; o.walking = false;
+    o.vis = true; o.y = null; o.mode = null; o.act = 'stand'; o.tau = tau; o.item = seg.item || 0; o.carry = seg.carry || 0; o.seatH = 0; o.look = null; o.kick = 0; o.talk = 0; o.talkRole = 0; o.talkSeed = 0; o.run = false; o.face = null; o.walking = false; o.stop = -1;
     if (seg.k === 'in') { o.vis = false; return; }
+    if (seg.k === 'patrol') {
+      const p = this._patrolAt(this.dayAbs + sod, this._pp || (this._pp = {}));
+      o.x = p.x; o.z = p.z; o.face = p.face; o.carry = CARRY.lantern; o.item = ITEM.stick;
+      if (p.pause >= 0) { o.act = 'raise'; o.tau = p.pause; o.stop = p.loop * 1000 + p.leg; }
+      else o.walking = true;
+      return;
+    }
     if (seg.k === 'walk') {
       if (!seg.line) seg.line = this.nav.polyline(seg.a, seg.b, seg.P, seg.Q);
       const L = seg.line, T = seg.t1 - seg.t0, v = L.len / Math.max(0.3, T - ACC);
@@ -845,9 +956,37 @@ export class Villagers {
       n.anim.step(far > 85 ? dt * 3 : dt, rate);
     }
     const y = o.y ?? this.T.heightAt(px, pz);
+    n.wy = y;
     this.crowd.set(n.kind, n.idx, px, y, pz, n.yaw, n.L.sx, n.L.sy, n.anim.cur, o.item || 0, o.carry || 0, n.L.hat);
     n.shown = true;
     this._collider(n, true, px, pz);
+  }
+  // the watchman's lantern hangs from his left hand (worked out from his pose, like the graphics card does) and
+  // lights the lane round him; at each stop he blows his whistle, and calls "Jaagte raho!" if you're close
+  _lantern(n, o, viewers, dt) {
+    const on = n.shown && o.vis && o.carry === CARRY.lantern;
+    this.lanternObj.visible = on;
+    if (on) {
+      const h = this._handL(n);
+      this.lanternObj.position.set(h[0], h[1], h[2]); this.lanternObj.rotation.y = n.yaw;
+      this.lamp.p.set(h[0], h[1] - 0.18, h[2]);
+      if (o.act === 'raise' && o.stop !== this.lastStop && o.tau > 0.4) { this.lastStop = o.stop; if (this.onWhistle) this.onWhistle(n.px, n.pz); this.callT = 4.5; }
+    }
+    this.callT = Math.max(0, (this.callT || 0) - dt);
+    const v = viewers[0], close = on && v && dist2(v.x, v.z, n.px, n.pz) < 16, m = this.bubble.material;
+    m.opacity = c01(m.opacity + (close && this.callT > 0 ? dt * 5 : -dt * 3));
+    this.bubble.visible = m.opacity > 0.01;
+    if (this.bubble.visible) this.bubble.position.set(n.px, (n.wy || 0) + 2.35 * n.L.sy, n.pz);
+  }
+  // where a villager's left hand is in the world
+  _handL(n) {
+    const S = n.S, P = this.piv[n.kind], c = n.anim.cur, p = [P[4][0], P[4][1] - S.fore - 0.01, 0.005];
+    rotX(p, P[4], c[7]);
+    rotZ(p, P[3], c[6]); rotX(p, P[3], c[5]);
+    rotY(p, P[1], c[2]); rotX(p, P[1], c[1]);
+    p[1] += c[0];
+    const x = p[0] * n.L.sx, y = p[1] * n.L.sy, z = p[2] * n.L.sx, cy = Math.cos(n.yaw), sy = Math.sin(n.yaw);
+    return [n.px + cy * x + sy * z, (n.wy || 0) + y, n.pz - sy * x + cy * z];
   }
   // players bump into villagers
   _collider(n, on, x, z) {
@@ -859,5 +998,5 @@ export class Villagers {
     if (cell !== n.col.cell) { W.removeCollider(n.col); W.addCollider(n.col); }
   }
   // (for tests and the next phase) what somebody is doing now
-  describe(i, ms) { const { sod } = istClock(ms), seg = this._seg(i, sod), n = this.npcs[i]; return { age: n.age, role: n.role, home: n.home.spec.name, kind: seg.k, act: seg.act || (seg.P && seg.P.kind) || null }; }
+  describe(i, ms) { const { sod } = istClock(ms), seg = this._seg(i, sod), n = this.npcs[i]; return { age: n.age, role: n.role, home: n.home.spec.name, kind: seg.k, act: seg.act || (seg.P && seg.P.kind) || (seg.k === 'patrol' ? 'patrol' : null) }; }
 }

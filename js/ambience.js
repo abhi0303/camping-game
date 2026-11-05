@@ -180,6 +180,29 @@ export class Ambience {
       this._env(og, t, vol * k * 0.8, 0.002, 0.08); this._wire(o, og, pan); o.start(t); o.stop(t + 0.1);
     });
   }
+  // the night watchman's whistle: a pea whistle's trill, a short blast and a long one, and his stick on the ground
+  whistle(vol, pan) {
+    const ctx = this.ctx, t0 = ctx.currentTime + 0.02;
+    [[0, 0.28], [0.42, 0.85]].forEach(([dt, d]) => {
+      const t = t0 + dt, o = ctx.createOscillator(), lfo = ctx.createOscillator(), lg = ctx.createGain(), g = ctx.createGain(), f = ctx.createBiquadFilter();
+      o.type = 'sine'; o.frequency.setValueAtTime(2750, t); o.frequency.linearRampToValueAtTime(2850, t + d);
+      lfo.frequency.value = 27; lg.gain.value = 170; lfo.connect(lg); lg.connect(o.frequency);   // the pea's trill
+      f.type = 'bandpass'; f.frequency.value = 2800; f.Q.value = 2;
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.03); g.gain.setValueAtTime(vol, t + d - 0.06); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+      o.connect(f); this._wire(f, g, pan); o.start(t); lfo.start(t); o.stop(t + d + 0.05); lfo.stop(t + d + 0.05);
+    });
+    for (const dt of [1.6, 2.3]) {                                       // tok… tok: the lathi on the ground
+      const t = t0 + dt, o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = 'triangle'; o.frequency.setValueAtTime(190, t); o.frequency.exponentialRampToValueAtTime(90, t + 0.08);
+      this._env(g, t, vol * 0.9, 0.003, 0.1); this._wire(o, g, pan); o.start(t); o.stop(t + 0.14);
+    }
+  }
+  onWhistle(x, z, listener) {
+    if (!this.ready || audio.muted || !listener) return;
+    const d = Math.hypot(x - listener.x, z - listener.z);
+    if (d > 60) return;
+    this.whistle(0.07 * clamp(1 - d / 60, 0.08, 1), panOf(listener, x, z));
+  }
   // the goats butted heads at (x, z)
   onKnock(x, z, listener) {
     if (!this.ready || audio.muted || !listener) return;

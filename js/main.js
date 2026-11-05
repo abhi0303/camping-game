@@ -731,6 +731,7 @@ async function enterFarm(L, status, isNew) {
   farmland.enable();                   // clear the ground, put up the market, the store and the plots
   fishArea.enable();                   // the Fish Market, the path and the docks on the river
   village.enable({ farmland, minimap });   // the village behind the Market
+  if (village.people) village.people.onWhistle = (x, z) => ambience.onWhistle(x, z, listener);   // the night watchman
   farmEco.start(L);
   startGame(r.role === 'host'
     ? (isNew || r.fresh ? `🌾 Welcome to ${L.roomName}! World code ${L.code} — invite friends from the menu (Esc)` : `🌾 Welcome back to ${L.roomName}`)

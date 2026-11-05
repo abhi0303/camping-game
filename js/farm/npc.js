@@ -20,7 +20,7 @@ function strawHat(b) {
 }
 const NEAR = 7;          // the bubble shows within this distance
 
-function bubbleTexture(text) {
+export function bubbleTexture(text) {
   return canvasTexture(512, 150, (c, w, h) => {
     const r = 34, bw = w - 8, bh = h - 40;
     c.fillStyle = 'rgba(0,0,0,0)'; c.clearRect(0, 0, w, h);
