@@ -528,7 +528,11 @@ function renderVoice() {
     sb.title = net.isHost ? 'Sync everyone: fresh copy of the game for all players, restart voice, reconnect players with a weak link'
       : 'Reconnect & sync: press it if a teammate is missing or frozen, or the voice breaks';
   }
-  for (const b of document.querySelectorAll('#pauseRoom .micBtn')) { b.classList.toggle('on', on); const h = on ? `${icon('mic')} Mic is ON — click to mute (B)` : `${icon('micOff')} Mic is off — click to talk to your team (B)`; if (b.dataset.h !== h) { b.dataset.h = h; b.innerHTML = h; } }
+  for (const b of document.querySelectorAll('#pauseRoom .micBtn')) {
+    b.classList.toggle('on', on); b.title = on ? 'Mic is on — click to mute (B)' : 'Mic is off — click to talk to your team (B)';
+    const h = farm.active ? `${icon(on ? 'mic' : 'micOff')} ${on ? 'Mic on' : 'Mic off'} <kbd>B</kbd>` : on ? `${icon('mic')} Mic is ON — click to mute (B)` : `${icon('micOff')} Mic is off — click to talk to your team (B)`;
+    if (b.dataset.h !== h) { b.dataset.h = h; b.innerHTML = h; }
+  }
 }
 const escapeHTML = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const inviteLink = () => `${location.origin}${location.pathname}?room=${net.code}`;
@@ -713,6 +717,7 @@ async function enterFarm(L, status, isNew) {
   gear.netId = String(L.memberId || 'f').slice(0, 8) + Date.now().toString(36);   // ids of gear you set down
   document.body.classList.add('farm');  // (CSS: no gun button, the floating bag + order slip)
   $('musicBtn').classList.remove('hidden');
+  $('play').innerHTML = `${icon('play')} Back to the farm`;
   farmland.enable();                   // clear the ground, put up the market, the store and the plots
   fishArea.enable();                   // the Fish Market, the path and the docks on the river
   farmEco.start(L);
@@ -952,7 +957,7 @@ function debugStage(st, build) {
   if (build) { designer.show(build); designer._action('build'); designer.close(); }
   if (st === 'siege' || st === 'giants') survival._toStage(st);
 }
-window.__game = { debugStage, net, session, voice, birds, ambience, notebook, grass, structures, designer, giants, player, rvs, remotes, obstacles, bridgeWorld, materials, world, inv, gear, editor, input, rig, camera, zombies, survival, combat, applySave, collectSave, saveNow, farm, farmEco, farmUI, farmland, fishArea, fishing, dayNight: world.dayNight, get objI() { return objI; },
+window.__game = { debugStage, net, session, voice, birds, ambience, notebook, grass, farmPanel, structures, designer, giants, player, rvs, remotes, obstacles, bridgeWorld, materials, world, inv, gear, editor, input, rig, camera, zombies, survival, combat, applySave, collectSave, saveNow, farm, farmEco, farmUI, farmland, fishArea, fishing, dayNight: world.dayNight, get objI() { return objI; },
   // test hooks: advance the game n frames / pin the camera
   run: n => { for (let i = 0; i < n; i++) step(1 / 60); renderer.render(scene, camera); }, setCam: a => { freezeCam = a; } };
 
