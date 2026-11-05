@@ -889,6 +889,7 @@ function step(dt) {
 function sounds(dt) {
   const dn = world.dayNight, dark = dn.dark ?? world.night;
   birds.update(dt, focus, dark);
+  grass.setDark(dark);
   grass.update(dt, focus);
   if (player.frame === 'world' && player.mode === 'foot') grass.press(pw.x, pw.z); else grass.press(null);
   camera.getWorldDirection(_fwd);

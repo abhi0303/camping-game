@@ -209,20 +209,19 @@ function terrainMesh(T, riverD, roadD) {
 
 /* ---------- the painted ground: a bright, clean low-poly meadow with soft dirt patches ----------
    Drawn by the terrain's shader from the world position (no texture, no extra geometry, no seams):
-   - the grass is a calm surface of large irregular facets (about 1.6 m), each split in two halves that
-     catch the light a little differently — the angular low-poly look — in soft patches of four bright
-     greens (TONE_STEPS: mostly the main bright green, some medium and deeper green, a few light ones);
+   - the grass is a calm surface of soft, roughly hexagonal patches (about 1.2 m) in close lime shades
+     (TONE_STEPS), a touch darker where the grass tufts grow thick;
    - dirt: where a slow noise is high the ground is light orange-brown earth with a few darker lumps and
      tiny stones, plus small spots of bare soil here and there; edges fray naturally;
    - the grass tufts and flowers standing on it are js/grass.js; far away the facets calm down (no shimmer).
    Faces that are not grass (road verges, river banks, rock slopes, sandy build zones) keep their own colour
    (aGrass = 0). Lighting, shadows, fog and day / night work as before (only the surface colour changes).
    The same palette and dirt noise are used by js/grass.js. */
-export const GROUND = { g0: 0x5aa533, g1: 0x67b33a, g2: 0x75c041, g3: 0x8ccf52, m0: 0xa9733f, m1: 0xbe8a51, m2: 0x8a5a30 };
-// how much of each green (by the meadow-tone noise): ~15 % deeper, ~25 % medium, ~52 % main bright, ~8 % light
-export const TONE_STEPS = [0.28, 0.43, 0.9];
+export const GROUND = { g0: 0x64b237, g1: 0x74c343, g2: 0x84d14d, g3: 0x95dc5a, m0: 0xb8814a, m1: 0xcc985c, m2: 0x9a6a3c };
+// how much of each green (by the meadow-tone noise): close lime shades, mostly the two middle ones
+export const TONE_STEPS = [0.25, 0.5, 0.82];
 export const MUD_T = 0.68;
-export const SOIL_T = 0.82;          // small bare-soil spots (a second, finer noise) above this
+export const SOIL_T = 0.86;          // small bare-soil spots (a second, finer noise) above this
 export function groundMaterial() {
   const mat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
   const u = {};
@@ -241,7 +240,7 @@ export function groundMaterial() {
           diffuseColor.rgb = mix(diffuseColor.rgb, groundColor(vGWorld.xz, far), vGrass);
         }`);
   };
-  mat.customProgramCacheKey = () => 'ground-v11';
+  mat.customProgramCacheKey = () => 'ground-v14';
   return mat;
 }
 const GROUND_GLSL = /* glsl */`
@@ -273,11 +272,13 @@ vec2 gcell(vec2 p, float scale, out vec2 off) {
 }
 vec3 groundColor(vec2 p, float far) {
   float mud = gmud(p), tone = gtone(p);
-  vec2 off; vec2 id = gcell(p, 0.62, off);
+  vec2 off; vec2 id = gcell(p, 0.85, off);                                 // soft, roughly hexagonal patches (~1.2 m)
   float h = gh12(id * 1.7 + 3.1);
   vec2 dir = normalize(gh22(id + 4.0) - 0.5 + 0.001);
-  float side = dot(off, dir) > 0.0 ? 1.0 : -1.0;                           // which half of the facet
-  float facet = mix(1.0 + (h - 0.5) * 0.09 + side * 0.035, 1.0, far);
+  float side = dot(off, dir) > 0.0 ? 1.0 : -1.0;                           // which half of the facet (very subtle)
+  float facet = mix(1.0 + (h - 0.5) * 0.08 + side * 0.015, 1.0, far);
+  float thick = smoothstep(0.45, 0.85, gnoise(p * 0.16 + vec2(3.1, -8.2)));  // where tufts grow thick (js/grass.js densAt)
+  facet *= 1.0 - 0.07 * thick;
   // the dirt's edge frays: small bits decide one by one near the boundary
   float edge = (mud - (MUD_T - 0.035)) / 0.035;
   bool dirt = mud > MUD_T;
@@ -291,7 +292,7 @@ vec3 groundColor(vec2 p, float far) {
     }
     return col;
   }
-  vec3 col = gpal(clamp(tone + (h - 0.5) * 0.14, 0.0, 1.0)) * facet;
+  vec3 col = gpal(clamp(tone + (h - 0.5) * 0.5, 0.0, 1.0)) * facet;          // each patch one of the close limes
   if (edge > -0.6) col = mix(col, uGr_g3 * 1.02, 0.25 * clamp(edge + 0.6, 0.0, 1.0));   // a little lighter, drier grass by the dirt
   return col;
 }`;

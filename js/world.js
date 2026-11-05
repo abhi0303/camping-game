@@ -530,12 +530,14 @@ function leafyPlant(b) {
 function boulder(b) {
   b.add(new THREE.DodecahedronGeometry(1, 0), 0x8f9198, 0, 0.45, 0, 0.3, 0.6, 0.1, 'solid', 1.25, 0.8, 1.05);
   b.add(new THREE.DodecahedronGeometry(0.55, 0), 0x9c9ea5, 1.05, 0.25, 0.35, 0.5, 0.2, 0.4, 'solid', 1.1, 0.75, 1);
+  b.add(new THREE.DodecahedronGeometry(0.22, 0), 0x8a8c94, -1.1, 0.1, 0.3, 0.3, 0.5, 0.2);              // little stones beside it
+  b.add(new THREE.DodecahedronGeometry(0.16, 0), 0x979aa2, 1.55, 0.06, -0.2, 0.1, 0.9, 0.4);
 }
 // a bright, round, faceted bush: a big blob and two smaller ones
 function meadowBush(b) {
-  b.add(new THREE.IcosahedronGeometry(0.75, 1), 0x5aab3a, 0, 0.55, 0, 0, 0, 0, 'solid', 1, 0.82, 1);
-  b.add(new THREE.IcosahedronGeometry(0.5, 1), 0x6cbd45, 0.55, 0.42, 0.25, 0.4, 0.3, 0, 'solid', 1, 0.85, 1);
-  b.add(new THREE.IcosahedronGeometry(0.42, 1), 0x4e9d33, -0.45, 0.36, -0.2, 0.2, 0.7, 0, 'solid', 1, 0.85, 1);
+  b.add(new THREE.IcosahedronGeometry(0.75, 1), 0x6cc23f, 0, 0.55, 0, 0, 0, 0, 'solid', 1, 0.82, 1);
+  b.add(new THREE.IcosahedronGeometry(0.5, 1), 0x82d24f, 0.55, 0.42, 0.25, 0.4, 0.3, 0, 'solid', 1, 0.85, 1);
+  b.add(new THREE.IcosahedronGeometry(0.42, 1), 0x5db236, -0.45, 0.36, -0.2, 0.2, 0.7, 0, 'solid', 1, 0.85, 1);
 }
 function pebble(b) { b.add(new THREE.IcosahedronGeometry(1, 0), 0xffffff, 0, 0.4, 0, 0.2, 0.4, 0, 'solid', 1.25, 0.7, 1); }   // white: tinted per instance
 function grassTuft(b) {
