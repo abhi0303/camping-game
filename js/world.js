@@ -156,7 +156,7 @@ export class World {
   }
 
   // Small things on the ground that go with the painted grass and mud (js/terrain.js): leafy plants and
-  // pebbles (the grass blades near the player are js/grass.js). Instanced and chunked like the jungle (one draw call per chunk and kind), no
+  // pebbles and grey rocks (the grass tufts and flowers near the player are js/grass.js). Instanced and chunked like the jungle (one draw call per chunk and kind), no
   // shadows, no colliders. They use their own random numbers, so the jungle, crates and colliders stay
   // exactly where they were. Phones get about half.
   _groundDecor() {
@@ -167,6 +167,7 @@ export class World {
     const kinds = [
       { geo: geo(leafyPlant), n: 650, sc: [0.6, 1.2], road: 5.4 },
       { geo: geo(pebble), n: 1400, sc: [0.12, 0.42], road: 4.8, flat: true, tints: [0x8e8c92, 0x9a978f, 0x86725e, 0x7a6a5c] },   // one mesh, coloured per pebble
+      { geo: geo(boulder), n: 700, sc: [0.45, 1.05], road: 6, flat: true, tints: [0xffffff, 0xf0eeea, 0xe2e4e8], solid: 0.55 },   // grey faceted rocks (you bump into the bigger ones)
     ];
     const m = new THREE.Matrix4(), q = new THREE.Quaternion(), sv = new THREE.Vector3(), p = new THREE.Vector3(), e = new THREE.Euler();
     for (const t of kinds) {
@@ -184,6 +185,7 @@ export class World {
         p.set(x, y - (t.flat ? sc * 0.25 : 0.05), z); sv.set(sc, sc * (t.flat ? rnd(0.6, 1) : rnd(0.85, 1.2)), sc);
         const ci = clamp(Math.floor((x - X0) / (SX / CHX)), 0, CHX - 1) + CHX * clamp(Math.floor((z - Z0) / (SZ / CHZ)), 0, CHZ - 1);
         chunks[ci].push({ m: m.compose(p, q, sv).clone(), c: t.tints ? t.tints[Math.floor(rnd(0, t.tints.length))] : 0 });
+        if (t.solid && sc > t.solid) this.addCollider({ x, z, r: sc * 1.05, rock: true });
         placed++;
       }
       for (const list of chunks) {
@@ -479,11 +481,11 @@ function palmTree(b) {
   b.add(new THREE.IcosahedronGeometry(0.45, 0), 0x6b4b2e, px, py - 0.2, 0);
 }
 function fern(b) {
-  for (let i = 0; i < 7; i++) b.group(0, 0.15, 0, 0, (i / 7) * Math.PI * 2, 0, () => b.box(0.32, 0.03, 1.3, 0, 0.25, 0.55, i % 2 ? 0x3f8a36 : 0x4a9a3e, 'solid', -0.5, 0, 0));
+  for (let i = 0; i < 7; i++) b.group(0, 0.15, 0, 0, (i / 7) * Math.PI * 2, 0, () => b.box(0.32, 0.03, 1.3, 0, 0.25, 0.55, i % 2 ? 0x4f9e38 : 0x60b043, 'solid', -0.5, 0, 0));
 }
 function bush(b) {
-  b.add(new THREE.IcosahedronGeometry(0.9, 0), 0x3c7d34, 0, 0.55, 0, 0, 0, 0, 'solid', 1, 0.75, 1);
-  b.add(new THREE.IcosahedronGeometry(0.6, 0), 0x4a8c3c, 0.6, 0.45, 0.3, 0.5, 0, 0);
+  b.add(new THREE.IcosahedronGeometry(0.9, 0), 0x4d9a37, 0, 0.55, 0, 0, 0, 0, 'solid', 1, 0.75, 1);
+  b.add(new THREE.IcosahedronGeometry(0.6, 0), 0x5eab43, 0.6, 0.45, 0.3, 0.5, 0, 0);
 }
 function rock(b) { b.add(new THREE.DodecahedronGeometry(1, 0), 0x7d7b74, 0, 0.35, 0, 0.3, 0.5, 0, 'solid', 1.2, 0.75, 1); }
 function pineTree(b) {
@@ -504,6 +506,11 @@ function leafyPlant(b) {
     b.group(0, 0.06, 0, 0, a, 0, () => b.add(new THREE.OctahedronGeometry(0.22, 0), cols[i % 3], 0, 0.1, 0.24, -0.55, 0, 0, 'solid', 0.75, 0.18, 1.5));
   }
   b.add(new THREE.OctahedronGeometry(0.12, 0), 0x86d052, 0, 0.18, 0, 0, 0.4, 0, 'solid', 1, 1.4, 1);
+}
+// a grey faceted rock with a smaller one leaning on it (lighter on top)
+function boulder(b) {
+  b.add(new THREE.DodecahedronGeometry(1, 0), 0x8f9198, 0, 0.45, 0, 0.3, 0.6, 0.1, 'solid', 1.25, 0.8, 1.05);
+  b.add(new THREE.DodecahedronGeometry(0.55, 0), 0x9c9ea5, 1.05, 0.25, 0.35, 0.5, 0.2, 0.4, 'solid', 1.1, 0.75, 1);
 }
 function pebble(b) { b.add(new THREE.IcosahedronGeometry(1, 0), 0xffffff, 0, 0.4, 0, 0.2, 0.4, 0, 'solid', 1.25, 0.7, 1); }   // white: tinted per instance
 function grassTuft(b) {
