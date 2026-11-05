@@ -42,6 +42,7 @@ import { Notebook } from './farm/notebook.js';
 import { Ambience } from './ambience.js';
 import { Birds } from './birds.js';
 import { Grass } from './grass.js';
+import { Music } from './music.js';
 import { icon, startIconizer } from './icons.js';
 import { RIVER_HALF } from './terrain.js';
 
@@ -185,7 +186,8 @@ const fishing = new Fishing({ scene, area: fishArea, eco: farmEco, player, gear,
 player.fishing = fishing;
 // birds in the trees and the sky; the jungle's sounds (crickets, toads, birdsong, the river, footsteps)
 const birds = new Birds(scene, world);
-const grass = new Grass(scene, world);             // grass blades around the player (js/grass.js)
+const grass = new Grass(scene, world);             // wild flowers around the player (js/grass.js)
+const music = new Music();                         // Farm World's tune (js/music.js)
 const ambience = new Ambience();
 const listener = { x: 0, z: 0, fx: 0, fz: 1 }, _fwd = new THREE.Vector3();
 fishArea.onJump = (x, z, landing) => ambience.onFishJump(x, z, landing, listener, fishing.active);
@@ -709,6 +711,7 @@ async function enterFarm(L, status, isNew) {
   if (r.role === 'host') { parkAtStore(); standAtStore(); }  // (guests stand beside the host's RV, already parked here)
   gear.netId = String(L.memberId || 'f').slice(0, 8) + Date.now().toString(36);   // ids of gear you set down
   document.body.classList.add('farm');  // (CSS: no gun button, the floating bag + order slip)
+  $('musicBtn').classList.remove('hidden');
   farmland.enable();                   // clear the ground, put up the market, the store and the plots
   fishArea.enable();                   // the Fish Market, the path and the docks on the river
   farmEco.start(L);
@@ -807,6 +810,11 @@ const sndBtn = $('sndBtn');
 const sndLabel = () => { sndBtn.innerHTML = `${icon(audio.muted ? 'speakerOff' : 'speaker')} ${audio.muted ? 'Sound off' : 'Sound on'}`; };
 sndLabel();
 sndBtn.addEventListener('click', e => { e.stopPropagation(); audio.toggleMute(); sndLabel(); });
+// Farm World's music on / off (remembered on this device)
+const musicBtn = $('musicBtn');
+const musicLabel = () => { musicBtn.innerHTML = `${icon('music')} ${music.on ? 'Music on' : 'Music off'}`; musicBtn.classList.toggle('off', !music.on); };
+musicLabel();
+musicBtn.addEventListener('click', e => { e.stopPropagation(); music.toggle(); musicLabel(); });
 if (input.touch) { const l = document.createElement('label'); l.className = 'qlab'; l.textContent = 'Graphics '; l.appendChild(qSel); $('qualSlot').appendChild(l); }
 canvas.addEventListener('click', () => { if (started && !paused && !input.locked) input.requestLock(); });
 
@@ -889,6 +897,7 @@ function step(dt) {
 function sounds(dt) {
   const dn = world.dayNight, dark = dn.dark ?? world.night;
   birds.update(dt, focus, dark);
+  music.update(farm.active && started, dark);
   grass.setDark(dark);
   grass.update(dt, focus);
   if (player.frame === 'world' && player.mode === 'foot') grass.press(pw.x, pw.z); else grass.press(null);

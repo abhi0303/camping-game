@@ -108,7 +108,7 @@ The main road splits it in two: **the farm** (plots and storage) on one side, **
 
   The timings live in one file, [`server/src/animals.js`](server/src/animals.js). A Regular White pays for itself in about 3½ hours, a Brown Desi in about 7 and a Black in about 10 — but a Black chicken earns the most per place in the coop. The **Chicken Farm panel** (stand at the coop, or open it from its sign) shows the varieties, **Next Egg In** (the shortest timer, ticking every second), the eggs ready to collect, the feeding left and the feed needed, in colours: 🟢 laying · 🟡 an egg is seconds away · 🔵 eggs ready · 🔴 feed required. The coop's panel also lists every chicken with its own timer.
 
-  Each kind has its own look, and its eggs are kept separately. 🐐 Goats (₹150) give goat milk (₹30), 🐄 cows (₹400) cow milk (₹25).
+  Each kind has its own look, and its eggs are kept separately. 🐐 Goats (₹150; Boer-style: white body, brown head with a white blaze, curved horns, droopy ears, beard) give goat milk (₹30), 🐄 cows (₹400) cow milk (₹25).
 - **Horses:** six colours, each with its own look. Buy a **baby** (Level 1) or a **grown** horse (Level 10):
 
   | Colour | Baby | Grown | Rent (per 2 h) | Sells for (Level 1 → 10) |
@@ -161,6 +161,8 @@ Farm World follows the **real time in India (IST)**. The sun's position comes fr
 - **Together:** everyone in a world sees the same sky — it uses the farm server's clock (the same one the animals use), not each computer's clock, and nothing extra is sent over the network. Opening the game later shows the right time of day at once.
 
 **Sounds and wildlife** (`js/ambience.js`, `js/birds.js`, all synthesized — no audio files): at night a cricket chorus with single crickets close by, toads trilling (more near the river) and now and then a distant owl; in the morning lots of birdsong, fewer birds later in the day. Two or three birds circle high over you and a few sit on the tops of nearby jungle trees (now and then one flies to another tree); they roost at night. Near the river you hear the water; at the docks while fishing the water laps, little bubbles rise and fish splash as they jump. Footsteps are soft: grass, gravel on the road, hollow knocks on the docks and the RV floor. Inside the RV the outside sounds are muffled. The RV itself sounds like a big diesel van: the starter cranks, then a deep, low rumble that rises with speed and load.
+
+**Farm music** (`js/music.js`, synthesized): a gentle country tune — finger-picked "boom-chick" guitar under a whistled melody, a banjo-like pluck the second time round, then the guitar alone for a while, with a soft shaker in the daytime; at night it plays quieter, guitar only. It follows Sound on / off and has its own **Music on / off** button in the Esc menu (Farm World only, remembered on this device).
 
 Zombie Trail keeps its zombie nights (the campaign decides when it is dark); they now have stars, a moon and lit torches too.
 
@@ -278,6 +280,7 @@ Global: **M** map, **K** sound, **B** mic on / off (co-op), **R** RV back to the
 - `js/minimap.js` – minimap and full map
 - `js/icons.js` – the game's icons (small SVG pictures for items, animals, places and the HUD); emoji written anywhere in the page are swapped for these icons, so no emoji is ever shown
 - `js/grass.js` – wild flowers (white and yellow) around the player
+- `js/music.js` – Farm World's music
 - `js/ambience.js`, `js/birds.js` – the jungle's sounds (crickets, toads, birdsong, the river, bubbles, fish jumps, footsteps) and the birds in the trees and the sky
 - `js/app.js`, `sw.js`, `manifest.webmanifest`, `icons/` – installable app: service worker (offline cache), install button / iOS hint, full screen, wake lock, back button
 - `js/farm/` – Farm World: server address (`config.js`), API calls (`api.js`), logins kept on this device (`logins.js`), the session that hosts / joins / saves / hands over the world (`farm.js`), start-menu screens (`menu.js`), Esc-menu members panel (`panel.js`); the farm: plot / store layout (`layout.js`), small props (`props.js`), models (`models.js`), the farmer (`npc.js`), farm in the world + animals + gates (`farmland.js`), shared money, goods and production timers (`economy.js`), store / market / storage / plot / shelter / feeding popups, the production panel (`farmui.js`), the floating bag / order-slip buttons, the Farm Notebook and the Order Slip (`notebook.js`)

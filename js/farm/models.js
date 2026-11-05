@@ -544,19 +544,70 @@ function chicken(b, o) {
     for (const x of [-0.05, 0.05]) { leg(b, x * s, 0, 0.16 * s, 0.016 * s, o.legs); b.box(0.06 * s, 0.015 * s, 0.07 * s, x * s, 0.008, 0.02 * s, o.legs); }
   });
 }
+// a goat (Boer style): white faceted body, brown head and neck with a white blaze down the face, long droopy
+// ears, horns curving back, amber eyes with a dark slit, a beard, jointed legs with dark hooves, an upturned
+// tail and a small udder. Faces +z, feet at y = 0 (about 1 m to the horn tips).
+const GOAT_COAT = { coat: 0xf2ede3, belly: 0xe2dbcd, shin: 0xe0d8ca, head: 0x8f4f2c, headD: 0x74401f, blaze: 0xf5f0e6, horn: 0x9a8a72, hornTip: 0x5e5246,
+  hoof: 0x3a302a, nose: 0x4e3a34, eye: 0xd09a2a, ear: 0x8f4f2c, earIn: 0xe0a898, beard: 0xd8d0c2, udder: 0xe9b3aa };
+const _ga = new THREE.Vector3(), _gb = new THREE.Vector3(), _gq = new THREE.Quaternion(), _ge = new THREE.Euler(), _gy = new THREE.Vector3(0, 1, 0);
+// a tapered cylinder from point a to point c (radius r0 at a, r1 at c)
+function limb(b, a, c, r0, r1, col, seg = 5) {
+  _ga.set(...a); _gb.set(...c);
+  const d = _gb.clone().sub(_ga), len = d.length();
+  _ge.setFromQuaternion(_gq.setFromUnitVectors(_gy, d.normalize()));
+  b.add(new THREE.CylinderGeometry(r1, r0, len, seg), col, (a[0] + c[0]) / 2, (a[1] + c[1]) / 2, (a[2] + c[2]) / 2, _ge.x, _ge.y, _ge.z);
+}
+function goat(b, o) {
+  const ico = (r, d = 1) => new THREE.IcosahedronGeometry(r, d);
+  // body: chest and rump (faceted barrels), a lighter belly, the spine ridge
+  b.add(ico(1), o.coat, 0, 0.665, 0.1, 0, 0, 0, 'solid', 0.19, 0.2, 0.26);
+  b.add(ico(1), o.coat, 0, 0.675, -0.15, 0, 0, 0, 'solid', 0.18, 0.19, 0.25);
+  b.add(ico(1, 0), o.belly, 0, 0.53, -0.02, 0, 0, 0, 'solid', 0.14, 0.09, 0.28);
+  b.add(ico(1, 0), o.coat, 0, 0.8, -0.04, 0, 0, 0, 'solid', 0.1, 0.07, 0.3);
+  // udder
+  b.add(new THREE.DodecahedronGeometry(0.055, 0), o.udder, 0, 0.47, -0.17, 0, 0, 0, 'solid', 1, 0.75, 1);
+  for (const x of [-0.022, 0.022]) b.cyl(0.008, 0.012, 0.04, 4, x, 0.43, -0.17, o.udder);
+  // legs: upper leg, knee, shin, hoof (front legs a little forward)
+  for (const x of [-0.1, 0.1]) for (const z of [0.23, -0.24]) {
+    const fz = z > 0 ? 0.015 : -0.01;
+    limb(b, [x, 0.58, z], [x, 0.31, z + fz], 0.064, 0.042, o.coat, 6);
+    b.add(new THREE.DodecahedronGeometry(0.042, 0), o.coat, x, 0.3, z + fz);
+    limb(b, [x, 0.3, z + fz], [x, 0.05, z], 0.036, 0.031, o.shin, 6);
+    b.cyl(0.034, 0.04, 0.055, 6, x, 0.027, z + 0.004, o.hoof);
+  }
+  // tail: a short tuft pointing up and back
+  b.add(new THREE.ConeGeometry(0.03, 0.11, 5), o.coat, 0, 0.82, -0.4, -0.55, 0, 0);
+  // neck (brown, like the head)
+  limb(b, [0, 0.74, 0.27], [0, 0.95, 0.43], 0.1, 0.075, o.head, 6);
+  b.add(ico(1, 0), o.head, 0, 0.78, 0.3, 0.5, 0, 0, 'solid', 0.11, 0.1, 0.1);
+  // head, tipped nose-down
+  b.group(0, 0.99, 0.46, 0.35, 0, 0, () => {
+    b.add(new THREE.DodecahedronGeometry(0.1, 0), o.head, 0, 0.02, 0, 0, 0, 0, 'solid', 0.92, 0.95, 1.1);   // skull
+    b.cyl(0.048, 0.072, 0.17, 6, 0, -0.035, 0.1, o.head, Math.PI / 2, 0, 0);                               // muzzle
+    b.box(0.04, 0.016, 0.21, 0, 0.065, 0.075, o.blaze, 'solid', 0.4, 0, 0);                                 // white blaze
+    b.box(0.07, 0.035, 0.03, 0, -0.03, 0.185, o.nose);                                                       // nose
+    for (const x of [-0.016, 0.016]) b.box(0.012, 0.012, 0.01, x, -0.022, 0.2, 0x1e1614);                   // nostrils
+    b.box(0.05, 0.008, 0.012, 0, -0.068, 0.175, o.headD);                                                    // mouth
+    for (const sx of [-1, 1]) {
+      b.add(ico(0.02, 0), o.eye, sx * 0.08, 0.045, 0.045);                                                   // amber eye
+      b.box(0.006, 0.007, 0.026, sx * 0.098, 0.045, 0.045, 0x111111);                                        // goat's slit pupil
+      // long droopy ear (brown, pink inside)
+      b.group(sx * 0.09, 0.04, -0.03, 0, sx * 0.35, -sx * 0.8, () => {
+        b.add(new THREE.OctahedronGeometry(1, 0), o.ear, sx * 0.11, 0, 0, 0, 0, 0, 'solid', 0.12, 0.018, 0.048);
+        b.add(new THREE.OctahedronGeometry(1, 0), o.earIn, sx * 0.1, -0.008, 0, 0, 0, 0, 'solid', 0.085, 0.009, 0.03);
+      });
+      // horn curving up and back (thick at the base, darker at the tip)
+      const H = [[sx * 0.04, 0.09, -0.005], [sx * 0.05, 0.15, -0.045], [sx * 0.06, 0.18, -0.11], [sx * 0.068, 0.17, -0.175], [sx * 0.075, 0.13, -0.215]];
+      for (let i = 0; i < H.length - 1; i++) limb(b, H[i], H[i + 1], 0.024 - i * 0.005, 0.019 - i * 0.005, i < 2 ? o.horn : o.hornTip);
+    }
+    b.add(new THREE.ConeGeometry(0.026, 0.1, 5), o.beard, 0, -0.12, 0.11, Math.PI + 0.25, 0, 0);            // beard
+  });
+}
 export const ANIMAL_GEO = {
   chicken: () => geomOf(b => chicken(b, { body: 0xf3efe6, wing: 0xe8e2d4, tail: 0xe0d8c6, comb: 0xd8342a, beak: 0xf0b030, legs: 0xf0b030 })),
   chicken_brown: () => geomOf(b => chicken(b, { body: 0x9a5a2a, neck: 0xc8822e, head: 0xb06a28, wing: 0x6e3c1c, tail: 0x1e2a22, tail2: 0x2e4a34, longTail: true, comb: 0xd8342a, beak: 0xd8a040, legs: 0xc89a40, size: 1.05 })),
   chicken_dark: () => geomOf(b => chicken(b, { body: 0x2a2a2e, neck: 0x34343a, head: 0x2e2e32, wing: 0x1c1d24, tail: 0x15161c, tail2: 0x22304a, longTail: true, comb: 0x5a1a2a, beak: 0x3a3a3a, legs: 0x2a2a2a, size: 1.0 })),
-  goat: () => geomOf(b => {
-    b.box(0.34, 0.32, 0.7, 0, 0.62, 0, 0xe2ddd2);
-    b.box(0.2, 0.24, 0.28, 0, 0.86, 0.42, 0xe2ddd2, 'solid', 0.3, 0, 0);
-    for (const x of [-0.06, 0.06]) b.cyl(0.02, 0.035, 0.2, 4, x, 1.02, 0.36, 0x8a7a64, -0.5, 0, 0);
-    for (const x of [-0.12, 0.12]) b.box(0.1, 0.04, 0.08, x, 0.9, 0.36, 0xd8d0c4, 'solid', 0, 0, x > 0 ? -0.5 : 0.5);
-    b.box(0.06, 0.12, 0.04, 0, 0.7, 0.54, 0xb8b0a0);
-    for (const x of [-0.12, 0.12]) for (const z of [-0.26, 0.26]) leg(b, x, z, 0.46, 0.04, 0xcfc8ba);
-    b.box(0.06, 0.12, 0.06, 0, 0.78, -0.37, 0xe2ddd2, 'solid', -0.6, 0, 0);
-  }),
+  goat: () => geomOf(b => goat(b, GOAT_COAT)),
   cow: () => geomOf(b => {
     b.box(0.62, 0.62, 1.4, 0, 1.05, 0, 0xf4f1ea);
     b.box(0.02, 0.36, 0.42, 0.315, 1.1, 0.2, 0x2a2622); b.box(0.02, 0.3, 0.5, -0.315, 1.0, -0.3, 0x2a2622); b.box(0.4, 0.02, 0.36, 0, 1.365, -0.1, 0x2a2622);

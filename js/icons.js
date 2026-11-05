@@ -124,6 +124,7 @@ const UI = {
   user: U('M4.4 20.6c0-4 3.4-6.6 7.6-6.6s7.6 2.6 7.6 6.6', '<circle cx="12" cy="7.8" r="4" fill="none" stroke="currentColor" stroke-width="2"/>'),
   mic: U('M5.6 11a6.4 6.4 0 0 0 12.8 0M12 17.4V21M8.6 21h6.8', '<rect x="8.6" y="2.6" width="6.8" height="11.4" rx="3.4" fill="currentColor"/>'),
   micOff: U('M5.6 11a6.4 6.4 0 0 0 10.4 5M18.4 11c0 .8-.2 1.6-.4 2.4M12 17.4V21M8.6 21h6.8M3 3l18 18', '<path d="M15.4 10.4V6a3.4 3.4 0 0 0-6.6-1.2zM8.6 9.6V11a3.4 3.4 0 0 0 5.4 2.8z" fill="currentColor"/>'),
+  music: U('M9 17.5V5.6l11-2.3v12', '<circle cx="6.4" cy="17.5" r="2.7" fill="currentColor"/><circle cx="17.4" cy="15.3" r="2.7" fill="currentColor"/>'),
   speaker: U('M15.6 8.6a5 5 0 0 1 0 6.8M18.4 5.8a9 9 0 0 1 0 12.4', '<path d="M3 9.4h3.8L12 5v14l-5.2-4.4H3z" fill="currentColor"/>'),
   speakerOff: U('M16 9.4l5 5.2M21 9.4l-5 5.2', '<path d="M3 9.4h3.8L12 5v14l-5.2-4.4H3z" fill="currentColor"/>'),
   refresh: U('M20.4 12a8.4 8.4 0 0 1-14.6 5.6M3.6 12a8.4 8.4 0 0 1 14.6-5.6M18.6 2.6v4h-4M5.4 21.4v-4h4'),
