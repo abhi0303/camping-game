@@ -20,7 +20,7 @@
   <link rel="icon" href="icons/favicon-32.png" sizes="32x32" type="image/png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Patrick+Hand&family=Alfa+Slab+One&display=swap" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Patrick+Hand&family=Alfa+Slab+One&family=Creepster&family=Black+Ops+One&display=swap" />
   <link rel="stylesheet" href="css/style.css" />
   <script type="importmap">
   {
@@ -132,10 +132,10 @@
       <div id="modeTabs" class="mtabs"><button data-mode="zombie" class="on"><i data-ic="skull"></i> Zombie Trail</button><button data-mode="farm"><i data-ic="wheat"></i> Farm World</button></div>
       <p class="sub" id="mSub">Drive through the jungle, clear the trail, rebuild the bridge and reach the hilltop camp — alone or with friends.</p>
       <div id="menuStart">
-        <label class="mrow"><span>Your name</span><input id="mName" maxlength="16" autocomplete="off" /></label>
+        <label class="mrow"><span>Survivor</span><input id="mName" maxlength="16" autocomplete="off" /></label>
         <div id="mSaveRow" class="mrow hidden"><span>Saved progress</span><button id="mContinue" class="mbtn">Continue</button><button id="mNew" class="mbtn">New game</button></div>
         <div class="mrow"><button id="mSolo" class="mbig"><i data-ic="play"></i> Play solo</button><button id="mHost" class="mbig alt"><i data-ic="users"></i> Host co-op</button></div>
-        <div class="mrow"><input id="mCode" placeholder="ROOM CODE or invite link" autocomplete="off" autocapitalize="characters" spellcheck="false" /><button id="mJoin" class="mbig alt">Join a friend</button></div>
+        <div class="mrow"><input id="mCode" placeholder="ROOM CODE" title="Room code or invite link" autocomplete="off" autocapitalize="characters" spellcheck="false" /><button id="mJoin" class="mbig alt">Join a friend</button></div>
         <p id="mStatus" class="small"></p>
         <div id="appRow" class="mrow hidden"><button id="installBtn" class="mbtn hidden"><i data-ic="phone"></i> Install the app</button><span id="iosHint" class="small hidden"><i data-ic="phone"></i> Install: tap <b>Share</b> <span class="shareIco"><i data-ic="share"></i></span> then <b>Add to Home Screen</b></span></div>
       </div>
@@ -192,6 +192,7 @@
         <div class="fm-h"><span>Keys</span></div>
         <div class="fm-keys"><span><b>WASD</b> move</span><span><b>Shift</b> run</span><span><b>Space</b> jump</span><span><b>E</b> interact</span><span><b>F</b> use / punch</span><span><b>1–6</b> hold an item</span><span><b>N</b> farm notebook</span><span><b>O</b> order slip</span><span><b>M</b> map</span><span><b>V</b> camera</span><span><b>R</b> RV to the store</span><span><b>B</b> mic</span><span><b>I</b> invite</span></div>
       </div>
+      <div class="zsec zkeys desk-only"><span>Field manual</span></div>
       <div class="grid desk-only">
         <div><b>WASD</b> move</div><div><b>Shift</b> run</div><div><b>Space</b> jump</div>
         <div><b>F / Click</b> use / punch</div><div><b>E</b> interact</div><div><b>1 - 6</b> hold an item</div>
@@ -200,7 +201,17 @@
         <div><b>Hold E</b> revive friend</div><div><b>X</b> carry friend</div><div><b>B</b> mic on / off</div>
       </div>
       <p class="small finfo"><i data-ic="wheat"></i> A world that never ends and is saved online. Up to 4 members; any of them can open it, alone or together — it remembers everything when nobody is playing. No zombies here.</p>
-      <p class="small zinfo"><i data-ic="moon"></i> Nights fall after 3, 6, then every 10 minutes — zombies come, tougher at every checkpoint. Go down and nobody revives you? You're out for good (spectate). The RV only drives at 100%. Build towers at Watchtower Valley to survive the siege, then a stone castle against 10 giants at the Giant Plateau. Most zombie kills + revives wins the scoreboard!</p>
+      <div class="zinfo">
+        <div class="zsec"><span>Survival rules</span></div>
+        <ul class="zrules">
+          <li><i data-ic="moon"></i><span>Nights fall after <b>3</b>, <b>6</b>, then every <b>10 min</b> — zombies get tougher at every checkpoint</span></li>
+          <li><i data-ic="skull"></i><span>Go down and nobody revives you? <b>You're out</b> — you watch your team</span></li>
+          <li><i data-ic="rv"></i><span>The RV only drives at <b>100%</b> — repair it with the hammer</span></li>
+          <li><i data-ic="tower"></i><span>Build towers at <b>Watchtower Valley</b> to survive the siege</span></li>
+          <li><i data-ic="castle"></i><span>Then a stone castle against <b>10 giants</b> at the Giant Plateau</span></li>
+          <li><i data-ic="trophy"></i><span>Most zombie kills + revives <b>wins</b> the scoreboard</span></li>
+        </ul>
+      </div>
       <p class="dim small desk-only">Esc frees the mouse. Choose "Low" quality (top-right) if your laptop gets warm.</p>
       <p class="dim small touch-only">Left thumb: move · right thumb: look · tap the prompt to interact. Landscape works best.</p>
       <p id="loadErr" class="err hidden"></p>

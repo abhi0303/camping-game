@@ -1038,3 +1038,93 @@ body.farm #overlay.playing #pauseRoom { margin: 0 20px; }
   #fTabs button { font-size: 12px; padding: 7px 4px; }
 }
 @media (max-width: 420px) { #overlay[data-mode="farm"] .fm-pair { grid-template-columns: 1fr; } #fTabs button .ic { display: none; } }
+
+/* =====================================================================
+   Zombie Trail menu (start + Esc): a riveted survival plate — hazard tape, dripping title,
+   blood-orange and army-green buttons, field-manual keys, survival rules
+   ===================================================================== */
+.zsec { display: none; }
+#overlay[data-mode="farm"] .zkeys { display: none !important; }
+#overlay[data-mode="zombie"] { background: radial-gradient(ellipse at center, rgba(10, 16, 8, .45), rgba(4, 6, 3, .8)); }
+#overlay[data-mode="zombie"] .card {
+  position: relative; width: min(580px, calc(100vw - 24px)); padding: 0 0 16px; text-align: center; color: #e6e1cf;
+  border: 5px solid #2b2f25; border-radius: 16px;
+  background:
+    radial-gradient(circle, #8a8d80 0 2.5px, #3a3d33 3px 3.6px, transparent 4px) 10px 10px / 12px 12px no-repeat,
+    radial-gradient(circle, #8a8d80 0 2.5px, #3a3d33 3px 3.6px, transparent 4px) calc(100% - 10px) 10px / 12px 12px no-repeat,
+    radial-gradient(circle, #8a8d80 0 2.5px, #3a3d33 3px 3.6px, transparent 4px) 10px calc(100% - 10px) / 12px 12px no-repeat,
+    radial-gradient(circle, #8a8d80 0 2.5px, #3a3d33 3px 3.6px, transparent 4px) calc(100% - 10px) calc(100% - 10px) / 12px 12px no-repeat,
+    radial-gradient(ellipse at 50% 115%, rgba(120, 200, 60, .14), transparent 55%),
+    repeating-linear-gradient(115deg, rgba(255,255,255,.012) 0 2px, transparent 2px 7px),
+    linear-gradient(#1c2018, #11140f);
+  box-shadow: inset 0 0 0 2px #4a3a22, inset 0 0 40px rgba(0,0,0,.55), 0 26px 70px rgba(0,0,0,.65);
+}
+/* hazard tape + the dripping title */
+#overlay[data-mode="zombie"] .card > h1 {
+  margin: 0 0 6px; padding: 26px 16px 2px; font: 400 60px/1 "Creepster", "Black Ops One", Impact, sans-serif; letter-spacing: .05em; color: #b6f065;
+  text-shadow: 0 0 18px rgba(140, 230, 70, .45), 0 3px 0 #1b2a0f, 0 6px 14px rgba(0,0,0,.6);
+  background: repeating-linear-gradient(-45deg, #f2b632 0 14px, #17170f 14px 28px) top / 100% 11px no-repeat;
+}
+/* mode switch */
+#overlay[data-mode="zombie"] .mtabs { display: flex; margin: 4px 24px 12px; padding: 4px; gap: 4px; background: #0b0d09; border: 1px solid #30352a; border-radius: 999px; }
+#overlay[data-mode="zombie"] .mtabs button { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px; background: transparent; color: #a8a592; font-size: 14px; padding: 8px 12px; }
+#overlay[data-mode="zombie"] .mtabs button:hover { color: #e6e1cf; }
+#overlay[data-mode="zombie"] .mtabs button.on { background: linear-gradient(#e2533a, #a8301f); color: #fff; box-shadow: 0 2px 0 #5e1a10, 0 0 14px rgba(226, 83, 58, .35); }
+/* the briefing */
+#overlay[data-mode="zombie"] #mSub { margin: 0 28px 14px; color: #c9c5b0; opacity: 1; font-size: 14px; line-height: 1.45; }
+#overlay[data-mode="zombie"] #mSub::before { content: 'MISSION'; display: inline-block; margin-right: 8px; padding: 1px 7px; border-radius: 4px; font: 400 11px/1.6 "Black Ops One", Impact, sans-serif; letter-spacing: .12em; color: #11140f; background: #9be15d; vertical-align: 1px; }
+/* name, save, play */
+#overlay[data-mode="zombie"] #menuStart { margin: 0 24px; }
+#overlay[data-mode="zombie"] .mrow { margin: 8px 0; gap: 8px; }
+#overlay[data-mode="zombie"] .mrow > span { min-width: 104px; color: #8f8c78; opacity: 1; font: 400 12px "Black Ops One", Impact, sans-serif; letter-spacing: .12em; text-transform: uppercase; }
+#overlay[data-mode="zombie"] #mName { width: 236px; background: #0b0d09; color: #f1edda; border: 1px solid #3a4030; border-radius: 9px; padding: 10px 12px; font-weight: 700; }
+#overlay[data-mode="zombie"] #mName:focus, #overlay[data-mode="zombie"] #mCode:focus { outline: none; border-color: #9be15d; box-shadow: 0 0 0 3px rgba(155, 225, 93, .18); }
+#overlay[data-mode="zombie"] #mSaveRow .mbtn { min-width: 114px; background: #23271e; color: #c9c5b0; border: 1px solid #3a4030; padding: 9px 14px; }
+#overlay[data-mode="zombie"] #mSaveRow .mbtn.on { background: #f2b632; color: #17170f; border-color: #f2b632; box-shadow: 0 2px 0 #8a6214; }
+#overlay[data-mode="zombie"] .mbig { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-width: 176px; padding: 12px 18px; border-radius: 10px;
+  font: 400 15px "Black Ops One", Impact, sans-serif; letter-spacing: .06em; text-transform: uppercase; transition: transform .08s, filter .15s; }
+#overlay[data-mode="zombie"] .mbig .ic { width: 16px; height: 16px; }
+#overlay[data-mode="zombie"] .mbig:active { transform: translateY(2px); }
+#overlay[data-mode="zombie"] #mSolo { background: linear-gradient(#ff7a3c, #d4432a); color: #fff; box-shadow: 0 4px 0 #6e2214, 0 0 18px rgba(255, 110, 60, .25); text-shadow: 0 1px 2px rgba(0,0,0,.35); }
+#overlay[data-mode="zombie"] .mbig.alt { background: linear-gradient(#6f8a3e, #4f6828); color: #f1eedc; box-shadow: 0 4px 0 #2f4016; text-shadow: 0 1px 2px rgba(0,0,0,.35); }
+#overlay[data-mode="zombie"] .mbig.pulse { animation: zPulse 1.2s ease-in-out infinite; }
+@keyframes zPulse { 50% { box-shadow: 0 4px 0 #2f4016, 0 0 0 6px rgba(155, 225, 93, .3); } }
+#overlay[data-mode="zombie"] #mCode { width: 176px; background: #0b0d09; color: #f2b632; border: 1px dashed #5c6342; border-radius: 9px; padding: 10px 12px; font: 400 15px "Black Ops One", Impact, sans-serif; letter-spacing: .2em; }
+#overlay[data-mode="zombie"] #mCode::placeholder { color: #5f6450; letter-spacing: .14em; font-size: 12px; }
+#overlay[data-mode="zombie"] #mStatus { color: #f2b632; }
+#overlay[data-mode="zombie"] #appRow .mbtn { background: #23271e; color: #c9c5b0; border: 1px solid #3a4030; display: inline-flex; align-items: center; gap: 6px; }
+/* section headers */
+#overlay[data-mode="zombie"] .zsec { display: flex; align-items: center; gap: 10px; margin: 14px 24px 8px; color: #9be15d; font: 400 12px "Black Ops One", Impact, sans-serif; letter-spacing: .16em; text-transform: uppercase; }
+#overlay[data-mode="zombie"] .zsec::before, #overlay[data-mode="zombie"] .zsec::after { content: ''; flex: 1; height: 2px; background: repeating-linear-gradient(90deg, #3d4532 0 6px, transparent 6px 10px); }
+body.touch #overlay[data-mode="zombie"] .zkeys { display: none; }
+/* field manual: the keys as chips */
+#overlay[data-mode="zombie"] .grid { display: flex; flex-wrap: wrap; justify-content: center; gap: 5px; margin: 0 24px 6px; }
+#overlay[data-mode="zombie"] .grid > div { background: #1b1f17; border: 1px solid #2f3428; border-radius: 7px; padding: 4px 9px; font-size: 12px; color: #c9c5b0; }
+#overlay[data-mode="zombie"] .grid b { color: #f2b632; margin-right: 3px; }
+/* survival rules */
+#overlay[data-mode="zombie"] .zinfo { margin: 12px 24px 10px; padding: 2px 14px 12px; text-align: left; background: linear-gradient(rgba(110, 22, 16, .3), rgba(70, 14, 10, .3)); border: 1px solid rgba(220, 80, 55, .35); border-radius: 12px; line-height: 1.4; }
+#overlay[data-mode="zombie"] .zinfo .zsec { margin: 10px 0 8px; color: #ff8a66; }
+#overlay[data-mode="zombie"] .zinfo .zsec::before, #overlay[data-mode="zombie"] .zinfo .zsec::after { background: repeating-linear-gradient(90deg, rgba(255, 138, 102, .35) 0 6px, transparent 6px 10px); }
+.zrules { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; }
+.zrules li { display: flex; align-items: flex-start; gap: 9px; font-size: 12.5px; color: #e7dccd; }
+.zrules li .ic { width: 20px; height: 20px; flex: none; margin-top: -1px; }
+.zrules li .ic:not(.pic) { color: #ff8a66; }
+.zrules b { color: #ffb08f; }
+#overlay[data-mode="zombie"] .card > p.dim { margin: 4px 24px 0; color: #8f8c78; opacity: 1; }
+/* Esc menu during a Zombie Trail game */
+#overlay[data-mode="zombie"] #menuPause { margin: 0 24px; }
+#overlay[data-mode="zombie"] #play { display: inline-flex; align-items: center; justify-content: center; width: 100%; background: linear-gradient(#ff7a3c, #d4432a); color: #fff; box-shadow: 0 4px 0 #6e2214; font: 400 17px "Black Ops One", Impact, sans-serif; letter-spacing: .08em; text-transform: uppercase; padding: 13px 20px; }
+#overlay[data-mode="zombie"] #pauseSettings .mbtn, #overlay[data-mode="zombie"] #pauseSettings select { background: #23271e; color: #c9c5b0; border: 1px solid #3a4030; border-radius: 999px; display: inline-flex; align-items: center; gap: 6px; }
+#overlay[data-mode="zombie"] .phead { color: #9be15d; opacity: 1; font: 400 12px "Black Ops One", Impact, sans-serif; letter-spacing: .14em; text-transform: uppercase; }
+#overlay[data-mode="zombie"] .prow { background: #1b1f17; border: 1px solid #2f3428; }
+#overlay[data-mode="zombie"] .stable th { color: #9be15d; opacity: .85; }
+#overlay[data-mode="zombie"] .irow code, #overlay[data-mode="zombie"] .irow .ilink { background: #0b0d09; border-color: #3a4030; }
+/* phones / short screens */
+@media (max-height: 520px), (max-width: 560px) {
+  #overlay[data-mode="zombie"] .card > h1 { font-size: 40px; padding-top: 20px; }
+  #overlay[data-mode="zombie"] .mtabs { margin: 2px 16px 8px; }
+  #overlay[data-mode="zombie"] #menuStart, #overlay[data-mode="zombie"] #menuPause { margin: 0 16px; }
+  #overlay[data-mode="zombie"] .mbig { min-width: 150px; padding: 10px 14px; font-size: 13px; }
+  #overlay[data-mode="zombie"] .zinfo { margin: 10px 16px 8px; }
+}
+@media (max-width: 560px) { .zrules { grid-template-columns: 1fr; } #overlay[data-mode="zombie"] .mrow > span { min-width: 0; } }
