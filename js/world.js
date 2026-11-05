@@ -15,6 +15,8 @@ export class World {
     this.night = 0; this.nightTarget = 0; this.time = 0; this.fireBoost = 0;
     this.bridge = null;          // set by main (BridgeWorld)
     this.crates = [];            // supply crates {pos, label, give, taken}
+    this.grassBlock = [];        // (x, z) -> true where no grass blades may grow (farm pens, paths…; js/grass.js)
+    this.grassRev = 0;
     srand(4242);
 
     this._lights();
@@ -153,8 +155,8 @@ export class World {
     }
   }
 
-  // Small things on the ground that go with the painted grass and mud (js/terrain.js): spiky grass clumps,
-  // leafy plants and pebbles. Instanced and chunked like the jungle (one draw call per chunk and kind), no
+  // Small things on the ground that go with the painted grass and mud (js/terrain.js): leafy plants and
+  // pebbles (the grass blades near the player are js/grass.js). Instanced and chunked like the jungle (one draw call per chunk and kind), no
   // shadows, no colliders. They use their own random numbers, so the jungle, crates and colliders stay
   // exactly where they were. Phones get about half.
   _groundDecor() {
@@ -163,7 +165,6 @@ export class World {
     const geo = fn => { const b = new GeoBuilder(); fn(b); return b.build().children[0].geometry; };
     const T = this.T, k = this.lite ? 0.55 : 1;
     const kinds = [
-      { geo: geo(grassClump), n: 2600, sc: [0.7, 1.35], road: 5.0 },
       { geo: geo(leafyPlant), n: 650, sc: [0.6, 1.2], road: 5.4 },
       { geo: geo(pebble), n: 1400, sc: [0.12, 0.42], road: 4.8, flat: true, tints: [0x8e8c92, 0x9a978f, 0x86725e, 0x7a6a5c] },   // one mesh, coloured per pebble
     ];
@@ -174,7 +175,7 @@ export class World {
       while (placed < n && tries < n * 20) {
         tries++;
         const x = rnd(-230, 230), z = rnd(-230, 708), y = T.heightAt(x, z);
-        if (T.roadDistAt(x, z) < t.road || T.riverDistAt(x, z) < RIVER_HALF + 1.2 || y < T.W + 0.6) continue;
+        if (T.roadDistAt(x, z) < t.road || T.riverDistAt(x, z) < RIVER_HALF + 1.2) continue;
         if (Math.abs(T.heightAt(x + 1.5, z) - T.heightAt(x - 1.5, z)) > 1.6 || Math.abs(T.heightAt(x, z + 1.5) - T.heightAt(x, z - 1.5)) > 1.6) continue;   // no cliffs
         if (Math.hypot(x - START.x, z - START.z) < 16 || Math.hypot(x - CAMP.x, z - CAMP.z) < 16 || Math.hypot(x - GIANT.x, z - GIANT.z) < 34
           || (Math.abs(x - TOWER_ZONE.x) < TOWER_ZONE.hw + 3 && Math.abs(z - TOWER_ZONE.z) < TOWER_ZONE.hd + 3)) continue;
@@ -196,6 +197,9 @@ export class World {
       }
     }
   }
+
+  // no grass blades here (a test (x, z) -> true); the grass around the player is filled again
+  addGrassBlock(fn) { this.grassBlock.push(fn); this.grassRev++; }
 
   // Farm World: clear trees, bushes and rocks from these rectangles (the farm and its path).
   // Done after the jungle is made, so Zombie Trail's jungle stays exactly as it is.
@@ -491,15 +495,6 @@ function pineTree(b) {
 function pineTall(b) {
   b.cyl(0.26, 0.4, 5, 6, 0, 2.5, 0, 0x5e4128);
   for (let i = 0; i < 4; i++) b.add(new THREE.ConeGeometry(3.0 - i * 0.6, 3.6, 7), i % 2 ? 0x2c6436 : 0x34723f, 0, 5 + i * 2.2, 0, 0, i * 0.5, 0);
-}
-// a spiky clump of grass: tapered three-sided blades leaning out, light and dark greens
-function grassClump(b) {
-  const cols = [0x5aa832, 0x6fbd3f, 0x84cc4c, 0x4c9a2b];
-  for (let i = 0; i < 7; i++) {
-    const a = i / 7 * Math.PI * 2 + (i % 2) * 0.3, lean = 0.35 + (i % 3) * 0.12, h = 0.45 + (i % 3) * 0.14;
-    b.add(new THREE.ConeGeometry(0.07, h, 3), cols[i % 4], Math.cos(a) * 0.09, h * 0.45, Math.sin(a) * 0.09, Math.sin(a) * lean, 0, -Math.cos(a) * lean);
-  }
-  b.add(new THREE.ConeGeometry(0.08, 0.62, 3), 0x6fbd3f, 0, 0.3, 0);
 }
 // a small leafy plant: broad pointed leaves around a centre
 function leafyPlant(b) {

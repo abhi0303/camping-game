@@ -10,7 +10,7 @@ const FILES = [
   './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png', './icons/icon.svg', './icons/favicon-32.png',
   ...['main', 'world', 'day-night', 'terrain', 'rv', 'rvModel', 'rvInterior', 'rvDims', 'player', 'character', 'camera', 'input', 'touch', 'audio', 'inventory',
     'items', 'gear', 'drone', 'bridge', 'bridgeEditor', 'obstacles', 'materials', 'minimap', 'net', 'multiplayer', 'remote', 'save', 'utils',
-    'zombies', 'survival', 'combat', 'voice', 'structures', 'designer', 'giants', 'app', 'icons', 'ambience', 'birds',
+    'zombies', 'survival', 'combat', 'voice', 'structures', 'designer', 'giants', 'app', 'icons', 'ambience', 'birds', 'grass',
     'farm/config', 'farm/api', 'farm/logins', 'farm/farm', 'farm/menu', 'farm/panel',
     'farm/layout', 'farm/props', 'farm/models', 'farm/npc', 'farm/farmland', 'farm/economy', 'farm/farmui', 'farm/notebook',
     'fishing/sim', 'fishing/models', 'fishing/thumbs', 'fishing/area', 'fishing/fishing', 'fishing/marketui'].map(f => `./js/${f}.js`),

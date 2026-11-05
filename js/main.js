@@ -41,6 +41,7 @@ import { Fishing } from './fishing/fishing.js';
 import { Notebook } from './farm/notebook.js';
 import { Ambience } from './ambience.js';
 import { Birds } from './birds.js';
+import { Grass } from './grass.js';
 import { icon, startIconizer } from './icons.js';
 import { RIVER_HALF } from './terrain.js';
 
@@ -184,6 +185,7 @@ const fishing = new Fishing({ scene, area: fishArea, eco: farmEco, player, gear,
 player.fishing = fishing;
 // birds in the trees and the sky; the jungle's sounds (crickets, toads, birdsong, the river, footsteps)
 const birds = new Birds(scene, world);
+const grass = new Grass(scene, world);             // grass blades around the player (js/grass.js)
 const ambience = new Ambience();
 const listener = { x: 0, z: 0, fx: 0, fz: 1 }, _fwd = new THREE.Vector3();
 fishArea.onJump = (x, z, landing) => ambience.onFishJump(x, z, landing, listener, fishing.active);
@@ -389,6 +391,8 @@ function applyQuality(name) {
   camera.far = q.far; camera.updateProjectionMatrix(); scene.fog.far = q.fog; scene.fog.near = q.fog * 0.25;
   world.sun.castShadow = q.shadows;
   world.dayNight.setQuality(QUALITY[name] ? name : 'medium');   // lamps' real lights + torch smoke
+  grass.setQuality(QUALITY[name] ? name : 'medium');            // how far and how dense the grass blades grow
+  world.T.mesh.material.userData.ground.uGrLayers.value = name === 'low' ? 1 : 2;   // the ground's leaf clumps: one layer on Low
   if (world.sun.shadow.mapSize.x !== q.size) {
     world.sun.shadow.mapSize.set(q.size, q.size);
     if (world.sun.shadow.map) { world.sun.shadow.map.dispose(); world.sun.shadow.map = null; }
@@ -886,6 +890,7 @@ function step(dt) {
 function sounds(dt) {
   const dn = world.dayNight, dark = dn.dark ?? world.night;
   birds.update(dt, focus, dark);
+  grass.update(dt, focus);
   camera.getWorldDirection(_fwd);
   listener.x = camera.position.x; listener.z = camera.position.z; listener.fx = _fwd.x; listener.fz = _fwd.z;
   let walk = null;

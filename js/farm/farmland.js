@@ -47,6 +47,18 @@ export class Farmland {
     if (this.on) return;
     this.on = true;
     this.world.clearArea(CLEAR);
+    // no grass blades in the pens, on the walkway, in the buildings and on the path from the road
+    const near = (P, x, z, r) => Math.hypot(x - P.x, z - P.z) < r, path = CLEAR[1];
+    this.world.addGrassBlock((x, z) => {
+      if (x > -107 && x < -49 && z > -184 && z < -173) return true;                                       // the walkway
+      if (x > path.x0 && x < path.x1 && z > path.z0 && z < path.z1) return true;
+      if (Math.abs(x - STORAGE.x) < 7.5 && Math.abs(z - STORAGE.z) < 7.5) return true;
+      if (near(MARKET, x, z, 9.5) || near(TRUCK, x, z, 4.5) || near(WINDMILL, x, z, 3)) return true;
+      const ls = toLocal(STORE, x, z);
+      if (Math.abs(ls.x) < STORE_DIM.w / 2 + 1.2 && ls.z > -STORE_DIM.d / 2 - 1.2 && ls.z < STORE_DIM.d / 2 + STORE_DIM.porch + 3) return true;
+      for (const P of PLOTS) { const l = toLocal(P, x, z); if (Math.abs(l.x) < PLOT_HW + 0.5 && l.z > -7.2 && l.z < 7.6) return true; }
+      return false;
+    });
     for (const P of PLOTS) { this._marker(P); this._sign(P.i, null); }
     // the farm sign by the road
     const s1 = signboard('FARM', 'plots · storage', { w: 2.0, h: 0.8, lift: 0.9, bg: '#41622c' });

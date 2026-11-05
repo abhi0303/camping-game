@@ -164,6 +164,10 @@ export class FishingArea {
     const bw = s[1].bank, back = { x: bw.x - 2.6, z: bw.z - 2.2, yaw: s[1].yaw + Math.PI };
     this.place(signboard('FISH MARKET', '↓ worms · rods · sell your catch', { w: 1.9, h: 0.72, lift: 0.85, bg: '#1f4a63', hAt: this.hAt(back) }), back);
     this.world.clearArea(rects.concat(s.map(sp => ({ x0: sp.F.x - 6, x1: sp.F.x + 6, z0: sp.F.z - 6, z1: sp.F.z + 6 }))));
+    const segs = [];
+    for (const list of [pts, branch]) for (let i = 0; i < list.length - 1; i++) segs.push([...list[i], ...list[i + 1]]);
+    const segD = (x, z, [ax, az, bx, bz]) => { const vx = bx - ax, vz = bz - az, t = Math.max(0, Math.min(1, ((x - ax) * vx + (z - az) * vz) / (vx * vx + vz * vz || 1))); return Math.hypot(x - ax - vx * t, z - az - vz * t); };
+    this.world.addGrassBlock((x, z) => Math.hypot(x - M.x, z - M.z) < 9 || segs.some(g => segD(x, z, g) < 1.5) || s.some(sp => Math.hypot(x - sp.bank.x, z - sp.bank.z) < 3.2));
   }
 
   /* ---------- water life: swimming fish, jumps, rings and drops ---------- */
