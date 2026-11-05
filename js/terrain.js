@@ -213,7 +213,7 @@ function terrainMesh(T, riverD, roadD) {
      catch the light a little differently — the angular low-poly look — in soft patches of four bright
      greens (TONE_STEPS: mostly the main bright green, some medium and deeper green, a few light ones);
    - dirt: where a slow noise is high the ground is light orange-brown earth with a few darker lumps and
-     tiny stones; its edge is broken into small bits of grass and earth, so it frays naturally;
+     tiny stones, plus small spots of bare soil here and there; edges fray naturally;
    - the grass tufts and flowers standing on it are js/grass.js; far away the facets calm down (no shimmer).
    Faces that are not grass (road verges, river banks, rock slopes, sandy build zones) keep their own colour
    (aGrass = 0). Lighting, shadows, fog and day / night work as before (only the surface colour changes).
@@ -222,6 +222,7 @@ export const GROUND = { g0: 0x5aa533, g1: 0x67b33a, g2: 0x75c041, g3: 0x8ccf52, 
 // how much of each green (by the meadow-tone noise): ~15 % deeper, ~25 % medium, ~52 % main bright, ~8 % light
 export const TONE_STEPS = [0.28, 0.43, 0.9];
 export const MUD_T = 0.68;
+export const SOIL_T = 0.82;          // small bare-soil spots (a second, finer noise) above this
 export function groundMaterial() {
   const mat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
   const u = {};
@@ -240,7 +241,7 @@ export function groundMaterial() {
           diffuseColor.rgb = mix(diffuseColor.rgb, groundColor(vGWorld.xz, far), vGrass);
         }`);
   };
-  mat.customProgramCacheKey = () => 'ground-v9';
+  mat.customProgramCacheKey = () => 'ground-v11';
   return mat;
 }
 const GROUND_GLSL = /* glsl */`
@@ -253,7 +254,12 @@ float gnoise(vec2 p) {
   vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
   return mix(mix(gh12(i), gh12(i + vec2(1.0, 0.0)), f.x), mix(gh12(i + vec2(0.0, 1.0)), gh12(i + vec2(1.0, 1.0)), f.x), f.y);
 }
-float gmud(vec2 p) { return gnoise(p * 0.065) * 0.55 + gnoise(p * 0.17 + 7.3) * 0.3 + gnoise(p * 0.5 - 3.1) * 0.15; }
+// the dirt field: big dirt patches, and small spots of bare soil (1–3 m) folded in on the same scale
+float gmud(vec2 p) {
+  float big = gnoise(p * 0.065) * 0.55 + gnoise(p * 0.17 + 7.3) * 0.3 + gnoise(p * 0.5 - 3.1) * 0.15;
+  float small = gnoise(p * 0.3 + 31.7) * 0.78 + gnoise(p * 0.9 - 9.3) * 0.22;
+  return max(big, small - ${SOIL_T} + MUD_T);
+}
 float gtone(vec2 p) { return clamp(gnoise(p * 0.11) * 0.7 + gnoise(p * 0.031) * 0.5 - 0.12, 0.0, 1.0); }
 vec3 gpal(float t) { return t < ${TONE_STEPS[0]} ? uGr_g0 : t < ${TONE_STEPS[1]} ? uGr_g1 : t < ${TONE_STEPS[2]} ? uGr_g2 : uGr_g3; }
 // nearest cell of an irregular grid (scale: cells per metre): cell id, offset from p to its centre

@@ -9,7 +9,7 @@
 // The circle's size and density follow the graphics quality.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { GROUND, MUD_T, TONE_STEPS } from './terrain.js';
+import { GROUND, MUD_T, SOIL_T, TONE_STEPS } from './terrain.js';
 import { RIVER_HALF, START, CAMP, GIANT, TOWER_ZONE } from './terrain.js';
 
 const QUALITY = { low: { r: 18, step: 0.95 }, medium: { r: 28, step: 0.72 }, high: { r: 38, step: 0.62 } };
@@ -30,7 +30,8 @@ function gnoise(x, y) {
   const a = gh12(ix, iy), b = gh12(ix + 1, iy), c = gh12(ix, iy + 1), d = gh12(ix + 1, iy + 1);
   return (a + (b - a) * fx) + ((c + (d - c) * fx) - (a + (b - a) * fx)) * fy;
 }
-export const mudAt = (x, z) => gnoise(x * 0.065, z * 0.065) * 0.55 + gnoise(x * 0.17 + 7.3, z * 0.17 + 7.3) * 0.3 + gnoise(x * 0.5 - 3.1, z * 0.5 - 3.1) * 0.15;
+export const mudAt = (x, z) => Math.max(gnoise(x * 0.065, z * 0.065) * 0.55 + gnoise(x * 0.17 + 7.3, z * 0.17 + 7.3) * 0.3 + gnoise(x * 0.5 - 3.1, z * 0.5 - 3.1) * 0.15,
+  gnoise(x * 0.3 + 31.7, z * 0.3 + 31.7) * 0.78 + gnoise(x * 0.9 - 9.3, z * 0.9 - 9.3) * 0.22 - SOIL_T + MUD_T);
 const toneAt = (x, z) => Math.min(1, Math.max(0, gnoise(x * 0.11, z * 0.11) * 0.7 + gnoise(x * 0.031, z * 0.031) * 0.5 - 0.12));
 const PAL = [GROUND.g0, GROUND.g1, GROUND.g2, GROUND.g3].map(h => new THREE.Color(h));
 const palAt = t => PAL[t < TONE_STEPS[0] ? 0 : t < TONE_STEPS[1] ? 1 : t < TONE_STEPS[2] ? 2 : 3];
@@ -45,21 +46,22 @@ const col3 = (g, fn) => {          // colour every vertex: fn(y) -> [r, g, b]
 const solid = hex => { const c = new THREE.Color(hex); return () => [c.r, c.g, c.b]; };
 const clean = g => { g = g.index ? g.toNonIndexed() : g; g.deleteAttribute('uv'); return g; };
 // one blade: a flat three-sided cone leaning out, dark at the base and light yellow-green at the tip (x tint)
-function blade(h, w, a, lean, out) {
+function blade(h, w, a, lean, out, shade = [1, 1, 1]) {
   const g = new THREE.ConeGeometry(w, h, 3, 1, true);
   g.translate(0, h / 2, 0); g.scale(1, 1, 0.32);
   g.rotateY(Math.PI / 2 - a);
   const ax = new THREE.Vector3(-Math.sin(a), 0, Math.cos(a));                    // lean away from the centre
   g.applyMatrix4(new THREE.Matrix4().makeRotationAxis(ax, -lean));
   g.translate(Math.cos(a) * out, 0, Math.sin(a) * out);
-  return col3(clean(g), y => { const t = Math.max(0, Math.min(1, y / h)); return [0.74 + 0.62 * t, 0.8 + 0.46 * t, 0.66 + 0.26 * t]; });
+  return col3(clean(g), y => { const t = Math.max(0, Math.min(1, y / h)); return [(0.74 + 0.62 * t) * shade[0], (0.8 + 0.46 * t) * shade[1], (0.66 + 0.26 * t) * shade[2]]; });
 }
 function tuft(n, hMin, hMax, w, seed) {
   const parts = [];
   for (let i = 0; i < n; i++) {
     const r = k => fract(Math.sin((i + 1) * 12.9898 * k + seed * 78.233) * 43758.5453);
     const a = i / n * Math.PI * 2 + r(1) * 0.9, h = hMin + (hMax - hMin) * r(2), lean = 0.18 + r(3) * 0.5;
-    parts.push(blade(h, w * (0.8 + r(4) * 0.4), a, lean, 0.02 + r(5) * 0.07));
+    const k = 0.8 + r(6) * 0.32, yellow = r(7) > 0.72;                            // every blade its own green
+    parts.push(blade(h, w * (0.8 + r(4) * 0.4), a, lean, 0.02 + r(5) * 0.07, yellow ? [k * 1.12, k * 1.04, k * 0.8] : [k, k, k]));
   }
   const m = mergeGeometries(parts); m.computeVertexNormals(); return m;
 }
@@ -70,15 +72,24 @@ function stem(h, lean = 0) {
 function leafPair(h) {
   return [0.6, 3.6].map(a => col3(blade(h, 0.035, a, 0.7, 0.01), y => { const t = Math.max(0, Math.min(1, y / h)); return [0.32 + 0.25 * t, 0.6 + 0.2 * t, 0.2 + 0.1 * t]; }));
 }
-// a flower head: a ring of petals (a flat low-poly disc) with a raised centre
+// a flower head: individual pointed petals (flat diamonds) around a raised, faceted centre, tilted a little
 function head(r, petals, petal, centre, y, tilt = 0.25) {
-  const disc = col3(clean(new THREE.CylinderGeometry(r, r * 0.55, 0.02, petals)), solid(petal));
-  const mid = col3(clean(new THREE.CylinderGeometry(r * 0.38, r * 0.42, 0.035, 6)), solid(centre)); mid.translate(0, 0.02, 0);
-  const g = mergeGeometries([disc, mid]); g.rotateX(tilt); g.translate(0, y, 0);
+  const parts = [];
+  for (let i = 0; i < petals; i++) {
+    const g = col3(clean(new THREE.OctahedronGeometry(1, 0)), solid(petal));
+    g.scale(r * 0.28, 0.012, r * 0.55); g.rotateX(-0.18); g.translate(0, 0, r * 0.55);
+    g.rotateY(i / petals * Math.PI * 2 + (i % 2) * 0.12);
+    parts.push(g);
+  }
+  const mid = col3(clean(new THREE.IcosahedronGeometry(r * 0.3, 0)), solid(centre)); mid.scale(1, 0.6, 1); mid.translate(0, 0.012, 0);
+  parts.push(mid);
+  const g = mergeGeometries(parts); g.rotateX(tilt); g.translate(0, y, 0);
   return g;
 }
 function daisy() {
-  const m = mergeGeometries([stem(0.34, 0.06), head(0.075, 8, 0xf7f6ef, 0xf2c230, 0.34), ...leafPair(0.13)]); m.computeVertexNormals(); return m;
+  const h2 = head(0.055, 8, 0xf7f6ef, 0xf2c230, 0.24, 0.45), s2 = stem(0.24, -0.2);
+  h2.translate(0.045, 0, 0.01);
+  const m = mergeGeometries([stem(0.33, 0.06), head(0.07, 9, 0xf9f8f2, 0xf2c230, 0.33), s2, h2, ...leafPair(0.13)]); m.computeVertexNormals(); return m;
 }
 function yellowFlower() {
   const h2 = head(0.05, 6, 0xffdd40, 0xf0a020, 0.215, 0.5), s2 = stem(0.22, 0.25);
@@ -90,7 +101,7 @@ function lavender() {
   [[0, 0, 0.42], [0.06, 0.03, 0.34], [-0.05, 0.04, 0.37]].forEach(([x, z, h]) => {
     const s = stem(h); s.translate(x, 0, z); parts.push(s);
     for (let k = 0; k < 5; k++) {
-      const b = col3(clean(new THREE.OctahedronGeometry(0.03 - k * 0.003, 0)), solid(k % 2 ? 0x9a6ee0 : 0x8455d0));
+      const b = col3(clean(new THREE.OctahedronGeometry(0.03 - k * 0.003, 0)), solid(k % 2 ? 0x9a6ee0 : 0x8455d0));   // little purple florets up the spike
       b.scale(1, 1.4, 1); b.translate(x, h - 0.02 - k * 0.045, z); parts.push(b);
     }
   });
@@ -104,18 +115,21 @@ export class Grass {
     this.scene = scene; this.world = world; this.kx = null; this.job = null; this.rev = -1;
     // [0] small, [1] medium, [2] tall tufts, [3] daisies, [4] yellow flowers, [5] lavender
     this.geos = [tuft(10, 0.16, 0.3, 0.07, 1), tuft(13, 0.26, 0.5, 0.075, 2), tuft(15, 0.4, 0.78, 0.08, 3), daisy(), yellowFlower(), lavender()];
-    this.time = { value: 0 };
+    this.time = { value: 0 }; this.pressAt = { value: new THREE.Vector3(1e5, 1e5, 0) };
     const mat = this.mat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
     mat.onBeforeCompile = sh => {                       // a gentle sway: the higher the vertex, the more it moves
-      sh.uniforms.uTime = this.time;
-      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nuniform float uTime;')
+      sh.uniforms.uTime = this.time; sh.uniforms.uPress = this.pressAt;
+      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nuniform float uTime;\nuniform vec3 uPress;')
         .replace('#include <begin_vertex>', `#include <begin_vertex>
           #ifdef USE_INSTANCING
+          // pressed down and leaning away around the player's feet (you can always see where you walk)
+          vec2 away = instanceMatrix[3].xz - uPress.xy; float pd = length(away), pk = mix(0.28, 1.0, smoothstep(0.45, 1.7, pd));
+          transformed.y *= pk;
           float sw = sin(uTime * 1.6 + instanceMatrix[3].x * 0.35 + instanceMatrix[3].z * 0.27);
           transformed.x += sw * 0.08 * transformed.y * transformed.y; transformed.z += sw * 0.045 * transformed.y * transformed.y;
           #endif`);
     };
-    mat.customProgramCacheKey = () => 'grass-v2';
+    mat.customProgramCacheKey = () => 'grass-v3';
     this.setQuality('medium');
   }
   setQuality(name) {
@@ -145,8 +159,11 @@ export class Grass {
     if (Math.hypot(x - START.x, z - START.z) < 14 || Math.hypot(x - CAMP.x, z - CAMP.z) < 14 || Math.hypot(x - GIANT.x, z - GIANT.z) < 34
       || (Math.abs(x - TOWER_ZONE.x) < TOWER_ZONE.hw + 3 && Math.abs(z - TOWER_ZONE.z) < TOWER_ZONE.hd + 3)) return false;
     for (const f of W.grassBlock) if (f(x, z)) return false;
-    return mudAt(x, z) < MUD_T - 0.035;
+    if (mudAt(x, z) >= MUD_T - 0.035) return false;
+    return !W.blockedAt(x, z);                                    // not on rocks, bushes, tree trunks, fences, lamps…
   }
+  // the player's feet (x, z), or null when not walking: grass there is pressed down
+  press(x, z) { if (x === null) this.pressAt.value.set(1e5, 1e5, 0); else this.pressAt.value.set(x, z, 1); }
   // focus: the player (or the RV / drone)
   update(dt, focus) {
     this.time.value += dt;
@@ -175,9 +192,9 @@ export class Grass {
       const v = flower ? 3 + Math.floor(h1 * 2.999) : h2 < 0.55 ? 0 : h2 < 0.86 ? 1 : 2, st = this.stage[v];
       if (st.n >= this.caps[v]) continue;
       const edge = Math.min(1, (1 - Math.sqrt(d2) / Q.r) * 5);   // shrink near the circle's edge (no hard border)
-      const size = (flower ? 1.75 + h2 * 0.5 : 0.8 + h1 * 0.5) * (0.35 + 0.65 * edge);   // flowers: big enough to see
+      const size = (flower ? 1.45 + h2 * 0.45 : 0.8 + h1 * 0.5) * (0.35 + 0.65 * edge);   // flowers: easy to see, not oversized
       q.setFromAxisAngle(up, h3 * 40);
-      m.compose(p.set(x, T.heightAt(x, z) - 0.02, z), q, sc.set(size, size * (0.85 + h2 * 0.3), size));
+      m.compose(p.set(x, T.heightAt(x, z) - 0.02, z), q, sc.set(size, size * (flower ? 0.75 + h1 * 0.6 : 0.85 + h2 * 0.3), size));
       m.toArray(st.mat, st.n * 16);
       if (flower) c.copy(WHITE);
       else c.copy(palAt(Math.min(1, Math.max(0, toneAt(x, z) + (h1 - 0.5) * 0.3)))).multiplyScalar(0.9 + h2 * 0.15);

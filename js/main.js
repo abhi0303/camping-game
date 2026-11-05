@@ -890,6 +890,7 @@ function sounds(dt) {
   const dn = world.dayNight, dark = dn.dark ?? world.night;
   birds.update(dt, focus, dark);
   grass.update(dt, focus);
+  if (player.frame === 'world' && player.mode === 'foot') grass.press(pw.x, pw.z); else grass.press(null);
   camera.getWorldDirection(_fwd);
   listener.x = camera.position.x; listener.z = camera.position.z; listener.fx = _fwd.x; listener.fz = _fwd.z;
   let walk = null;
@@ -940,7 +941,7 @@ function debugStage(st, build) {
   if (build) { designer.show(build); designer._action('build'); designer.close(); }
   if (st === 'siege' || st === 'giants') survival._toStage(st);
 }
-window.__game = { debugStage, net, session, voice, birds, ambience, notebook, structures, designer, giants, player, rvs, remotes, obstacles, bridgeWorld, materials, world, inv, gear, editor, input, rig, camera, zombies, survival, combat, applySave, collectSave, saveNow, farm, farmEco, farmUI, farmland, fishArea, fishing, dayNight: world.dayNight, get objI() { return objI; },
+window.__game = { debugStage, net, session, voice, birds, ambience, notebook, grass, structures, designer, giants, player, rvs, remotes, obstacles, bridgeWorld, materials, world, inv, gear, editor, input, rig, camera, zombies, survival, combat, applySave, collectSave, saveNow, farm, farmEco, farmUI, farmland, fishArea, fishing, dayNight: world.dayNight, get objI() { return objI; },
   // test hooks: advance the game n frames / pin the camera
   run: n => { for (let i = 0; i < n; i++) step(1 / 60); renderer.render(scene, camera); }, setCam: a => { freezeCam = a; } };
 

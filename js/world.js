@@ -11,6 +11,7 @@ export class World {
     this.scene = scene; this.lite = !!opts.lite; this.onNightChange = null;
     this.bounds = { minX: -232, maxX: 232, minZ: -232, maxZ: 712 };
     this.grid = Array.from({ length: GNX * GNZ }, () => []);
+    this.deco = Array.from({ length: GNX * GNZ }, () => []);   // small things on the ground {x, z, r} (no collision: grass keeps off them)
     this.surfaces = [];          // extra walkable tops (towers, castle walls): { surfaceAt(x, z, y) -> height | null }
     this.night = 0; this.nightTarget = 0; this.time = 0; this.fireBoost = 0;
     this.bridge = null;          // set by main (BridgeWorld)
@@ -141,6 +142,7 @@ export class World {
         chunks[ci].push(m.compose(p, q, s).clone());
         if (t.r) this.addCollider({ x, z, r: t.r * sc, tree: !!t.tree, kind: key, yaw, sc, y: p.y });   // (kind, yaw, sc, y: birds perch on the crowns)
         else if (t.rock && sc > 0.9) this.addCollider({ x, z, r: 0.9 * sc, rock: true });
+        else if (t.rock || key === 'bush' || key === 'hbush' || key === 'fern') this.addDeco(x, z, (t.rock ? 1.0 : key === 'fern' ? 0.8 : 1.0) * sc);
         placed++;
       }
       for (const list of chunks) {
@@ -156,7 +158,7 @@ export class World {
   }
 
   // Small things on the ground that go with the painted grass and mud (js/terrain.js): leafy plants and
-  // pebbles and grey rocks (the grass tufts and flowers near the player are js/grass.js). Instanced and chunked like the jungle (one draw call per chunk and kind), no
+  // pebbles, grey rocks and round bushes (the grass tufts and flowers near the player are js/grass.js). Instanced and chunked like the jungle (one draw call per chunk and kind), no
   // shadows, no colliders. They use their own random numbers, so the jungle, crates and colliders stay
   // exactly where they were. Phones get about half.
   _groundDecor() {
@@ -166,8 +168,9 @@ export class World {
     const T = this.T, k = this.lite ? 0.55 : 1;
     const kinds = [
       { geo: geo(leafyPlant), n: 650, sc: [0.6, 1.2], road: 5.4 },
-      { geo: geo(pebble), n: 1400, sc: [0.12, 0.42], road: 4.8, flat: true, tints: [0x8e8c92, 0x9a978f, 0x86725e, 0x7a6a5c] },   // one mesh, coloured per pebble
-      { geo: geo(boulder), n: 700, sc: [0.45, 1.05], road: 6, flat: true, tints: [0xffffff, 0xf0eeea, 0xe2e4e8], solid: 0.55 },   // grey faceted rocks (you bump into the bigger ones)
+      { geo: geo(pebble), n: 1400, sc: [0.12, 0.42], road: 4.8, flat: true, tints: [0x8e8c92, 0x9a978f, 0x8a93a3, 0x98a0ad, 0x86725e], deco: 1.2 },   // one mesh, coloured per pebble
+      { geo: geo(boulder), n: 700, sc: [0.45, 1.05], road: 6, flat: true, tints: [0xffffff, 0xe8edf5, 0xdde5f0, 0xf2efe9], solid: 0.55, deco: 1.35 },   // grey and bluish-grey faceted rocks (you bump into the bigger ones)
+      { geo: geo(meadowBush), n: 380, sc: [0.5, 1.0], road: 6, tints: [0xffffff, 0xe8f4e2, 0xfff4dc], deco: 1.15 },   // round, faceted, bright
     ];
     const m = new THREE.Matrix4(), q = new THREE.Quaternion(), sv = new THREE.Vector3(), p = new THREE.Vector3(), e = new THREE.Euler();
     for (const t of kinds) {
@@ -185,6 +188,7 @@ export class World {
         p.set(x, y - (t.flat ? sc * 0.25 : 0.05), z); sv.set(sc, sc * (t.flat ? rnd(0.6, 1) : rnd(0.85, 1.2)), sc);
         const ci = clamp(Math.floor((x - X0) / (SX / CHX)), 0, CHX - 1) + CHX * clamp(Math.floor((z - Z0) / (SZ / CHZ)), 0, CHZ - 1);
         chunks[ci].push({ m: m.compose(p, q, sv).clone(), c: t.tints ? t.tints[Math.floor(rnd(0, t.tints.length))] : 0 });
+        this.addDeco(x, z, sc * (t.deco || 0.45));                                                   // grass keeps off it
         if (t.solid && sc > t.solid) this.addCollider({ x, z, r: sc * 1.05, rock: true });
         placed++;
       }
@@ -198,6 +202,19 @@ export class World {
         (this.vegMeshes || (this.vegMeshes = [])).push(im);
       }
     }
+  }
+
+  // a small thing on the ground (rock, pebble, bush, plant) that grass and flowers must not grow on
+  addDeco(x, z, r) { this.deco[this._cell(x, z)].push({ x, z, r }); }
+  // is (x, z) on (or right next to) an object — a collider (tree trunk, rock, fence, lamp…) or a ground decoration?
+  blockedAt(x, z, pad = 0.25) {
+    const ci = clamp(Math.floor((x - X0) / GC), 0, GNX - 1), cj = clamp(Math.floor((z - Z0) / GC), 0, GNZ - 1);
+    for (let j = Math.max(0, cj - 1); j <= Math.min(GNZ - 1, cj + 1); j++)
+      for (let i = Math.max(0, ci - 1); i <= Math.min(GNX - 1, ci + 1); i++) {
+        for (const c of this.grid[j * GNX + i]) { const dx = c.x - x, dz = c.z - z, rr = c.r + pad; if (dx * dx + dz * dz < rr * rr) return true; }
+        for (const c of this.deco[j * GNX + i]) { const dx = c.x - x, dz = c.z - z, rr = c.r + pad; if (dx * dx + dz * dz < rr * rr) return true; }
+      }
+    return false;
   }
 
   // no grass blades here (a test (x, z) -> true); the grass around the player is filled again
@@ -217,6 +234,8 @@ export class World {
       if (hit) { im.instanceMatrix.needsUpdate = true; im.computeBoundingSphere(); }
     }
     for (const cell of this.grid) for (let i = cell.length - 1; i >= 0; i--) { const c = cell[i]; if ((c.tree || c.rock) && inside(c.x, c.z)) cell.splice(i, 1); }
+    for (const cell of this.deco) for (let i = cell.length - 1; i >= 0; i--) if (inside(cell[i].x, cell[i].z)) cell.splice(i, 1);
+    this.grassRev++;
   }
 
   /* ---------------- trailhead (start) ---------------- */
@@ -511,6 +530,12 @@ function leafyPlant(b) {
 function boulder(b) {
   b.add(new THREE.DodecahedronGeometry(1, 0), 0x8f9198, 0, 0.45, 0, 0.3, 0.6, 0.1, 'solid', 1.25, 0.8, 1.05);
   b.add(new THREE.DodecahedronGeometry(0.55, 0), 0x9c9ea5, 1.05, 0.25, 0.35, 0.5, 0.2, 0.4, 'solid', 1.1, 0.75, 1);
+}
+// a bright, round, faceted bush: a big blob and two smaller ones
+function meadowBush(b) {
+  b.add(new THREE.IcosahedronGeometry(0.75, 1), 0x5aab3a, 0, 0.55, 0, 0, 0, 0, 'solid', 1, 0.82, 1);
+  b.add(new THREE.IcosahedronGeometry(0.5, 1), 0x6cbd45, 0.55, 0.42, 0.25, 0.4, 0.3, 0, 'solid', 1, 0.85, 1);
+  b.add(new THREE.IcosahedronGeometry(0.42, 1), 0x4e9d33, -0.45, 0.36, -0.2, 0.2, 0.7, 0, 'solid', 1, 0.85, 1);
 }
 function pebble(b) { b.add(new THREE.IcosahedronGeometry(1, 0), 0xffffff, 0, 0.4, 0, 0.2, 0.4, 0, 'solid', 1.25, 0.7, 1); }   // white: tinted per instance
 function grassTuft(b) {
