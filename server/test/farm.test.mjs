@@ -7,6 +7,7 @@ import { migrate } from '../src/migrations.js';
 import { simulate } from '../src/farm.js';
 import { CHICKENS, withAnimalConfig } from '../src/animals.js';
 import { PLOTS } from '../src/layout.js';
+import { THIEVES } from '../src/thieves.js';
 
 const ADMIN_URL = process.env.TEST_DATABASE_URL || 'postgres://postgres@127.0.0.1:55432/postgres';
 const DB = 'rvfarmtest_' + Math.random().toString(36).slice(2, 8);
@@ -17,6 +18,7 @@ before(async () => {
   const u = new URL(ADMIN_URL); u.pathname = '/' + DB;
   pool = new pg.Pool({ connectionString: u.toString(), max: 12 });
   await migrate(pool);
+  THIEVES.on = false;               // (thieves have their own tests: test/thieves.test.mjs)
   env = { __pool: pool, SERVER_SECRET: 'test-secret-0123456789', ADMIN_SECRET: 'admin-xyz', RATE_SCALE: 50 };
 });
 after(async () => {
@@ -353,7 +355,7 @@ test('upgrade from older databases: migration 1 only, 2 with animals and buildin
       const env2 = { ...env, __pool: p2 };
       const r = await worker.fetch(new Request('http://api.test/v1/health'), env2, {});
       assert.equal(r.status, 200);
-      assert.deepEqual((await p2.query('SELECT id FROM schema_migrations ORDER BY id')).rows.map(x => x.id), [1, 2, 3, 4, 5, 6, 7]);
+      assert.deepEqual((await p2.query('SELECT id FROM schema_migrations ORDER BY id')).rows.map(x => x.id), [1, 2, 3, 4, 5, 6, 7, 8]);
       const rm = (await p2.query('SELECT money, storage_level, total_earned FROM rooms')).rows[0];
       assert.deepEqual([Number(rm.money), rm.storage_level, Number(rm.total_earned)], [upTo === 4 ? 500 + 50 + 56 : 500, 1, upTo === 2 ? 42 : 0]);
       if (upTo >= 2) {

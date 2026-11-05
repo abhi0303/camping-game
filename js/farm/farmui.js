@@ -4,6 +4,7 @@
 // Fish Market (its screens are in js/fishing/marketui.js).
 // Every button asks the server; the numbers on screen always come from the server's answer.
 import { fishMarketView, fishHead } from '../fishing/marketui.js';
+import { icon } from '../icons.js';
 const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const ago = t => { const s = (Date.now() - Date.parse(t)) / 1000; return s < 60 ? 'just now' : s < 3600 ? `${Math.round(s / 60)} min ago` : s < 86400 ? `${Math.round(s / 3600)} h ago` : `${Math.round(s / 86400)} d ago`; };
@@ -40,7 +41,8 @@ const coat = k => (k && k.coat ? `<i class="coat" style="background:${k.coat}"><
 const STORE_MENU = [
   ['animals', '🐔', 'Buy animals', 'chickens, goats, cows, horses'],
   ['sell', '💰', 'Sell produce', 'eggs and milk'],
-  ['feed', '🌾', 'Buy feed', 'for every animal'],
+  ['feed', '🌾', 'Buy feed', 'for every animal · bones and treats for dogs'],
+  ['dogs', '🐕', 'Guard dogs', 'keep thieves away from your eggs'],
   ['materials', '🧱', 'Building materials', 'wood and stone'],
   ['orders', '📜', 'Customer orders', '10% extra · daily streak'],
   ['supplies', '🧰', 'Supplies', 'seeds and tools — coming soon'],
@@ -219,6 +221,7 @@ export class FarmUI {
     else if (this.view === 'market') { this.title.textContent = '🛒 Market'; html = head + this._market(); }
     else if (this.view === 'fish') { this.title.textContent = '🐟 Fish Market'; html = fishHead(this) + fishMarketView(this); }
     else if (this.view === 'storage') { this.title.textContent = `📦 Farm storage · level ${e.storageLevel}`; html = head + this._storage(); }
+    else if (this.view === 'thefts') { this.title.textContent = '🚨 Thieves came to the farm'; html = this._thefts(); }
     else if (this.view === 'plot') { this.title.textContent = `🌱 Plot ${this.arg + 1}`; html = head + this._plot(this.arg); }
     else if (this.view === 'shelter' || this.view === 'feed') {
       const bd = e.st.buildings.find(b => b.id === this.arg.id);
@@ -247,11 +250,60 @@ export class FarmUI {
     const back = `<button class="fu-back" data-x="tab" data-t="">‹ Back</button>`;
     if (this.tab === 'animals') return back + this.eco.items('animal').map(k => this._animalRow(k)).join('');
     if (this.tab === 'sell') return back + this._sellRows();
-    if (this.tab === 'feed') return back + this._goodRows(['feed']) + '<div class="fu-sub">Each animal eats its feed at the trough: one feeding keeps it fed (and producing) for 2 hours.</div>';
+    if (this.tab === 'feed') return back + this._goodRows(['feed']) + '<div class="fu-sub">Each animal eats its feed at the trough: one feeding keeps it fed (and producing) for 2 hours.</div>'
+      + (this.eco.cat('bone') ? '<div class="fu-h">For guard dogs</div>' + this._goodRows(['bone', 'dog_treat']) + '<div class="fu-sub">A bone keeps a guard dog on duty for 4 hours; a treat for a whole day (24 hours) — cheaper than six bones. Give them at “Guard dogs”.</div>' : '');
+    if (this.tab === 'dogs') return back + this._dogs();
     if (this.tab === 'materials') return back + this._goodRows(['wood', 'stone']) + '<div class="fu-sub">Or chop trees and break rocks, then store the logs and stones at the farm storage — it\'s free.</div>';
     if (this.tab === 'orders') return back + this._orders();
     if (this.tab === 'supplies') return back + '<div class="fu-row"><span class="fu-ico">🌱</span><span class="fu-main"><span class="fu-name">Nothing in stock yet</span><span class="fu-sub">Seeds and tools come with the crop fields. Feed is under “Purchase animal feed”.</span></span></div>';
     return back;
+  }
+  // guard dogs: the ones the farm has (on duty or asleep, feed, train) and one to buy
+  _dogs() {
+    const e = this.eco, k = e.cat('guard_dog'), T = e.thieves();
+    if (!k || !T) return '<div class="fu-sub">Guard dogs come with the next server update.</div>';
+    const now = e.serverNow(), max = k.max || 2, L = lv => (k.levels || []).find(l => l.level === lv) || {};
+    const cut = lv => { const c = L(lv).cut || [0, 0]; return c[0] === c[1] ? `${Math.round(c[0] * 100)}%` : `${Math.round(c[0] * 100)}–${Math.round(c[1] * 100)}%`; };
+    const LOOK = { 1: 'a young dog — friendly, tail always wagging', 2: 'spiked collar — strict and focused', 3: 'golden collar and tactical vest — fierce, well trained' };
+    let html = `<div class="fu-npc"><span class="fu-ico">${k.icon}</span><span class="fu-say"><b>Farmer</b>“Thieves come for eggs left waiting in the nests — more than ${T.rules.threshold}. A good dog keeps them off.”</span></div>`;
+    for (const d of T.dogs) {
+      const on = e.dogOnDuty(d, now), next = L(d.level + 1);
+      html += `<div class="fu-row dog"><span class="fu-ico">${k.icon}</span><span class="fu-main"><span class="fu-name">Guard dog ${d.slot + 1} · Level ${d.level}</span>
+        <span class="fu-sub">${LOOK[d.level] || ''} · saves ${cut(d.level)} of what a thief takes · thieves at most ${L(d.level).raids}× a day</span>
+        <span class="fu-sub ${on ? 'fu-ok' : 'fu-need'}">${on ? `On duty · <b data-cd="${d.fedUntil}" data-re="1">${clock(Date.parse(d.fedUntil) - now)}</b> left` : 'Asleep — hungry. Give a bone or a treat to put it on duty'}</span></span>
+        <span class="fu-col">
+          <button class="fu-go" data-x="dogfeed" data-d="${d.id}" data-f="bone" ${!e.qty('bone') || this.busy ? 'disabled' : ''}>Bone · +4 h <small>(${e.qty('bone')})</small></button>
+          <button class="fu-go alt" data-x="dogfeed" data-d="${d.id}" data-f="dog_treat" ${!e.qty('dog_treat') || this.busy ? 'disabled' : ''}>Treat · +24 h <small>(${e.qty('dog_treat')})</small></button>
+          ${next.cost ? `<button class="fu-go sell" data-x="dogtrain" data-d="${d.id}" data-l="${d.level + 1}" ${e.money < next.cost || this.busy ? 'disabled' : ''}>Train to L${d.level + 1} · ₹${next.cost}</button>` : '<span class="fu-sub fu-c">Top level</span>'}
+        </span></div>`;
+    }
+    if (T.dogs.length < max) html += `<div class="fu-row"><span class="fu-ico">${k.icon}</span><span class="fu-main"><span class="fu-name">${esc(k.breed || 'Guard dog')} · ₹${k.buy}</span>
+      <span class="fu-sub">Guards your coops. Level 1 saves ${cut(1)} of what a thief takes, Level 2 ${cut(2)}, Level 3 ${cut(3)}. Arrives on duty for ${k.hours || 4} h · ${T.dogs.length}/${max} dogs</span></span>
+      <button class="fu-go" data-x="dogbuy" ${e.money < k.buy || this.busy ? 'disabled' : ''}>Buy · ₹${k.buy}</button></div>`;
+    else html += `<div class="fu-sub">The farm has its ${max} guard dogs — the most it can keep.</div>`;
+    if (!e.qty('bone') && !e.qty('dog_treat') && T.dogs.length) html += `<div class="fu-sub fu-need">No bones or treats — they're under “Buy feed” (bone ₹${(e.cat('bone') || {}).buy}, treat ₹${(e.cat('dog_treat') || {}).buy}).</div>`;
+    html += `<div class="fu-sub">Training: Level 2 ₹${L(2).cost} (saves ${cut(2)}; thieves twice a day at most) · Level 3 ₹${L(3).cost} (saves ${cut(3)}; once a day). Without a dog on duty a thief can come 3 times a day.</div>`;
+    return html;
+  }
+  // the report when you come back: every thief since you last looked
+  _thefts() {
+    const e = this.eco, list = this.arg || [], k = e.cat('guard_dog');
+    const when = t => new Date(t).toLocaleString('en-IN', { weekday: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Kolkata' });
+    const eggs = r => Object.values(r.taken || {}).reduce((t, n) => t + (n > 0 ? n : 0), 0);
+    const lost = list.reduce((t, r) => t + (r.status === 'caught' ? 0 : eggs(r)), 0);
+    const rows = list.map(r => {
+      const n = eggs(r), what = Object.entries(r.taken || {}).filter(([, q]) => q > 0).map(([p, q]) => `${q} ${(e.cat(p) || {}).name || p}`.toLowerCase()).join(', ');
+      const [ico, line] = r.status === 'caught' ? [icon('net'), `<b>${esc(r.caughtBy || 'Someone')}</b> caught him — the eggs came back with 10% extra`]
+        : r.status === 'scared' || !n ? [k ? k.icon : '', 'Your guard dog scared him off — he got nothing']
+          : [icon('thief'), `Stole <b>${n} eggs</b> (${esc(what)})${r.saved ? ` · your guard dog saved ${r.saved}` : ''}`];
+      return `<div class="fu-row theft ${r.status}"><span class="fu-ico">${ico}</span><span class="fu-main"><span class="fu-name">${when(r.at)}</span><span class="fu-sub">${line}</span></span></div>`;
+    }).join('');
+    const dogs = e.thieves() ? e.thieves().dogs : [], tips = [];
+    tips.push(`Collect your eggs before more than ${(e.thieves() || { rules: {} }).rules.threshold || 40} are waiting in the nests.`);
+    if (!dogs.length) tips.push('A guard dog (Farm Store → Guard dogs) saves a share of what a thief takes — and keep it fed with bones or treats.');
+    else if (!dogs.some(d => e.dogOnDuty(d))) tips.push('Your guard dog is asleep — hungry. Give it a bone or a treat to put it back on duty.');
+    return `<div class="fu-npc thief"><span class="fu-ico">${icon('thief')}</span><span class="fu-say"><b>While you were away</b>“${list.length === 1 ? 'A thief came' : `${list.length} thieves came`} to the farm${lost ? ` and got away with ${lost} eggs` : ''}.”</span></div>
+      ${rows}<div class="fu-sub">${tips.join(' ')}</div><button class="fu-go wide" data-x="seenok">OK</button>`;
   }
   // one animal for sale (shelter: put it in this shelter first)
   _animalRow(k, shelter) {
@@ -455,6 +507,10 @@ export class FarmUI {
     else if (x === 'upgrade') await this._do({ action: 'upgrade', target: 'storage', level: Number(b.dataset.l) });
     else if (x === 'rod') await this._do({ action: 'rod', level: Number(b.dataset.l) });
     else if (x === 'order') await this._do({ action: 'order', order: b.dataset.o });
+    else if (x === 'dogbuy') await this._do({ action: 'dog', op: 'buy' });
+    else if (x === 'dogfeed') await this._do({ action: 'dog', op: 'feed', dog: b.dataset.d, food: b.dataset.f });
+    else if (x === 'dogtrain') await this._do({ action: 'dog', op: 'train', dog: b.dataset.d, level: Number(b.dataset.l) });
+    else if (x === 'seenok') { this.close(); if (this.g.onSeen) this.g.onSeen(); }
     else if (x === 'feedall') await this._do({ action: 'feed', shelter: this.arg.id, all: true }, null, () => this._started());
     else if (x === 'feedn') await this._do({ action: 'feed', shelter: this.arg.id, count: Number(b.dataset.q) }, () => { delete this.qty.f; }, () => this._started());
     else if (x === 'collect') await this._do({ action: 'collect', shelter: b.dataset.b }, r => this.g.onCollect && this.g.onCollect(r));

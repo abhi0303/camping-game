@@ -138,7 +138,8 @@ export class Notebook {
     let L = `<div class="nb-money">${icon('coin')}<div><b>${money(e.money)}</b><small>Farm money · shared by every member</small></div></div>`;
     L += this._line('feed', 'Animal feed', qtyCap('feed'), hungry ? 'bad' : '');
     if (hungry) L += `<div class="nb-note bad">${icon('warn')} ${hungry} animal${hungry > 1 ? 's are' : ' is'} hungry — feed them at the trough</div>`;
-    if (nests) L += `<div class="nb-note blue">${icon('egg')} ${nests} egg${nests > 1 ? 's' : ''} waiting in the nest boxes</div>`;
+    const T = e.thieves ? e.thieves() : null, many = T && nests > T.rules.threshold;
+    if (nests) L += `<div class="nb-note ${many ? 'bad' : 'blue'}">${icon('egg')} ${nests} egg${nests > 1 ? 's' : ''} waiting in the nest boxes${many ? ` — more than ${T.rules.threshold}: thieves come for them! Collect them` : ''}</div>`;
     L += `<h4>Produce</h4>` + produce.map(id => this._line(id, name(id), qtyCap(id))).join('');
     L += `<h4>Building</h4>` + BUILD.filter(id => e.cat(id)).map(id => this._line(id, name(id), qtyCap(id))).join('');
     L += `<div class="nb-foot">Farm storage · level ${e.storageLevel}</div>`;
@@ -147,6 +148,10 @@ export class Notebook {
     for (const a of st.animals) counts[a.type] = (counts[a.type] || 0) + 1;
     const animals = Object.entries(counts).map(([id, n]) => this._line(id, name(id), n)).join('');
     let R = `<h4>Animals</h4>` + (animals || `<div class="nb-empty">No animals yet — build a shelter on a plot, then buy them at the Farm Store.</div>`);
+    if (T && (T.dogs.length || e.qty('bone') || e.qty('dog_treat'))) {
+      R += `<h4>Guard dogs</h4>` + T.dogs.map(d => this._line('guard_dog', `Dog ${d.slot + 1} · Level ${d.level}`, e.dogOnDuty(d) ? 'on duty' : 'asleep', e.dogOnDuty(d) ? '' : 'bad')).join('')
+        + this._line('bone', 'Dog bones', qtyCap('bone')) + this._line('dog_treat', 'Dog treats', qtyCap('dog_treat'));
+    }
     const f = st.fishing || {}, lv = f.rod || 1, rod = RODS[lv];
     if (e.cat('worms') || f.rod) {
       R += `<h4>Fishing</h4>` + this._line('rod', rod ? rod.name : 'Fishing rod', `Lv ${lv}`) + this._line('worms', 'Worms', qtyCap('worms'));

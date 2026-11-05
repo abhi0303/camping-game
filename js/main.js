@@ -40,6 +40,8 @@ import { FishingArea } from './fishing/area.js';
 import { Fishing } from './fishing/fishing.js';
 import { Notebook } from './farm/notebook.js';
 import { Village } from './village/index.js';
+import { GuardDogs } from './farm/dogs.js';
+import { Thieves } from './farm/thieves.js';
 import { Ambience } from './ambience.js';
 import { Birds } from './birds.js';
 import { Grass } from './grass.js';
@@ -164,7 +166,7 @@ const farmland = new Farmland(scene, world, { onMarket: () => farmUI.open('marke
 net.on('farmGate', d => { if (d && typeof d.id === 'string') farmland.setGate(d.id, !!d.open); });
 rig.clip = (t, d, dist) => (farm.active ? farmland.camClip(t, d, dist) : dist);
 const farmEco = new FarmEconomy({ net, toast: m => toast(m), onGone: msg => farm.gone(msg, true),
-  onChange: st => { farmland.setState(st); farmUI.render(); farmUI.renderBar(farm.active); notebook.render(); if (!overlay.classList.contains('hidden')) farmPanel.render(); } });
+  onChange: st => { farmland.setState(st); farmUI.render(); farmUI.renderBar(farm.active); notebook.render(); if (!overlay.classList.contains('hidden')) farmPanel.render(); setTimeout(theftReport, 0); } });
 // day and night (js/day-night.js): Farm World follows the real time in India by the farm server's clock, the
 // same for every member, so the sun, sky and lamps match on every screen without any messages
 world.dayNight.clock = () => farmEco.serverNow();
@@ -172,7 +174,7 @@ world.dayNight.synced = () => farmEco.syncAt > 0;
 const PHASE_MSG = { evening: '🌇 Evening — the sun is going down; the lamps come on at dusk', night: '🌙 Night has fallen — lanterns, windows and torches light the farm', morning: '🌅 Sunrise — a new day on the farm' };
 world.dayNight.onPhase = ph => { if (started && survival.farm && PHASE_MSG[ph]) toast(PHASE_MSG[ph]); };
 const farmUI = new FarmUI({ eco: farmEco, materials, toast: m => toast(m), hooks: uiHooks, onCollect: () => { farmEco.collected = true; audio.thud(300, 0.05); },
-  beforeOpen: () => notebook.close() });
+  beforeOpen: () => notebook.close(), onSeen: () => farmEco.act({ action: 'seen' }).catch(() => {}) });
 // the bag (Farm Notebook) and the order slip: floating buttons, N / O
 const notebook = new Notebook({ eco: farmEco, materials, hooks: uiHooks, worldName: () => (farm.L ? farm.L.roomName : ''),
   dateText: () => new Date(farmEco.serverNow()).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' }),
@@ -193,6 +195,17 @@ const birds = new Birds(scene, world);
 const grass = new Grass(scene, world);             // wild flowers around the player (js/grass.js)
 const music = new Music();                         // Farm World's tune (js/music.js)
 const ambience = new Ambience();
+// thieves come for eggs left in the nests, guard dogs keep them off (the server decides: server/src/thieves.js)
+const dogs = new GuardDogs(scene, { eco: farmEco, world, bark: (x, z, n, deep) => ambience.onBark(x, z, listener, n, deep) });
+const thieves = new Thieves(scene, { eco: farmEco, world, player, touch, toast: m => toast(m), hud: $('hud'),
+  alarm: () => ambience.alarm(), whoosh: () => ambience.whoosh(), jingle: good => ambience.jingle(good),
+  seen: () => farmEco.act({ action: 'seen' }).catch(() => {}), myName: () => (farm.L ? farm.L.name : '') });
+// coming back to the game: what thieves did while you were away comes first
+function theftReport() {
+  if (!farm.active || !started || farmUI.isOpen || thieves.raid) return;
+  const list = thieves.unseen();
+  if (list) { thieves.markReported(list); farmUI.open('thefts', list); }
+}
 const listener = { x: 0, z: 0, fx: 0, fz: 1 }, _fwd = new THREE.Vector3();
 fishArea.onJump = (x, z, landing) => ambience.onFishJump(x, z, landing, listener, fishing.active);
 { const base = player.netExtra; player.netExtra = () => ({ ...base(), ...fishing.netExtra() }); }
@@ -309,6 +322,7 @@ function mapMarkers() {
   for (const z of zombies.list) if (z.st !== 4) markers.push({ x: z.x, z: z.z, dot: '#e0362a' });
   if (farm.active) {
     if (village.on) markers.push({ x: village.spots.square.x, z: village.spots.square.z, icon: 'home', label: 'Sonpur village' });
+    if (thieves.thiefPos) markers.push({ x: thieves.thiefPos.x, z: thieves.thiefPos.z, icon: 'thief', label: 'Thief!' });
     markers.push({ x: STORE.x, z: STORE.z, icon: 'store', label: 'Farm Store' }, { x: MARKET.x, z: MARKET.z, icon: 'market', label: 'Market' },
       { x: FARM_CENTER.x, z: FARM_CENTER.z, icon: 'plot', label: 'Farm' });
   }
@@ -732,6 +746,7 @@ async function enterFarm(L, status, isNew) {
   fishArea.enable();                   // the Fish Market, the path and the docks on the river
   village.enable({ farmland, minimap });   // the village behind the Market
   if (village.people) village.people.onWhistle = (x, z) => ambience.onWhistle(x, z, listener);   // the night watchman
+  dogs.enable(); thieves.enable();      // guard dogs and thieves
   farmEco.start(L);
   startGame(r.role === 'host'
     ? (isNew || r.fresh ? `🌾 Welcome to ${L.roomName}! World code ${L.code} — invite friends from the menu (Esc)` : `🌾 Welcome back to ${L.roomName}`)
@@ -894,6 +909,7 @@ const focus = new THREE.Vector3(), pw = new THREE.Vector3();
 let freezeCam = null, plotInfoT = 0;
 
 function step(dt) {
+  if (farm.active) thieves.input(input);   // a thief in play: F / click throws the net (before the player punches)
   globalKeys();
   const ctrl = player.update(dt, input, rig);
   gear.update(dt, input);
@@ -917,6 +933,7 @@ function step(dt) {
   survival.update(dt, input);
   if (farm.active) {
     farmland.update(dt, farmEco.serverNow(), player.mode === 'foot' ? player.pos : null);
+    dogs.update(dt, farmEco.serverNow()); thieves.update(dt, farmEco.serverNow());
     if (village.on) {                   // the villagers (their day follows the shared clock)
       villageViewers.length = 0;
       villageViewers.push(player.mode === 'foot' ? player.pos : player.rv.root.position);
@@ -1003,7 +1020,7 @@ function debugStage(st, build) {
   if (build) { designer.show(build); designer._action('build'); designer.close(); }
   if (st === 'siege' || st === 'giants') survival._toStage(st);
 }
-window.__game = { renderer, debugStage, net, session, voice, birds, ambience, notebook, grass, farmPanel, minimap, village, structures, designer, giants, player, rvs, remotes, obstacles, bridgeWorld, materials, world, inv, gear, editor, input, rig, camera, zombies, survival, combat, applySave, collectSave, saveNow, farm, farmEco, farmUI, farmland, fishArea, fishing, dayNight: world.dayNight, get objI() { return objI; },
+window.__game = { renderer, dogs, thieves, debugStage, net, session, voice, birds, ambience, notebook, grass, farmPanel, minimap, village, structures, designer, giants, player, rvs, remotes, obstacles, bridgeWorld, materials, world, inv, gear, editor, input, rig, camera, zombies, survival, combat, applySave, collectSave, saveNow, farm, farmEco, farmUI, farmland, fishArea, fishing, dayNight: world.dayNight, get objI() { return objI; },
   // test hooks: advance the game n frames / pin the camera
   run: n => { for (let i = 0; i < n; i++) step(1 / 60); renderer.render(scene, camera); }, setCam: a => { freezeCam = a; } };
 

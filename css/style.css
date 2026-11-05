@@ -1300,3 +1300,44 @@ body.touch .bm-hint .touch-only { display: inline; }
   .bm-tools button, .bm-close { width: 36px; height: 36px; }
   .bm-hint { display: none; }
 }
+
+/* ---------- thieves and guard dogs (js/farm/thieves.js, farmui.js) ---------- */
+#thiefAlert { position: absolute; left: 50%; top: 64px; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; max-width: min(560px, calc(100vw - 32px));
+  padding: 9px 16px 9px 10px; border-radius: 12px; font-size: 14px; line-height: 1.3; color: #fff; pointer-events: none; z-index: 3;
+  background: repeating-linear-gradient(135deg, rgba(150, 24, 18, .92) 0 14px, rgba(120, 16, 12, .92) 14px 28px); border: 2px solid #ffd23a; box-shadow: 0 6px 22px rgba(0,0,0,.4); }
+#thiefAlert.hidden { display: none; }
+#thiefAlert.live { animation: taPulse .8s ease-in-out infinite alternate; }
+#thiefAlert.good { background: rgba(28, 92, 40, .94); border-color: #9be36b; }
+#thiefAlert.bad { background: rgba(60, 30, 26, .94); border-color: #e0a050; }
+#thiefAlert b { color: #ffd23a; margin-right: 4px; letter-spacing: .04em; }
+#thiefAlert em { display: block; font-style: normal; font-size: 12px; opacity: .85; }
+#thiefAlert .ta-ico svg { width: 34px; height: 34px; display: block; }
+@keyframes taPulse { from { box-shadow: 0 6px 22px rgba(0,0,0,.4); } to { box-shadow: 0 0 26px rgba(255, 70, 40, .85); } }
+#netMeter { position: absolute; left: 50%; bottom: 112px; transform: translateX(-50%); width: min(340px, calc(100vw - 40px)); padding: 8px 12px 9px; border-radius: 12px;
+  background: rgba(30, 22, 12, .86); border: 2px solid #c8a868; color: #f4ead6; font-size: 12.5px; pointer-events: none; z-index: 3; }
+#netMeter.hidden { display: none; }
+#netMeter.far { opacity: .7; }
+#netMeter.far .nm-zone { background: #7d8a6a; box-shadow: none; }
+#netMeter.shake { animation: nmShake .3s; }
+@keyframes nmShake { 25% { transform: translateX(calc(-50% - 6px)); } 75% { transform: translateX(calc(-50% + 6px)); } }
+.nm-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; font-weight: 800; letter-spacing: .03em; }
+.nm-nets { display: flex; align-items: center; gap: 4px; }
+.nm-nets svg { width: 20px; height: 20px; margin-right: 2px; }
+.nm-nets i { width: 10px; height: 10px; border-radius: 50%; border: 2px solid #c8a868; display: inline-block; }
+.nm-nets i.on { background: #ffd23a; border-color: #ffd23a; }
+.nm-bar { position: relative; height: 18px; border-radius: 9px; overflow: hidden; background: linear-gradient(90deg, #5a3a20, #8a6a40 50%, #5a3a20); box-shadow: inset 0 2px 5px rgba(0,0,0,.5); }
+.nm-zone { position: absolute; top: 0; bottom: 0; background: #7ee05a; box-shadow: 0 0 10px #a8ff7a; }
+.nm-needle { position: absolute; top: -2px; bottom: -2px; width: 3px; margin-left: -1.5px; background: #fff; box-shadow: 0 0 6px #fff; border-radius: 2px; }
+.nm-hint { margin-top: 5px; text-align: center; opacity: .88; }
+body.touch #netMeter { top: auto; bottom: 10px; width: min(270px, 38vw); padding: 5px 9px 6px; font-size: 11px; }
+body.touch .nm-bar { height: 15px; }
+body.touch .nm-top { margin-bottom: 4px; }
+body.touch #thiefAlert { top: 54px; font-size: 12.5px; }
+#touchUI .tb.net { background: rgba(200, 60, 30, .78); border-color: #ffd23a; color: #fff; animation: taPulse .6s ease-in-out infinite alternate; }
+.fu-col { display: flex; flex-direction: column; gap: 5px; flex: none; }
+.fu-col .fu-go { padding: 7px 10px; font-size: 12.5px; }
+.fu-h { margin: 12px 0 4px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; font-size: 12px; opacity: .8; }
+.fu-ok { color: #4f9a3c; font-weight: 700; }
+.fu-row.theft.stolen .fu-name { color: #b0402a; }
+.fu-row.theft.caught .fu-name, .fu-row.theft.scared .fu-name { color: #3f8a3a; }
+.fu-npc.thief .fu-say b { color: #b0402a; }

@@ -197,6 +197,52 @@ export class Ambience {
       this._env(g, t, vol * 0.9, 0.003, 0.1); this._wire(o, g, pan); o.start(t); o.stop(t + 0.14);
     }
   }
+  // a big dog's bark: "wuf!" — a short, rough, falling tone through a mouth-like band (deeper for a bigger dog)
+  bark(vol, pan, deep = 1) {
+    const ctx = this.ctx, t = ctx.currentTime + 0.01, f0 = rnd(330, 400) / deep;
+    const o = ctx.createOscillator(), g = ctx.createGain(), b = ctx.createBiquadFilter(), n = ctx.createBufferSource(), nf = ctx.createBiquadFilter(), ng = ctx.createGain();
+    o.type = 'sawtooth'; o.frequency.setValueAtTime(f0 * 1.3, t); o.frequency.exponentialRampToValueAtTime(f0, t + 0.04); o.frequency.exponentialRampToValueAtTime(f0 * 0.62, t + 0.17);
+    b.type = 'bandpass'; b.frequency.value = 900; b.Q.value = 1.4;
+    this._env(g, t, vol, 0.008, 0.17); o.connect(b); this._wire(b, g, pan); o.start(t); o.stop(t + 0.22);
+    n.buffer = this.white; nf.type = 'bandpass'; nf.frequency.value = 1400; nf.Q.value = 0.8;   // the breath in it
+    n.connect(nf); this._env(ng, t, vol * 0.5, 0.005, 0.1); this._wire(nf, ng, pan); n.start(t, Math.random() * 1.5); n.stop(t + 0.14);
+  }
+  // barking at a thief: a few barks from (x, z)
+  onBark(x, z, listener, n = 3, deep = 1) {
+    if (!this.ready || audio.muted || !listener) return;
+    const d = Math.hypot(x - listener.x, z - listener.z);
+    if (d > 70) return;
+    const v = 0.16 * clamp(1 - d / 70, 0.08, 1), pan = panOf(listener, x, z);
+    for (let i = 0; i < n; i++) setTimeout(() => this.bark(v * rnd(0.85, 1), pan, deep), i * rnd(230, 340));
+  }
+  // the thief alarm: two quick rising tones, twice
+  alarm(vol = 0.08) {
+    if (!this.ready || audio.muted) return;
+    const ctx = this.ctx, t0 = ctx.currentTime + 0.02;
+    [0, 0.22, 0.6, 0.82].forEach((dt, i) => {
+      const t = t0 + dt, o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = 'square'; o.frequency.setValueAtTime(i % 2 ? 880 : 660, t); o.frequency.linearRampToValueAtTime(i % 2 ? 990 : 740, t + 0.18);
+      this._env(g, t, vol, 0.01, 0.18); this._wire(o, g, 0); o.start(t); o.stop(t + 0.22);
+    });
+  }
+  // the net leaving the hand: a whoosh
+  whoosh(vol = 0.12) {
+    if (!this.ready || audio.muted) return;
+    const ctx = this.ctx, t = ctx.currentTime + 0.01, n = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+    n.buffer = this.white; f.type = 'bandpass'; f.Q.value = 1.2; f.frequency.setValueAtTime(500, t); f.frequency.exponentialRampToValueAtTime(2200, t + 0.25);
+    n.connect(f); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.08); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.38);
+    this._wire(f, g, 0); n.start(t, Math.random() * 1.5); n.stop(t + 0.42);
+  }
+  // caught! a bright little rising jingle · got away: two falling notes
+  jingle(good, vol = 0.09) {
+    if (!this.ready || audio.muted) return;
+    const ctx = this.ctx, t0 = ctx.currentTime + 0.02, notes = good ? [523, 659, 784, 1046] : [392, 294];
+    notes.forEach((fr, i) => {
+      const t = t0 + i * (good ? 0.1 : 0.2), o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = 'triangle'; o.frequency.value = fr;
+      this._env(g, t, vol, 0.01, good ? 0.28 : 0.4); this._wire(o, g, 0); o.start(t); o.stop(t + 0.5);
+    });
+  }
   onWhistle(x, z, listener) {
     if (!this.ready || audio.muted || !listener) return;
     const d = Math.hypot(x - listener.x, z - listener.z);

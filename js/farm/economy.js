@@ -164,6 +164,15 @@ export class FarmEconomy {
   }
   // horse rental requests and horses out on rent (null on an older server)
   rentals() { return this.st && this.st.rentals ? this.st.rentals : null; }
+  // thieves and guard dogs (server state, or null on an older server: no thieves there)
+  thieves() { return this.st && this.st.thieves ? this.st.thieves : null; }
+  dogs() { const t = this.thieves(); return t ? t.dogs : []; }
+  dogOnDuty(d, now = this.serverNow()) { return !!(d && d.fedUntil && Date.parse(d.fedUntil) > now); }
+  // the raid going on now (the thief is out there), or null
+  liveRaid(now = this.serverNow()) {
+    const t = this.thieves();
+    return t ? t.list.find(r => r.status === 'live' && Date.parse(r.at) <= now + 500 && Date.parse(r.escapeAt) + 1500 > now) || null : null;
+  }
   // Market orders (server state, or null on an older server): the order to deliver now, the next one's arrival
   orders() { return this.st && this.st.orders ? this.st.orders : null; }
   orderNow() {
@@ -181,6 +190,11 @@ export class FarmEconomy {
     for (const b of this.st.buildings) { const i = this.shelterInfo(b); ms = Math.min(ms, i.nests ? Infinity : i.nextMs, i.dueMs > 0 ? i.dueMs : Infinity); }
     const o = this.orderNow();
     if (o.O) ms = Math.min(ms, Math.max(0, o.endsMs) + 2000, o.next ? Math.max(0, Date.parse(o.next.availableAt) - this.serverNow()) : Infinity);
+    // a thief on his way: ask just as he arrives (the server starts the raid then); one out there: ask when he's gone
+    const T = this.thieves(), now = this.serverNow();
+    if (T && T.dueAt) ms = Math.min(ms, Math.max(0, Date.parse(T.dueAt) - now) + 1200);
+    const live = T && T.list.find(r => r.status === 'live');
+    if (live) ms = Math.min(ms, Math.max(0, Date.parse(live.escapeAt) - now) + 5000);
     return ms;
   }
   // eggs waiting in all nest boxes (by product)

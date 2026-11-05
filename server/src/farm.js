@@ -13,6 +13,7 @@ import { withAnimalConfig } from './animals.js';
 import { cast, reel, buyRod, fishingState } from './fishing.js';
 import { ensureOrders, ordersState, deliver } from './orders.js';
 import { ensureRentals, rentalsState, rent, sellHorse, isHorse, HORSES } from './horses.js';
+import { thiefCtx, thiefStep, thiefSave, thievesState, catchThief, dogAction, seenThefts } from './thieves.js';
 
 const H = 3600e3;
 const MAX_OFFLINE_H = 24 * 7;          // production is counted for at most a week of absence
@@ -92,7 +93,7 @@ export function simulate(animals, inv, cat, fromMs, toMs, level = 1) {
 
 // Bring the farm up to now. Must run inside a transaction; locks the world's row.
 async function settle(c, roomId, cat) {
-  const r = await c.one(`SELECT money, econ_rev, produced_at, total_earned, storage_level, now() AS now FROM rooms WHERE id = $1 FOR UPDATE`, [roomId]);
+  const r = await c.one(`SELECT money, econ_rev, produced_at, total_earned, storage_level, thief_due_at, now() AS now FROM rooms WHERE id = $1 FOR UPDATE`, [roomId]);
   const inv = await invMap(c, roomId), dirty = [];
   let changed = false;
   if (r.econ_rev === 0) {                                  // first time this farm is opened: starting goods
@@ -101,9 +102,22 @@ async function settle(c, roomId, cat) {
   }
   const from = Math.max(r.produced_at.getTime(), r.now.getTime() - MAX_OFFLINE_H * H), to = r.now.getTime();
   if (to > from) {
-    const animals = await c.rows('SELECT id, type, health, hunger, progress, ready, level, fed_until FROM animals WHERE room_id = $1 ORDER BY born_at, id', [roomId]);
+    const animals = await c.rows('SELECT id, type, shelter_id, health, hunger, progress, ready, level, fed_until FROM animals WHERE room_id = $1 ORDER BY born_at, id', [roomId]);
     if (animals.length) {
-      const out = simulate(animals, inv, cat, from, to, r.storage_level);
+      // hour by hour (and to the moment a thief arrives): a thief may come for eggs left waiting (thieves.js)
+      const hens = animals.some(a => cat[a.type] && cat[a.type].nest), ctx = hens || r.thief_due_at ? await thiefCtx(c, roomId, r.thief_due_at) : null;
+      const out = { made: {} };
+      for (const a of animals) a.madeAny = false;
+      for (let t = from; t < to;) {
+        const end = !ctx ? to : Math.min(to, t + H, ctx.due !== null && ctx.due > t ? ctx.due : Infinity);
+        const o = simulate(animals, inv, cat, t, end, r.storage_level);
+        for (const [k, v] of Object.entries(o.made)) out.made[k] = (out.made[k] || 0) + v;
+        for (const a of animals) a.madeAny = a.madeAny || a.made;
+        t = end;
+        if (ctx) thiefStep(ctx, animals, cat, t, to);
+      }
+      for (const a of animals) a.made = a.madeAny;
+      if (ctx && await thiefSave(c, roomId, ctx)) changed = true;
       dirty.push(...Object.keys(out.made));
       await c.rows(`UPDATE animals a SET health = v.health, hunger = v.hunger, progress = v.progress, ready = v.ready, level = v.level,
           last_production_at = CASE WHEN v.made THEN $7 ELSE a.last_production_at END
@@ -135,6 +149,7 @@ async function state(c, roomId, cat, s, me) {
     fishing: me ? await fishingState(c, roomId, me.id) : null,
     orders: await ordersState(c, roomId, s),
     rentals: await rentalsState(c, roomId, s),
+    thieves: await thievesState(c, roomId, s, me, cat),
   };
 }
 
@@ -152,7 +167,7 @@ export async function farmState(req, env, db, code) {
 export async function farmHistory(req, env, db, code) {
   const me = await member(db, req, code);
   const list = await rows(db, `SELECT t.kind, t.detail, t.money_delta, t.created_at, m.name FROM room_transactions t
-      LEFT JOIN room_members m ON m.id = t.member_id WHERE t.room_id = $1 AND t.kind NOT IN ('gate', 'cast')
+      LEFT JOIN room_members m ON m.id = t.member_id WHERE t.room_id = $1 AND t.kind NOT IN ('gate', 'cast', 'seen')
       AND NOT (t.kind = 'reel' AND (t.detail->>'caught')::boolean IS NOT TRUE) ORDER BY t.created_at DESC, t.id DESC LIMIT 30`, [me.room_id]);
   return json({ history: list.map(x => ({ kind: x.kind, who: x.name || 'A former member', message: x.detail.message || '', money: Number(x.money_delta), at: x.created_at })) });
 }
@@ -196,7 +211,7 @@ const plural = (n, k) => `${n} ${lower(k.name)}${n === 1 || /s$/.test(k.name) ? 
 
 async function buy(c, { me, b, cat, s }) {
   const item = String(b.item || ''), k = cat[item];
-  if (!k || !k.buy || k.kind === 'building' || k.kind === 'upgrade') throw new ApiError(400, 'bad_item', 'That can\'t be bought here.');
+  if (!k || !k.buy || k.kind === 'building' || k.kind === 'upgrade' || k.kind === 'dog') throw new ApiError(400, 'bad_item', 'That can\'t be bought here.');
   const qty = whole(b.qty, 1, k.kind === 'animal' ? 12 : 500);
   if (k.unlock && s.earned < k.unlock) throw new ApiError(409, 'locked', `${k.name}s are sold once the farm has earned ₹${k.unlock} from sales (₹${s.earned} so far).`);
   const foal = isHorse(k) && b.age === 'foal';            // a baby horse: cheaper, Level 1
@@ -362,4 +377,5 @@ async function gate(c, { me, b }) {
   return { money: 0, items: [], detail: { shelter, open }, message: `${me.name} ${open ? 'opened' : 'closed'} the gate of plot ${r.plot + 1}` };
 }
 
-const ACTIONS = { buy, sell, build, deposit, feed, upgrade, gate, collect, cast, reel, rod: buyRod, order: deliver, rent, sellhorse: sellHorse };
+const ACTIONS = { buy, sell, build, deposit, feed, upgrade, gate, collect, cast, reel, rod: buyRod, order: deliver, rent, sellhorse: sellHorse,
+  catch: catchThief, dog: dogAction, seen: seenThefts };

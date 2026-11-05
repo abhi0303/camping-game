@@ -318,6 +318,49 @@ CREATE TABLE horse_rentals (
 CREATE INDEX horse_rentals_room_idx ON horse_rentals (room_id, status);
 `,
   },
+  {
+    id: 8,
+    name: 'thieves_guard_dogs',
+    sql: `
+-- thieves come for eggs left waiting in the nests (server/src/thieves.js); guard dogs (at most 2) keep them off
+ALTER TABLE catalog DROP CONSTRAINT catalog_kind_check;
+ALTER TABLE catalog ADD CONSTRAINT catalog_kind_check CHECK (kind IN ('animal', 'good', 'building', 'upgrade', 'gear', 'dog'));
+INSERT INTO catalog (item, kind, name, icon, buy_price, sell_price, data, sort) VALUES
+  ('bone',      'good', 'Dog bones',  '🦴', 5,    NULL, '{"cap": 200, "dogHours": 4}', 12),
+  ('dog_treat', 'good', 'Dog treats', '🍖', 25,   NULL, '{"cap": 60, "dogHours": 24}', 13),
+  ('guard_dog', 'dog',  'Guard dog',  '🐕', 1000, NULL, '{"max": 2, "hours": 4, "breed": "German Shepherd", "levels": [{"level": 1, "cut": [0.4, 0.4], "raids": 3}, {"level": 2, "cost": 1500, "cut": [0.7, 0.7], "raids": 2}, {"level": 3, "cost": 2000, "cut": [0.95, 1], "raids": 1}]}', 40);
+CREATE TABLE farm_dogs (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  room_id    UUID NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
+  slot       SMALLINT NOT NULL CHECK (slot IN (0, 1)),
+  level      SMALLINT NOT NULL DEFAULT 1 CHECK (level BETWEEN 1 AND 3),
+  fed_until  TIMESTAMPTZ,                              -- on duty until then
+  bought_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (room_id, slot)
+);
+CREATE TABLE farm_thefts (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  room_id    UUID NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
+  day        DATE NOT NULL,                            -- the India-time day of the raid
+  at         TIMESTAMPTZ NOT NULL,                     -- the thief comes out of the jungle
+  steal_at   TIMESTAMPTZ NOT NULL,                     -- reaches the coop and takes the eggs
+  escape_at  TIMESTAMPTZ NOT NULL,                     -- gone for good unless caught before
+  shelter_id UUID,                                     -- the coop he goes for
+  wanted     INTEGER NOT NULL CHECK (wanted >= 0),     -- eggs he meant to take
+  taken      JSONB NOT NULL,                           -- { egg: n, ... } what he took
+  saved      INTEGER NOT NULL DEFAULT 0,               -- eggs the dogs saved
+  dog_level  SMALLINT NOT NULL DEFAULT 0,              -- the best dog on duty (0: none)
+  dogs       SMALLINT NOT NULL DEFAULT 0,              -- dogs on duty
+  status     TEXT NOT NULL CHECK (status IN ('live', 'stolen', 'caught', 'scared')),
+  seed       INTEGER NOT NULL,                         -- his way in and out (the same on every screen)
+  caught_by  UUID REFERENCES room_members(id) ON DELETE SET NULL,
+  caught_at  TIMESTAMPTZ
+);
+CREATE INDEX farm_thefts_room_idx ON farm_thefts (room_id, at);
+ALTER TABLE rooms ADD COLUMN thief_due_at TIMESTAMPTZ;           -- a thief has noticed the eggs and comes then
+ALTER TABLE room_members ADD COLUMN thefts_seen_at TIMESTAMPTZ;  -- this member has read the theft reports up to then
+`,
+  },
 ];
 
 const LOCK_ID = 727001;   // advisory lock: two migrate runs never overlap
