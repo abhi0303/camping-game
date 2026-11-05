@@ -5,6 +5,8 @@
 //   river    — flowing water when you're near it; at the docks while fishing, water lapping, little bubbles
 //              and fish jumping out of the water
 //   footsteps — soft steps on grass, gravel on the road, hollow knocks on wooden docks and the RV floor
+//   farm animals — walk up to the pens and the hens cluck ("buk-buk… ba-gawk!") and the goats bleat, from
+//              where they are, louder the closer you get (hens mostly sleep at night)
 // Everything is quiet and low-passed so it sits under the game. Inside the RV it sounds muffled.
 import { audio } from './audio.js';
 
@@ -15,7 +17,7 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const panOf = (L, x, z) => { const dx = x - L.x, dz = z - L.z, d = Math.hypot(dx, dz) || 1; return clamp((-L.fz * dx + L.fx * dz) / d * 0.9, -0.9, 0.9); };
 
 export class Ambience {
-  constructor() { this.ready = false; this.t = 0; this.stepT = 0; this.foot = 0; this.timers = { cricket: [], toad: 2, owl: 30, bird: 1, bubble: 2, lap: 0 }; }
+  constructor() { this.ready = false; this.t = 0; this.stepT = 0; this.foot = 0; this.timers = { cricket: [], toad: 2, owl: 30, bird: 1, bubble: 2, lap: 0, hen: 1, goat: 2 }; this.close = { hen: false, goat: false }; }
 
   _setup() {
     const ctx = audio.context(), out = audio.out && audio.out();
@@ -132,6 +134,40 @@ export class Ambience {
     s.connect(f); this._env(g, t, vol * (landing ? 1.1 : 0.5), 0.01, landing ? 0.32 : 0.16); this._wire(f, g, pan);
     s.start(t, Math.random() * 1.5); s.stop(t + 0.4);
   }
+  // a hen: a few quick nasal "buk"s, now and then ending in a long "ba-gawk!" (a sawtooth through two
+  // vowel-like bands, each note sliding down)
+  cluck(vol, pan) {
+    const ctx = this.ctx, t0 = ctx.currentTime + 0.02, out = ctx.createGain(), b1 = ctx.createBiquadFilter(), b2 = ctx.createBiquadFilter();
+    b1.type = b2.type = 'bandpass'; b1.frequency.value = 1050; b1.Q.value = 4; b2.frequency.value = 2400; b2.Q.value = 5;
+    b1.connect(out); b2.connect(out); out.gain.value = 1;
+    const p = this._pan(pan); if (p) { out.connect(p); p.connect(this.bus); } else out.connect(this.bus);
+    const note = (t, f0, f1, d, v, mid) => {
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = 'sawtooth'; o.frequency.setValueAtTime(f0, t);
+      if (mid) { o.frequency.linearRampToValueAtTime(mid, t + d * 0.35); o.frequency.exponentialRampToValueAtTime(f1, t + d); }
+      else o.frequency.exponentialRampToValueAtTime(f1, t + d);
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(v, t + 0.008); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+      o.connect(g); g.connect(b1); g.connect(b2); o.start(t); o.stop(t + d + 0.02);
+    };
+    let t = t0;
+    const n = 2 + Math.floor(Math.random() * 4), f = rnd(380, 470);
+    for (let i = 0; i < n; i++) { note(t, f * rnd(0.95, 1.08), f * 0.72, rnd(0.06, 0.085), vol * rnd(0.75, 1)); t += rnd(0.1, 0.16); }
+    if (Math.random() < 0.22) { note(t + 0.05, f * 1.2, f * 1.05, 0.09, vol); note(t + 0.17, f * 1.5, f * 1.15, 0.32, vol * 1.1, f * 2.1); }
+  }
+  // a goat: a wavering "meh-eh-eh" (a sawtooth with a fast tremble, through "eh" vowel bands)
+  bleat(vol, pan) {
+    const ctx = this.ctx, t = ctx.currentTime + 0.02, d = rnd(0.55, 1.05), f = rnd(300, 430);
+    const o = ctx.createOscillator(), b1 = ctx.createBiquadFilter(), b2 = ctx.createBiquadFilter(), am = ctx.createGain(), lfo = ctx.createOscillator(), lg = ctx.createGain(), wob = ctx.createGain(), g = ctx.createGain();
+    o.type = 'sawtooth'; o.frequency.setValueAtTime(f * 1.06, t); o.frequency.linearRampToValueAtTime(f, t + 0.12); o.frequency.linearRampToValueAtTime(f * 0.9, t + d);
+    lfo.frequency.value = rnd(8, 11);                                     // the tremble: loudness and pitch
+    lg.gain.value = 0.45; am.gain.value = 0.55; lfo.connect(lg); lg.connect(am.gain);
+    wob.gain.value = f * 0.03; lfo.connect(wob); wob.connect(o.frequency);
+    b1.type = b2.type = 'bandpass'; b1.frequency.value = 650; b1.Q.value = 3; b2.frequency.value = 1750; b2.Q.value = 4;
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.06); g.gain.setValueAtTime(vol, t + d - 0.15); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+    o.connect(am); am.connect(b1); am.connect(b2); b1.connect(g); b2.connect(g);
+    const p = this._pan(pan); if (p) { g.connect(p); p.connect(this.bus); } else g.connect(this.bus);
+    o.start(t); lfo.start(t); o.stop(t + d + 0.05); lfo.stop(t + d + 0.05);
+  }
   // one footstep. surface: grass | gravel | wood
   step(surface, vol) {
     const ctx = this.ctx, t = ctx.currentTime + 0.005, s = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
@@ -196,6 +232,21 @@ export class Ambience {
       T.bird = (morning > 0.9 ? rnd(0.8, 2.6) : morning > 0.4 ? rnd(2.5, 6) : rnd(4, 9));
       const b = s.birds && s.birds.length && Math.random() < 0.75 ? s.birds[Math.floor(Math.random() * s.birds.length)] : null;
       this.bird(0.036 * day * (b ? distVol(b) : rnd(0.35, 0.7)), panAt(b));
+    }
+    // farm animals near the player: hens cluck, goats bleat — right away when you walk up to them, then now
+    // and then (more often when several are close; hens mostly sleep at night)
+    const A = s.animals;
+    if (A) for (const [k, base, gap] of [['hen', 0.17, [1.2, 3.4]], ['goat', 0.15, [3.5, 8]]]) {   // (up close: clearly louder than birdsong, under the engine)
+      const v = A[k];
+      if (!v || v.d > 20) { this.close[k] = false; continue; }
+      const prox = clamp(1 - v.d / 20, 0, 1), sleepy = k === 'hen' ? night : night * 0.5;
+      if (!this.close[k] && v.d < 10) { this.close[k] = true; T[k] = Math.min(T[k], rnd(0.15, 0.5)); }   // just walked up: they notice you
+      else if (v.d > 13) this.close[k] = false;
+      if ((T[k] -= dt) < 0) {
+        T[k] = rnd(gap[0], gap[1]) / Math.sqrt(Math.max(1, v.n)) * (1 + sleepy * 3);
+        const vol = base * (0.25 + 0.75 * prox) * (1 - sleepy * 0.5) * rnd(0.8, 1.05), pan = panOf(L || { x: 0, z: 0, fx: 0, fz: 1 }, v.x, v.z);
+        if (k === 'hen') this.cluck(vol, pan); else this.bleat(vol, pan);
+      }
     }
     // fishing: little bubbles now and then, very quiet
     if (s.fishing && (T.bubble -= dt) < 0) { T.bubble = rnd(1.4, 4.2); this.bubble(0.016, rnd(-0.3, 0.3)); }

@@ -911,7 +911,7 @@ function sounds(dt) {
     walk = { speed: player.vel.length(), surface };
   }
   ambience.update(dt, { dark, phase: dn.phase, water: Math.max(0, world.T.riverDistAt(pw.x, pw.z) - RIVER_HALF), fishing: fishing.active,
-    muffled: player.frame === 'rv', walk, listener, birds: birds.perched() });
+    muffled: player.frame === 'rv', walk, listener, birds: birds.perched(), animals: farm.active && player.mode === 'foot' ? farmland.near : null });
 }
 
 function frame(now) {

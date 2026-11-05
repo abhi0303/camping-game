@@ -344,6 +344,9 @@ export class Farmland {
     this.t += dt;
     const t = serverMs / 1000, n = {};
     for (const type in this.inst) n[type] = 0;
+    // the nearest hen and goat to the player and how many are close (they cluck and bleat: js/ambience.js)
+    const near = this.near || (this.near = { hen: { x: 0, z: 0, d: 1e9, n: 0 }, goat: { x: 0, z: 0, d: 1e9, n: 0 } });
+    for (const k in near) { near[k].d = 1e9; near[k].n = 0; }
     for (const a of this.list.concat(this.decor)) {
       const m = this.inst[a.type];
       if (n[a.type] >= MAX_PER_TYPE) continue;
@@ -352,6 +355,8 @@ export class Farmland {
       const size = a.level && a.type.startsWith('horse') ? 0.55 + 0.45 * (Math.min(10, a.level) - 1) / 9 : 1;
       this._s.setScalar(size);
       const p = this.posOf(a, serverMs), sp = SPEED[a.type] || 1, chick = a.type.startsWith('chicken');
+      const voice = me && (chick ? near.hen : a.type === 'goat' ? near.goat : null);
+      if (voice) { const d = Math.hypot(p.x - me.x, p.z - me.z); if (d < 22) { voice.n++; if (d < voice.d) { voice.d = d; voice.x = p.x; voice.z = p.z; } } }
       const bob = p.walking ? Math.abs(Math.sin(t * 9 * sp + a.k * 9)) * (chick ? 0.05 : 0.04) : 0;
       const sick = a.health !== undefined && a.health < 40 ? 0.06 : 0;
       // standing chickens peck at the ground now and then
