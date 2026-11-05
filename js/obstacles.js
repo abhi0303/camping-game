@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GeoBuilder, MAT, rand } from './utils.js';
 import { audio } from './audio.js';
+import { fallenTreeHalf, lumpGeo } from './flora.js';
 
 const TOOL = { tree: ['chainsaw', 'axe'], rock: ['sledge'], pile: ['sledge'] };
 const POWER = { chainsaw: 2, axe: 1, sledge: 1 };
@@ -45,17 +46,8 @@ export class Obstacles {
 
   _tree(o) {
     for (const side of [-1, 1]) {
-      const b = new GeoBuilder();
-      b.cyl(0.52, 0.58, 6.2, 8, side * 3.1, 0.55, 0, 0x6b5a45, 0, 0, Math.PI / 2);
-      for (let i = 0; i < 4; i++) b.box(0.6, 0.12, 0.5, side * (0.8 + i * 1.3), 1.05, rand(-0.2, 0.2), 0x4c7a35);
-      if (side < 0) {
-        b.cyl(1.6, 1.6, 0.45, 9, -6.3, 1.1, 0, 0x5e4630, 0, 0, Math.PI / 2);
-        for (let i = 0; i < 6; i++) { const a = i * 1.05; b.box(0.12, 0.12, 1.2, -6.5, 1.1 + Math.sin(a) * 1.2, Math.cos(a) * 1.2, 0x4a3826, 'solid', a, 0, 0); }
-      } else {
-        for (let i = 0; i < 3; i++) b.cyl(0.12, 0.18, 2.4, 5, 4 + i * 0.8, 1.2, (i - 1) * 0.9, 0x6b5a45, 0.8 * (i - 1), 0, -0.9);
-        for (const [x, y, z, s] of [[6.6, 1.6, 0.4, 1.6], [5.6, 2.0, -1.1, 1.3], [7.4, 1.0, -0.6, 1.2], [5.0, 1.4, 1.3, 1.1]])
-          b.add(new THREE.IcosahedronGeometry(s, 0), 0x2f6b2c, x, y, z, 0.3, 0.6, 0, 'solid', 1.1, 0.8, 1.1);
-      }
+      const b = new GeoBuilder(), jit = [rand(-0.2, 0.2), rand(-0.2, 0.2), rand(-0.2, 0.2), rand(-0.2, 0.2)];   // (4 numbers a side, as always)
+      fallenTreeHalf(b, side, jit);                   // root plate on one side, the crown on the other (js/flora.js)
       const part = b.build(); part.userData.side = side;
       o.group.add(part); o.parts.push(part);
     }
@@ -65,9 +57,10 @@ export class Obstacles {
   _rocks(o, n) {
     for (let i = 0; i < n; i++) {
       const s = o.type === 'pile' ? rand(0.8, 1.2) : rand(0.9, 1.5), lx = (i - (n - 1) / 2) * 2.0 + rand(-0.3, 0.3), lz = rand(-0.8, 0.8);
-      const b = new GeoBuilder();
-      b.add(new THREE.DodecahedronGeometry(s, 0), i % 2 ? 0x7d7b74 : 0x8a877e, 0, s * 0.7, 0, rand(0, 3), rand(0, 3), 0, 'solid', 1.1, 0.85, 1);
-      b.add(new THREE.DodecahedronGeometry(s * 0.35, 0), 0x6e6b62, s * 0.8, 0.2, s * 0.5);
+      const b = new GeoBuilder(), rx = rand(0, 3), ry = rand(0, 3);
+      b.add(lumpGeo(1, 0.16, 300 + i * 7 + Math.round(s * 10)), i % 2 ? 0xa3a8b1 : 0xb2b7c0, 0, s * 0.62, 0, rx * 0.15, ry, 0, 'solid', s * 1.1, s * 0.85, s);
+      b.add(lumpGeo(0, 0.14, 400 + i), 0x8a909a, s * 0.85, 0.16, s * 0.5, 0, ry, 0, 'solid', s * 0.34, s * 0.28, s * 0.32);
+      b.add(lumpGeo(0, 0.14, 500 + i), 0x969ca6, -s * 0.7, 0.1, -s * 0.45, 0.3, rx, 0, 'solid', s * 0.2, s * 0.17, s * 0.2);
       const part = b.build(); part.position.set(lx, 0, lz);
       o.group.add(part); o.parts.push(part);
       o.colliders.push({ lx, lz, r: s * 0.95, obstacle: o, rock: true });

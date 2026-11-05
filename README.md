@@ -280,6 +280,7 @@ Global: **M** map, **K** sound, **B** mic on / off (co-op), **R** RV back to the
 - `js/combat.js` – shotgun and cannon
 - `js/minimap.js` – minimap and full map
 - `js/icons.js` – the game's icons (small SVG pictures for items, animals, places and the HUD); emoji written anywhere in the page are swapped for these icons, so no emoji is ever shown
+- `js/flora.js` – the trees, bushes, plants, rocks and broken wood, built from code in a stylised low-poly look: broadleaf trees with layered, drooping lime leaf pads and red-brown branching trunks, a big canopy tree, round layered trees, a few dead trees, curved palms, jagged tiered pines and cypresses in the highlands, round lime bushes, leafy undergrowth, rounded grey / bluish rocks, standing stones, a few red rocks, pebble groups, cut stumps with roots and broken fallen logs (the trail's fallen trees and rockfalls too). Which look a tree gets comes from its position, so every tree stands exactly where it always did
 - `js/grass.js` – wild flowers (white and yellow) around the player
 - `js/music.js` – Farm World's music
 - `js/farm/animals.js` – how goats and chickens move: steps, head butting, eating and drinking, pecking, hops

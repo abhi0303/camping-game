@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GeoBuilder, MAT, rand, srand, clamp, canvasTexture } from './utils.js';
 import { DayNight, flambeau } from './day-night.js';
+import * as F from './flora.js';
 import { buildTerrain, X0, Z0, SX, SZ, START, CAMP, BRIDGE, RIVER_HALF, NORTH, VALLEY, TOWER_ZONE, GIANT } from './terrain.js';
 
 const GC = 10, GNX = Math.ceil(SX / GC), GNZ = Math.ceil(SZ / GC);   // collision grid (10 m cells)
@@ -97,32 +98,42 @@ export class World {
   /* ---------------- vegetation (instanced, chunked) ---------------- */
   _vegetation() {
     const geo = fn => { const b = new GeoBuilder(); fn(b); return b.build().children[0].geometry; };
+    // every kind has one or more looks (js/flora.js); which look a spot gets comes from its position (w: how
+    // often each look appears), so the world's random sequence — and where everything stands — is unchanged
+    const rocks = [geo(F.boulderA), geo(F.boulderB), geo(F.standingRock), geo(F.redRock)], bushG = geo(F.roundBush);
     const types = {
-      jungle: { geo: geo(jungleTree), n: 430, shadow: true, r: 0.55, tree: true, near: 7.5 },
-      tall: { geo: geo(tallTree), n: 70, shadow: true, r: 0.7, tree: true, near: 9 },
-      palm: { geo: geo(palmTree), n: 130, shadow: true, r: 0.4, tree: true, near: 7.5, river: true },
-      fern: { geo: geo(fern), n: 800, shadow: false, near: 5.2, small: true },
-      bush: { geo: geo(bush), n: 260, shadow: false, near: 5.6, small: true },
-      rock: { geo: geo(rock), n: 110, shadow: true, near: 6, rock: true },
+      jungle: { geos: [geo(F.broadleafA), geo(F.broadleafB), geo(F.roundTree), geo(F.deadTree)], w: [0.42, 0.36, 0.17, 0.05], n: 430, shadow: true, r: 0.55, tree: true, near: 7.5 },
+      tall: { geos: [geo(F.bigTree)], n: 70, shadow: true, r: 0.7, tree: true, near: 9 },
+      palm: { geos: [geo(F.palmA), geo(F.palmB)], n: 130, shadow: true, r: 0.4, tree: true, near: 7.5, river: true },
+      fern: { geos: [geo(F.smallPlant)], n: 800, shadow: false, near: 5.2, small: true },
+      bush: { geos: [bushG], n: 260, shadow: false, near: 5.6, small: true },
+      rock: { geos: rocks, w: [0.38, 0.32, 0.18, 0.12], n: 110, shadow: true, near: 6, rock: true },
       // highlands (north of the ridge)
-      pine: { geo: geo(pineTree), n: 420, shadow: true, r: 0.5, tree: true, near: 7.5, north: true },
-      pine2: { geo: geo(pineTall), n: 90, shadow: true, r: 0.6, tree: true, near: 9, north: true },
-      hbush: { geo: geo(bush), n: 160, shadow: false, near: 5.6, small: true, north: true },
-      tuft: { geo: geo(grassTuft), n: 420, shadow: false, near: 4.8, small: true, north: true },
-      hrock: { geo: geo(rock), n: 170, shadow: true, near: 6, rock: true, north: true },
+      pine: { geos: [geo(F.pineLime), geo(F.pineGreen)], n: 420, shadow: true, r: 0.5, tree: true, near: 7.5, north: true },
+      pine2: { geos: [geo(F.pineTall), geo(F.cypress)], w: [0.65, 0.35], n: 90, shadow: true, r: 0.6, tree: true, near: 9, north: true },
+      hbush: { geos: [bushG], n: 160, shadow: false, near: 5.6, small: true, north: true },
+      tuft: { geos: [geo(grassTuft)], n: 420, shadow: false, near: 4.8, small: true, north: true },
+      hrock: { geos: rocks.slice(0, 3), w: [0.42, 0.36, 0.22], n: 170, shadow: true, near: 6, rock: true, north: true },
+    };
+    const look = (t, x, z) => {
+      if (t.geos.length < 2) return 0;
+      const h = ((Math.sin(x * 12.9898 + z * 78.233) * 43758.5453) % 1 + 1) % 1, w = t.w || t.geos.map(() => 1 / t.geos.length);
+      let acc = 0;
+      for (let i = 0; i < w.length; i++) { acc += w[i]; if (h < acc) return i; }
+      return w.length - 1;
     };
     if (this.lite) for (const k in types) types[k].n = Math.round(types[k].n * 0.55);   // phones: lighter jungle
     const T = this.T, m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
     // the highest points of each tree's crown, in the tree's own space (birds sit there: js/birds.js)
     this.treeTops = {};
-    for (const key of ['jungle', 'tall']) {
-      const pos = types[key].geo.attributes.position, pts = [];
+    for (const key of ['jungle', 'tall']) types[key].geos.forEach((g, vi) => {
+      const pos = g.attributes.position, pts = [];
       for (let i = 0; i < pos.count; i++) pts.push([pos.getX(i), pos.getY(i), pos.getZ(i)]);
       pts.sort((a, b) => b[1] - a[1]);
-      this.treeTops[key] = pts.filter((v, i) => pts.findIndex(w => Math.hypot(w[0] - v[0], w[2] - v[2]) < 0.4 && Math.abs(w[1] - v[1]) < 0.4) === i).slice(0, 4);
-    }
+      this.treeTops[key + vi] = pts.filter((v, i) => pts.findIndex(w => Math.hypot(w[0] - v[0], w[2] - v[2]) < 0.4 && Math.abs(w[1] - v[1]) < 0.4) === i).slice(0, 4);
+    });
     for (const key in types) {
-      const t = types[key], chunks = Array.from({ length: CHX * CHZ }, () => []);
+      const t = types[key], chunks = t.geos.map(() => Array.from({ length: CHX * CHZ }, () => []));
       let placed = 0, tries = 0;
       while (placed < t.n && tries < t.n * 30) {
         tries++;
@@ -139,15 +150,16 @@ export class World {
         const yaw = rand(0, Math.PI * 2);
         p.set(x, T.heightAt(x, z) - 0.1, z); q.setFromAxisAngle(up, yaw); s.set(sc, sc * (t.small ? rand(0.8, 1.2) : 1), sc);
         const ci = clamp(Math.floor((x - X0) / (SX / CHX)), 0, CHX - 1) + CHX * clamp(Math.floor((z - Z0) / (SZ / CHZ)), 0, CHZ - 1);
-        chunks[ci].push(m.compose(p, q, s).clone());
-        if (t.r) this.addCollider({ x, z, r: t.r * sc, tree: !!t.tree, kind: key, yaw, sc, y: p.y });   // (kind, yaw, sc, y: birds perch on the crowns)
+        const vi = look(t, x, z);
+        chunks[vi][ci].push(m.compose(p, q, s).clone());
+        if (t.r) this.addCollider({ x, z, r: t.r * sc, tree: !!t.tree, kind: key + vi, yaw, sc, y: p.y });   // (kind, yaw, sc, y: birds perch on the crowns)
         else if (t.rock && sc > 0.9) this.addCollider({ x, z, r: 0.9 * sc, rock: true });
         else if (t.rock || key === 'bush' || key === 'hbush' || key === 'fern') this.addDeco(x, z, (t.rock ? 1.0 : key === 'fern' ? 0.8 : 1.0) * sc);
         placed++;
       }
-      for (const list of chunks) {
+      for (let vi = 0; vi < t.geos.length; vi++) for (const list of chunks[vi]) {
         if (!list.length) continue;
-        const im = new THREE.InstancedMesh(t.geo, MAT.solid, list.length);
+        const im = new THREE.InstancedMesh(t.geos[vi], MAT.solid, list.length);
         list.forEach((mm, i) => im.setMatrixAt(i, mm));
         im.castShadow = t.shadow; im.receiveShadow = !t.shadow;
         im.computeBoundingSphere();
@@ -157,8 +169,8 @@ export class World {
     }
   }
 
-  // Small things on the ground that go with the painted grass and mud (js/terrain.js): leafy plants and
-  // pebbles, grey rocks and round bushes (the flowers near the player are js/grass.js). Instanced and chunked like the jungle (one draw call per chunk and kind), no
+  // Small things on the ground that go with the painted grass and mud (js/terrain.js): leafy plants,
+  // pebbles, grey rocks, round bushes, cut stumps and broken logs (the flowers near the player are js/grass.js). Instanced and chunked like the jungle (one draw call per chunk and kind), no
   // shadows, no colliders. They use their own random numbers, so the jungle, crates and colliders stay
   // exactly where they were. Phones get about half.
   _groundDecor() {
@@ -167,10 +179,12 @@ export class World {
     const geo = fn => { const b = new GeoBuilder(); fn(b); return b.build().children[0].geometry; };
     const T = this.T, k = this.lite ? 0.55 : 1;
     const kinds = [
-      { geo: geo(leafyPlant), n: 650, sc: [0.6, 1.2], road: 5.4 },
-      { geo: geo(pebble), n: 1400, sc: [0.12, 0.42], road: 4.8, flat: true, tints: [0x8e8c92, 0x9a978f, 0x8a93a3, 0x98a0ad, 0x86725e], deco: 1.2 },   // one mesh, coloured per pebble
-      { geo: geo(boulder), n: 700, sc: [0.45, 1.05], road: 6, flat: true, tints: [0xffffff, 0xe8edf5, 0xdde5f0, 0xf2efe9], solid: 0.55, deco: 1.35 },   // grey and bluish-grey faceted rocks (you bump into the bigger ones)
-      { geo: geo(meadowBush), n: 380, sc: [0.5, 1.0], road: 6, tints: [0xffffff, 0xe8f4e2, 0xfff4dc], deco: 1.15 },   // round, faceted, bright
+      { geo: geo(F.smallPlant), n: 650, sc: [0.7, 1.2], road: 5.4 },
+      { geo: geo(F.pebbles), n: 1100, sc: [0.5, 1.1], road: 4.8, tints: [0x9aa0aa, 0xa8adb6, 0x8f96a2, 0xb0b4bb, 0x9a8a7a], deco: 0.7 },   // little groups of pebbles, coloured per group
+      { geo: geo(F.rockCluster), n: 700, sc: [0.45, 1.0], road: 6, flat: true, tints: [0xa3a8b1, 0xb2b7c0, 0x99a2b0, 0xaeb0b4], solid: 0.55, deco: 1.4 },   // grey and bluish-grey rocks with small stones (you bump into the bigger ones)
+      { geo: geo(F.roundBush), n: 380, sc: [0.5, 1.0], road: 6, tints: [0xffffff, 0xeef8e4, 0xfff6de], deco: 1.15 },   // round, faceted, bright
+      { geo: geo(F.stump), n: 140, sc: [0.75, 1.25], road: 6, collide: 0.5, deco: 1.2 },          // cut stumps with roots
+      { geo: geo(F.fallenLog), n: 100, sc: [0.7, 1.15], road: 6.5, log: true, deco: 1.6 },       // broken fallen logs
     ];
     const m = new THREE.Matrix4(), q = new THREE.Quaternion(), sv = new THREE.Vector3(), p = new THREE.Vector3(), e = new THREE.Euler();
     for (const t of kinds) {
@@ -190,6 +204,8 @@ export class World {
         chunks[ci].push({ m: m.compose(p, q, sv).clone(), c: t.tints ? t.tints[Math.floor(rnd(0, t.tints.length))] : 0 });
         this.addDeco(x, z, sc * (t.deco || 0.45));                                                   // grass keeps off it
         if (t.solid && sc > t.solid) this.addCollider({ x, z, r: sc * 1.05, rock: true });
+        if (t.collide) this.addCollider({ x, z, r: sc * t.collide, rock: true });
+        if (t.log) for (const d of [-0.8, 0.8]) this.addCollider({ x: x + Math.cos(e.y) * d * sc, z: z - Math.sin(e.y) * d * sc, r: 0.38 * sc, rock: true });
         placed++;
       }
       for (const list of chunks) {
@@ -475,71 +491,6 @@ function picnicTable(b, x, y, z, ry, world) {
   });
   world.addCollider({ x, z, r: 1.0 });
 }
-function jungleTree(b) {
-  b.cyl(0.26, 0.42, 9, 6, 0, 4.5, 0, 0x6b5a45);
-  for (let i = 0; i < 3; i++) { const a = i * 2.1; b.box(0.22, 0.9, 1.0, Math.cos(a) * 0.38, 0.4, Math.sin(a) * 0.38, 0x5e4f3c, 'solid', 0, -a, 0.35); }
-  b.add(new THREE.IcosahedronGeometry(3.0, 0), 0x2f6b2c, 0, 9.4, 0, 0, 0, 0, 'solid', 1.35, 0.7, 1.35);
-  b.add(new THREE.IcosahedronGeometry(2.4, 0), 0x3b7a33, 1.3, 10.5, 0.6, 0.4, 0.2, 0, 'solid', 1.2, 0.75, 1.2);
-  b.add(new THREE.IcosahedronGeometry(2.1, 0), 0x2a5e28, -1.1, 10.1, -0.9, 0.2, 0.7, 0, 'solid', 1.2, 0.7, 1.2);
-  b.box(0.06, 3.4, 0.06, 1.6, 7.0, 0.5, 0x2d5a26); b.box(0.06, 2.6, 0.06, -1.3, 7.6, -0.9, 0x2d5a26); b.box(0.05, 3.0, 0.05, 0.2, 7.2, 1.7, 0x335f2a);
-}
-function tallTree(b) {
-  b.cyl(0.32, 0.55, 15, 6, 0, 7.5, 0, 0x8a8172);
-  b.add(new THREE.IcosahedronGeometry(4.4, 0), 0x356f2e, 0, 15.4, 0, 0, 0.3, 0, 'solid', 1.3, 0.45, 1.3);
-  b.add(new THREE.IcosahedronGeometry(2.8, 0), 0x2c6127, 1.5, 16.3, -1.0, 0.3, 0, 0, 'solid', 1.2, 0.5, 1.2);
-}
-function palmTree(b) {
-  let px = 0, py = 0;
-  for (let i = 0; i < 5; i++) {
-    const sh = 1.5, t = i / 5, ox = 0.12 * (1 + t);
-    b.cyl(0.2 * (1 - t * 0.35), 0.24 * (1 - t * 0.3), sh * 1.04, 6, px + ox / 2, py + sh / 2, 0, i % 2 ? 0x8a6a45 : 0x7a5c3b, 0, 0, -ox * 0.15);
-    px += ox; py += sh;
-  }
-  const cols = [0x3f8f3a, 0x4fa043, 0x35802f];
-  for (let i = 0; i < 8; i++) b.group(px, py, 0, 0, -(i / 8) * Math.PI * 2, 0, () => b.box(0.9, 0.08, 3.2, 0, -0.35, 1.4, cols[i % 3], 'solid', 0.45, 0, 0));
-  b.add(new THREE.IcosahedronGeometry(0.45, 0), 0x6b4b2e, px, py - 0.2, 0);
-}
-function fern(b) {
-  for (let i = 0; i < 7; i++) b.group(0, 0.15, 0, 0, (i / 7) * Math.PI * 2, 0, () => b.box(0.32, 0.03, 1.3, 0, 0.25, 0.55, i % 2 ? 0x4f9e38 : 0x60b043, 'solid', -0.5, 0, 0));
-}
-function bush(b) {
-  b.add(new THREE.IcosahedronGeometry(0.9, 0), 0x4d9a37, 0, 0.55, 0, 0, 0, 0, 'solid', 1, 0.75, 1);
-  b.add(new THREE.IcosahedronGeometry(0.6, 0), 0x5eab43, 0.6, 0.45, 0.3, 0.5, 0, 0);
-}
-function rock(b) { b.add(new THREE.DodecahedronGeometry(1, 0), 0x7d7b74, 0, 0.35, 0, 0.3, 0.5, 0, 'solid', 1.2, 0.75, 1); }
-function pineTree(b) {
-  b.cyl(0.2, 0.3, 3, 6, 0, 1.5, 0, 0x6a4a2e);
-  b.add(new THREE.ConeGeometry(2.4, 3.4, 7), 0x2f6b3a, 0, 3.6, 0);
-  b.add(new THREE.ConeGeometry(1.9, 3.0, 7), 0x377a42, 0, 5.4, 0, 0, 0.4, 0);
-  b.add(new THREE.ConeGeometry(1.3, 2.6, 7), 0x3f8649, 0, 7.1, 0, 0, 0.8, 0);
-}
-function pineTall(b) {
-  b.cyl(0.26, 0.4, 5, 6, 0, 2.5, 0, 0x5e4128);
-  for (let i = 0; i < 4; i++) b.add(new THREE.ConeGeometry(3.0 - i * 0.6, 3.6, 7), i % 2 ? 0x2c6436 : 0x34723f, 0, 5 + i * 2.2, 0, 0, i * 0.5, 0);
-}
-// a small leafy plant: broad pointed leaves around a centre
-function leafyPlant(b) {
-  const cols = [0x5fb23a, 0x76c447, 0x4f9e30];
-  for (let i = 0; i < 6; i++) {
-    const a = i / 6 * Math.PI * 2;
-    b.group(0, 0.06, 0, 0, a, 0, () => b.add(new THREE.OctahedronGeometry(0.22, 0), cols[i % 3], 0, 0.1, 0.24, -0.55, 0, 0, 'solid', 0.75, 0.18, 1.5));
-  }
-  b.add(new THREE.OctahedronGeometry(0.12, 0), 0x86d052, 0, 0.18, 0, 0, 0.4, 0, 'solid', 1, 1.4, 1);
-}
-// a grey faceted rock with a smaller one leaning on it (lighter on top)
-function boulder(b) {
-  b.add(new THREE.DodecahedronGeometry(1, 0), 0x8f9198, 0, 0.45, 0, 0.3, 0.6, 0.1, 'solid', 1.25, 0.8, 1.05);
-  b.add(new THREE.DodecahedronGeometry(0.55, 0), 0x9c9ea5, 1.05, 0.25, 0.35, 0.5, 0.2, 0.4, 'solid', 1.1, 0.75, 1);
-  b.add(new THREE.DodecahedronGeometry(0.22, 0), 0x8a8c94, -1.1, 0.1, 0.3, 0.3, 0.5, 0.2);              // little stones beside it
-  b.add(new THREE.DodecahedronGeometry(0.16, 0), 0x979aa2, 1.55, 0.06, -0.2, 0.1, 0.9, 0.4);
-}
-// a bright, round, faceted bush: a big blob and two smaller ones
-function meadowBush(b) {
-  b.add(new THREE.IcosahedronGeometry(0.75, 1), 0x6cc23f, 0, 0.55, 0, 0, 0, 0, 'solid', 1, 0.82, 1);
-  b.add(new THREE.IcosahedronGeometry(0.5, 1), 0x82d24f, 0.55, 0.42, 0.25, 0.4, 0.3, 0, 'solid', 1, 0.85, 1);
-  b.add(new THREE.IcosahedronGeometry(0.42, 1), 0x5db236, -0.45, 0.36, -0.2, 0.2, 0.7, 0, 'solid', 1, 0.85, 1);
-}
-function pebble(b) { b.add(new THREE.IcosahedronGeometry(1, 0), 0xffffff, 0, 0.4, 0, 0.2, 0.4, 0, 'solid', 1.25, 0.7, 1); }   // white: tinted per instance
 function grassTuft(b) {
   for (let i = 0; i < 5; i++) b.box(0.08, 0.55, 0.02, Math.cos(i * 1.3) * 0.12, 0.25, Math.sin(i * 1.3) * 0.12, i % 2 ? 0x6aa843 : 0x7cb850, 'solid', (i - 2) * 0.2, i * 1.2, 0);
 }
