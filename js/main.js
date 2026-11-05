@@ -392,7 +392,7 @@ function applyQuality(name) {
   world.sun.castShadow = q.shadows;
   world.dayNight.setQuality(QUALITY[name] ? name : 'medium');   // lamps' real lights + torch smoke
   grass.setQuality(QUALITY[name] ? name : 'medium');            // how far and how dense the grass blades grow
-  world.T.mesh.material.userData.ground.uGrLayers.value = name === 'low' ? 1 : 2;   // the ground's leaf clumps: one layer on Low
+  world.T.mesh.material.userData.ground.uGrLayers.value = name === 'low' ? 2 : 3;   // the ground's leaf layers: two on Low
   if (world.sun.shadow.mapSize.x !== q.size) {
     world.sun.shadow.mapSize.set(q.size, q.size);
     if (world.sun.shadow.map) { world.sun.shadow.map.dispose(); world.sun.shadow.map = null; }

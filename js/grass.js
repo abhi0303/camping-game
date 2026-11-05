@@ -1,4 +1,4 @@
-// Grass blades around the player: small clusters of 3–7 low-poly blades (dark at the base, lighter at the
+// Grass around the player: mostly short, broad low-poly leaves lying low, and now and then a taller clump of blades (dark at the base, lighter at the
 // tips, swaying a little in the wind) standing on the painted ground (js/terrain.js), in the same greens and
 // the same meadow patches, never in the mud, on roads, river banks, cliffs, farm pens or paths.
 // Two instanced meshes (tall clusters and short leafy ones) — two draw calls. They cover a circle around the
@@ -7,7 +7,7 @@
 // grass doesn't jump around as you walk. The circle's size and density follow the graphics quality.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { GROUND, MUD_T } from './terrain.js';
+import { GROUND, MUD_T, TONE_STEPS } from './terrain.js';
 import { RIVER_HALF, START, CAMP, GIANT, TOWER_ZONE } from './terrain.js';
 
 const QUALITY = { low: { r: 18, step: 1.0 }, medium: { r: 28, step: 0.72 }, high: { r: 38, step: 0.6 } };
@@ -30,22 +30,22 @@ function gnoise(x, y) {
 }
 export const mudAt = (x, z) => gnoise(x * 0.065, z * 0.065) * 0.55 + gnoise(x * 0.17 + 7.3, z * 0.17 + 7.3) * 0.3 + gnoise(x * 0.5 - 3.1, z * 0.5 - 3.1) * 0.15;
 const toneAt = (x, z) => Math.min(1, Math.max(0, gnoise(x * 0.11, z * 0.11) * 0.7 + gnoise(x * 0.031, z * 0.031) * 0.5 - 0.12));
-const PAL = [GROUND.g0, GROUND.g1, GROUND.g2, GROUND.g3, GROUND.g4].map(h => new THREE.Color(h));
-const palAt = t => PAL[t < 0.2 ? 0 : t < 0.42 ? 1 : t < 0.72 ? 2 : t < 0.93 ? 3 : 4];
+const PAL = [GROUND.g0, GROUND.g1, GROUND.g2, GROUND.g3].map(h => new THREE.Color(h));
+const palAt = t => PAL[t < TONE_STEPS[0] ? 0 : t < TONE_STEPS[1] ? 1 : t < TONE_STEPS[2] ? 2 : 3];
 
 // a cluster of blades: thin three-sided cones leaning outwards, coloured dark at the base and light at the tip
 // (white-ish: each cluster is tinted by its instance colour)
-function cluster(n, hMin, hMax, spread, width) {
+function cluster(n, hMin, hMax, spread, width, lean0 = 0.25, flat = 0.45) {
   const parts = [];
   for (let i = 0; i < n; i++) {
-    const a = i / n * Math.PI * 2 + (i % 2) * 0.4, h = hMin + (hMax - hMin) * ((i * 7) % n) / Math.max(1, n - 1), lean = 0.25 + ((i * 3) % 4) * 0.12;
+    const a = i / n * Math.PI * 2 + (i % 2) * 0.4 + ((i * 5) % 3) * 0.3, h = hMin + (hMax - hMin) * ((i * 7) % n) / Math.max(1, n - 1), lean = lean0 + ((i * 3) % 4) * 0.12;
     const g = new THREE.ConeGeometry(width, h, 3, 1, true);
     g.translate(0, h / 2, 0);
-    g.scale(1, 1, 0.45);
+    g.scale(1, 1, flat);
     g.rotateZ(-Math.cos(a) * lean); g.rotateX(Math.sin(a) * lean); g.rotateY(a * 0.7);
     g.translate(Math.cos(a) * spread, 0, Math.sin(a) * spread);
     const pos = g.attributes.position, col = [];
-    for (let k = 0; k < pos.count; k++) { const t = Math.min(1, Math.max(0, pos.getY(k) / h)); const v = 0.45 + 0.7 * t; col.push(v, v, v); }
+    for (let k = 0; k < pos.count; k++) { const t = Math.min(1, Math.max(0, pos.getY(k) / h)); const v = 0.62 + 0.5 * t; col.push(v, v, v); }
     g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
     parts.push(g.toNonIndexed ? g.toNonIndexed() : g);
   }
@@ -55,7 +55,8 @@ function cluster(n, hMin, hMax, spread, width) {
 export class Grass {
   constructor(scene, world) {
     this.scene = scene; this.world = world; this.kx = null; this.job = null; this.rev = -1;
-    this.geos = [cluster(6, 0.28, 0.55, 0.07, 0.045), cluster(4, 0.16, 0.3, 0.1, 0.07)];
+    // [0] the occasional tall clump of blades, [1] short broad leaves lying low (most of them)
+    this.geos = [cluster(5, 0.24, 0.58, 0.06, 0.04), cluster(5, 0.12, 0.22, 0.05, 0.085, 0.8, 0.22)];
     this.time = { value: 0 };
     const mat = this.mat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
     mat.onBeforeCompile = sh => {                       // a gentle sway: the higher the vertex, the more it moves
@@ -115,15 +116,15 @@ export class Grass {
     for (; J.k < end; J.k++) {
       const ai = J.i0 + (J.k % J.n), aj = J.j0 + Math.floor(J.k / J.n);
       const h1 = gh12(ai * 1.31 + 0.7, aj * 0.97 + 3.3), h2 = gh12(ai * 0.73 + 9.1, aj * 1.17 + 1.9), h3 = gh12(ai + 17.7, aj + 5.3);
-      if (h3 < 0.12) continue;                                   // a few gaps, so it isn't a lawn
+      if (h3 < 0.3) continue;                                    // gaps: the painted leaves show through
       const x = (ai + 0.1 + h1 * 0.8) * s, z = (aj + 0.1 + h2 * 0.8) * s, dx = x - J.cx, dz = z - J.cz, d2 = dx * dx + dz * dz;
       if (d2 > r2) continue;
       const y = T.heightAt(x, z);
       if (!this._ok(x, z, y)) continue;
-      const v = h3 < 0.38 ? 1 : 0, st = this.stage[v];
+      const tall = h3 > 0.92 && h1 > 0.35, v = tall ? 0 : 1, st = this.stage[v];   // tall blades: about 1 spot in 20
       if (st.n >= this.max) continue;
       const edge = Math.min(1, (1 - Math.sqrt(d2) / Q.r) * 5);   // shrink near the circle's edge (no hard border)
-      const size = (0.75 + h1 * 0.6) * (0.35 + 0.65 * edge);
+      const size = (tall ? 0.7 + h1 * 0.5 : 0.8 + h1 * 0.7) * (0.35 + 0.65 * edge);
       q.setFromAxisAngle(up, h2 * Math.PI * 2);
       m.compose(p.set(x, y - 0.03, z), q, sc.set(size, size * (0.8 + h3 * 0.5), size));
       m.toArray(st.mat, st.n * 16);

@@ -209,22 +209,23 @@ function terrainMesh(T, riverD, roadD) {
 
 /* ---------- the painted ground: a carpet of small low-poly leaf clumps with brown mud patches ----------
    Drawn by the terrain's shader from the world position (no texture, no extra geometry, no seams):
-   - two layers of small overlapping grass clumps (about 0.4–0.7 m), each a star of pointed leaves with two
-     facets per leaf (one lit, one shaded), a dark heart and lighter tips; clumps further south overlap the
-     ones behind them, like a painted meadow;
-   - the clumps' greens come in soft meadow patches: forest and deep greens, the main medium green, bright
-     lime, now and then yellow-green; the gaps between clumps show dark forest green;
-   - mud: no clumps grow where a slow noise is high, so grass overhangs the mud with spiky edges and a
+   - three layers of small, short, broad, pointed leaves (about 20–50 cm) at random angles and sizes,
+     overlapping into a continuous carpet; each leaf has two facets (lit / shaded side of its midrib);
+   - the greens come in soft meadow patches: mostly bright green, then medium, some deep green and a few
+     yellow-green highlights (TONE_STEPS); darker green shows in the gaps and round the mud;
+   - mud: no leaves grow where a slow noise is high, so grass overhangs the mud with jagged edges and a
      darker rim; the mud has earth lumps and tiny stones;
-   - far away the detail fades to the average colours (no shimmer). Phones draw one clump layer, not two.
+   - far away the detail fades to the average colours (no shimmer). Low quality draws two leaf layers.
    Faces that are not grass (road verges, river banks, rock slopes, sandy build zones) keep their own colour
    (aGrass = 0). Lighting, shadows, fog and day / night work as before (only the surface colour changes).
    The same palette and mud noise are used by the grass blades (js/grass.js). */
-export const GROUND = { g0: 0x2c6420, g1: 0x3b7d28, g2: 0x4f9a33, g3: 0x6dbb3e, g4: 0x9ccd4a, gap: 0x24521a, edge: 0x2f6a20, m0: 0x83552a, m1: 0x9a6936, m2: 0x5f3b1e };
+export const GROUND = { g0: 0x3f8a2c, g1: 0x56a235, g2: 0x6dbd3e, g3: 0x9dce4e, gap: 0x2e6922, edge: 0x37762a, m0: 0x83552a, m1: 0x9a6936, m2: 0x5f3b1e };
+// how much of each green (by the meadow-tone noise): ~15 % deep, ~25 % medium, ~55 % bright, ~5 % yellow-green
+export const TONE_STEPS = [0.28, 0.43, 0.92];
 export const MUD_T = 0.665;
 export function groundMaterial() {
   const mat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
-  const u = { uGrLayers: { value: 2 } };
+  const u = { uGrLayers: { value: 3 } };
   for (const k in GROUND) u['uGr_' + k] = { value: new THREE.Color(GROUND[k]) };
   mat.userData.ground = u;
   mat.onBeforeCompile = sh => {
@@ -236,17 +237,17 @@ export function groundMaterial() {
       .replace('#include <common>', '#include <common>\n' + GROUND_GLSL)
       .replace('#include <color_fragment>', `#include <color_fragment>
         if (vGrass > 0.01) {
-          float far = smoothstep(22.0, 75.0, distance(vGWorld, cameraPosition));
+          float far = smoothstep(16.0, 60.0, distance(vGWorld, cameraPosition));
           diffuseColor.rgb = mix(diffuseColor.rgb, groundColor(vGWorld.xz, far), vGrass);
         }`);
   };
-  mat.customProgramCacheKey = () => 'ground-v4';
+  mat.customProgramCacheKey = () => 'ground-v7';
   return mat;
 }
 const GROUND_GLSL = /* glsl */`
 varying float vGrass; varying vec3 vGWorld;
 uniform float uGrLayers;
-uniform vec3 uGr_g0, uGr_g1, uGr_g2, uGr_g3, uGr_g4, uGr_gap, uGr_edge, uGr_m0, uGr_m1, uGr_m2;
+uniform vec3 uGr_g0, uGr_g1, uGr_g2, uGr_g3, uGr_gap, uGr_edge, uGr_m0, uGr_m1, uGr_m2;
 const float MUD_T = ${MUD_T};
 float gh12(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
 vec2 gh22(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973)); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.xx + p3.yz) * p3.zy); }
@@ -256,28 +257,31 @@ float gnoise(vec2 p) {
 }
 float gmud(vec2 p) { return gnoise(p * 0.065) * 0.55 + gnoise(p * 0.17 + 7.3) * 0.3 + gnoise(p * 0.5 - 3.1) * 0.15; }
 float gtone(vec2 p) { return clamp(gnoise(p * 0.11) * 0.7 + gnoise(p * 0.031) * 0.5 - 0.12, 0.0, 1.0); }
-vec3 gpal(float t) { return t < 0.2 ? uGr_g0 : t < 0.42 ? uGr_g1 : t < 0.72 ? uGr_g2 : t < 0.93 ? uGr_g3 : uGr_g4; }
-// one layer of leaf clumps (scale: cells per metre). rgb: colour, a: 1 where a clump covers p
-vec4 gclumps(vec2 p, float scale, float seed, float mud, float tone) {
+vec3 gpal(float t) { return t < ${TONE_STEPS[0]} ? uGr_g0 : t < ${TONE_STEPS[1]} ? uGr_g1 : t < ${TONE_STEPS[2]} ? uGr_g2 : uGr_g3; }
+// one layer of leaves (scale: cells per metre): every cell has one short, broad, pointed leaf (a kite shape)
+// at a random angle and size, reaching into the next cells, so leaves of neighbouring cells overlap.
+// Two facets per leaf (lit / shaded side of the midrib), a little lighter toward the tip.
+// rgb: colour, a: 1 where a leaf covers p
+vec4 gleaves(vec2 p, float scale, float seed, float mud, float tone) {
   vec2 q = p * scale + seed, ip = floor(q), fp = fract(q);
-  float best = -1e9; vec4 res = vec4(0.0);
+  float best = -1.0; vec4 res = vec4(0.0);
   for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
     vec2 o = vec2(float(i), float(j)), id = ip + o;
-    vec2 c = o + 0.15 + gh22(id) * 0.7, d = fp - c;
-    float hh = gh12(id + 5.7), R = 0.62 + hh * 0.38, L = length(d);
-    if (L > R) continue;
-    if (mud + (gh12(id + 1.3) - 0.5) * 0.06 > MUD_T) continue;            // no grass in the mud (jagged edge)
-    float k = 5.0 + floor(hh * 4.0), s = (atan(d.y, d.x) + hh * 6.2832) * k / 6.2832, fs = fract(s);
-    float tip = 1.0 - abs(fs * 2.0 - 1.0);                                   // 1 in the middle of a leaf, 0 between leaves
-    float r = R * (0.38 + 0.62 * pow(tip, 0.7));
-    if (L > r) continue;
-    float order = id.y + c.y;                                                // southern clumps lie over northern ones
+    vec2 c = o + gh22(id);                                                   // the leaf's base
+    float hh = gh12(id + 5.7), ang = hh * 6.2832 + gh12(id + 2.1);
+    vec2 dir = vec2(cos(ang), sin(ang)), d = fp - c;
+    float u = dot(d, dir), v = dot(d, vec2(-dir.y, dir.x));
+    float L = 0.72 + gh12(id + 3.3) * 0.28, w = L * (0.42 + gh12(id + 4.4) * 0.2), um = 0.38 * L;
+    float f = u < um ? (u + 0.14 * L) / (um + 0.14 * L) : (L - u) / (L - um); // straight edges: a polygon
+    if (f <= 0.0 || abs(v) > w * f) continue;
+    if (mud + (gh12(id + 1.3) - 0.5) * 0.06 > MUD_T) continue;              // no leaves in the mud (jagged edge)
+    float order = gh12(id + 8.8);
     if (order <= best) continue;
     best = order;
-    vec3 col = gpal(clamp(tone + (gh12(id + 9.1) - 0.5) * 0.32, 0.0, 1.0));
-    if (mud > MUD_T - 0.05) col = mix(col, uGr_edge, 0.55);                  // darker grass round the mud
-    col *= fs < 0.5 ? 1.08 : 0.86;                                           // two facets per leaf
-    col *= 0.68 + 0.42 * (L / r);                                            // dark heart, lighter tips
+    vec3 col = gpal(clamp(tone + (gh12(id + 9.1) - 0.5) * 0.26, 0.0, 1.0));
+    if (mud > MUD_T - 0.05) col = mix(col, uGr_edge, 0.5);                   // darker grass round the mud
+    col *= v > 0.0 ? 1.06 : 0.9;                                             // the two facets
+    col *= 0.9 + 0.16 * clamp(u / L, 0.0, 1.0);                              // lighter toward the tip
     res = vec4(col, 1.0);
   }
   return res;
@@ -292,15 +296,16 @@ vec3 groundColor(vec2 p, float far) {
     if (far < 0.7) {                                                         // earth lumps and tiny stones
       vec2 q = p * 2.4, ip = floor(q), fp = fract(q);
       vec2 c = 0.2 + gh22(ip) * 0.6; float e = length(fp - c), ph = gh12(ip + 11.0);
-      if (ph > 0.88 && e < 0.2 + ph * 0.1) bg = (ph > 0.96 ? vec3(0.32, 0.31, 0.32) : uGr_m2) * (1.0 + clamp(c.y - fp.y, -0.3, 0.3) * 0.9);
+      if (ph > 0.88 && e < 0.2 + ph * 0.1) bg = (ph > 0.985 ? vec3(0.24, 0.22, 0.21) : uGr_m2) * (1.0 + clamp(c.y - fp.y, -0.3, 0.3) * 0.9);
     }
-  } else bg = mix(uGr_gap, gpal(tone) * 0.62, 0.35);                          // dark green between the clumps
-  vec3 avg = mud > MUD_T ? mix(uGr_m0, uGr_m1, 0.5) : mix(uGr_gap, gpal(tone) * 0.92, 0.72);
+  } else bg = mix(uGr_gap, gpal(tone) * 0.7, 0.3);                           // dark green between and under the leaves
+  vec3 avg = mud > MUD_T ? mix(uGr_m0, uGr_m1, 0.5) : mix(uGr_gap, gpal(tone), 0.82);
   if (far > 0.98) return avg;
+  // overlapping layers of leaves, larger ones first, smaller ones on top (Low: two layers)
   vec3 col = bg;
-  vec4 a = gclumps(p, 1.55, 0.0, mud, tone);
-  if (a.a > 0.0) col = a.rgb;
-  if (uGrLayers > 1.5) { vec4 b = gclumps(p, 2.35, 17.3, mud, tone); if (b.a > 0.0) col = mix(col, b.rgb, 0.92); }
+  vec4 a = gleaves(p, 2.05, 0.0, mud, tone);  if (a.a > 0.0) col = a.rgb;
+  vec4 b = gleaves(p, 2.8, 17.3, mud, tone); if (b.a > 0.0) col = b.rgb;
+  if (uGrLayers > 2.5) { vec4 c = gleaves(p, 3.7, 41.9, mud, tone); if (c.a > 0.0) col = c.rgb; }
   return mix(col, avg, far);
 }`;
 
