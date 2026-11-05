@@ -304,6 +304,10 @@ function mapMarkers() {
   rvs.forEach((r, i) => { if (!(player.frame === 'rv' && player.rv === r)) markers.push({ x: r.root.position.x, z: r.root.position.z, icon: 'rv', label: rvs.length > 1 ? `RV ${i + 1}` : 'RV', edge: r === player.rv }); });
   remotes.each((r, p) => markers.push({ x: p.x, z: p.z, dot: r.color, label: (r.s.dn ? 'DOWN · ' : '') + r.s.n, edge: true }));
   for (const z of zombies.list) if (z.st !== 4) markers.push({ x: z.x, z: z.z, dot: '#e0362a' });
+  if (farm.active) {
+    markers.push({ x: STORE.x, z: STORE.z, icon: 'store', label: 'Farm Store' }, { x: MARKET.x, z: MARKET.z, icon: 'market', label: 'Market' },
+      { x: FARM_CENTER.x, z: FARM_CENTER.z, icon: 'plot', label: 'Farm' });
+  }
   if (farm.active && fishArea.on) {
     markers.push({ x: FISH_MARKET.x, z: FISH_MARKET.z, icon: 'fish_medium', label: 'Fish Market' });
     for (const sp of fishArea.spots) markers.push({ x: sp.stand.x, z: sp.stand.z, icon: 'rod', label: sp.i === 1 ? 'Fishing docks' : '' });
@@ -603,7 +607,7 @@ $('minimap').addEventListener('click', () => minimap.toggleBig());
 $('gunSlot').addEventListener('click', e => { e.stopPropagation(); if (!farm.active) combat.toggle(); });
 // phones: the goal line shows one line; tap it to read all of it
 hud.objective.addEventListener('click', e => { e.stopPropagation(); if (hud.objective.classList.contains('open')) { hud.objective.classList.remove('open'); clearTimeout(objT); } else openObjective(8); });
-$('bigmap').addEventListener('click', () => minimap.toggleBig(false));
+minimap.hooks = uiHooks;                        // the big map frees the mouse (scroll to zoom, drag to move)
 
 function updateHUD(dt) {
   if (toastT > 0) { toastT -= dt; if (toastT <= 0) hud.toast.classList.add('hidden'); }
@@ -824,7 +828,7 @@ overlay.addEventListener('click', e => { if (e.target === overlay && started) re
 $('menuBtn').addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); openMenu(); });
 document.addEventListener('pointerlockchange', () => {
   // Esc frees the mouse -> pause menu
-  if (!document.pointerLockElement && started && !input.dragging && !inv.isOpen && !farmUI.isOpen && !notebook.isOpen && !editor.open && !designer.open && !fishing.cardOpen) openMenu();
+  if (!document.pointerLockElement && started && !input.dragging && !inv.isOpen && !farmUI.isOpen && !notebook.isOpen && !minimap.bigOpen && !editor.open && !designer.open && !fishing.cardOpen) openMenu();
 });
 // installable app: back button (Android) closes the open popup or shows the menu
 app.init({
@@ -987,7 +991,7 @@ function debugStage(st, build) {
   if (build) { designer.show(build); designer._action('build'); designer.close(); }
   if (st === 'siege' || st === 'giants') survival._toStage(st);
 }
-window.__game = { debugStage, net, session, voice, birds, ambience, notebook, grass, farmPanel, structures, designer, giants, player, rvs, remotes, obstacles, bridgeWorld, materials, world, inv, gear, editor, input, rig, camera, zombies, survival, combat, applySave, collectSave, saveNow, farm, farmEco, farmUI, farmland, fishArea, fishing, dayNight: world.dayNight, get objI() { return objI; },
+window.__game = { debugStage, net, session, voice, birds, ambience, notebook, grass, farmPanel, minimap, structures, designer, giants, player, rvs, remotes, obstacles, bridgeWorld, materials, world, inv, gear, editor, input, rig, camera, zombies, survival, combat, applySave, collectSave, saveNow, farm, farmEco, farmUI, farmland, fishArea, fishing, dayNight: world.dayNight, get objI() { return objI; },
   // test hooks: advance the game n frames / pin the camera
   run: n => { for (let i = 0; i < n; i++) step(1 / 60); renderer.render(scene, camera); }, setCam: a => { freezeCam = a; } };
 

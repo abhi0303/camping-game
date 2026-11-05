@@ -99,7 +99,20 @@
   </div></div>
 
   <!-- full map -->
-  <div id="bigmap" class="hidden"><canvas id="bigmapCanvas" width="720" height="720"></canvas></div>
+  <div id="bigmap" class="hidden">
+    <div id="bigmapPanel">
+      <canvas id="bigmapCanvas" width="720" height="720"></canvas>
+      <div class="bm-title"><i data-ic="target"></i> Map</div>
+      <button class="bm-close" data-bm="close" title="Close (M / Esc)"><i data-ic="close"></i></button>
+      <div class="bm-tools">
+        <button data-bm="in" title="Zoom in"><i data-ic="plus"></i></button>
+        <button data-bm="out" title="Zoom out"><i data-ic="minus"></i></button>
+        <button data-bm="me" title="Centre on me"><i data-ic="target"></i></button>
+        <button data-bm="all" title="Whole map"><i data-ic="fullscreen"></i></button>
+      </div>
+      <div class="bm-hint"><span class="desk-only">Scroll to zoom · drag to move · M or Esc to close</span><span class="touch-only">Pinch to zoom · drag to move</span></div>
+    </div>
+  </div>
 
   <!-- storage popup -->
   <div id="storageUI" class="hidden">

@@ -21,6 +21,14 @@ export const clock = ms => {
   return h ? `${h}:${String(m).padStart(2, '0')}:${sec}` : `${String(m).padStart(2, '0')}:${sec}`;
 };
 const eggsText = n => (n === 1 ? '1 Egg Ready to Collect' : `${n} Eggs Ready to Collect`);
+// the numbers of a shelter: label / value rows in the small HUD panel, a grid of tiles in the popups
+function stats(compact) {
+  const tiles = [];
+  return {
+    row: (l, v, cls = '') => (compact ? `<div class="fi-r ${cls}"><span>${l}</span><b>${v}</b></div>` : (tiles.push(`<div class="fi-tile ${cls}"><b>${v}</b><small>${l}</small></div>`), '')),
+    tiles: () => (tiles.length ? `<div class="fi-tiles">${tiles.join('')}</div>` : ''),
+  };
+}
 const BUY_STEP = { feed: 10, wood: 10, stone: 10 };
 const FARM_TITLE = { coop: 'CHICKEN FARM', goat_shed: 'GOAT FARM', barn: 'COW FARM', stable: 'HORSE STABLE' };
 const NOUN = { egg: 'egg', egg_brown: 'egg', egg_dark: 'egg', goat_milk: 'milk', cow_milk: 'milk' };
@@ -30,12 +38,12 @@ const kind = a => (a.nest ? 'Chicken' : a.grow ? 'Horse' : a.name);
 const coat = k => (k && k.coat ? `<i class="coat" style="background:${k.coat}"></i>` : '');
 // the farmer's menu
 const STORE_MENU = [
-  ['animals', '🐔', 'Purchase animals', 'Regular White, Brown Desi and Black chickens, goats, cows, horses'],
-  ['sell', '💰', 'Sell farm products', 'eggs and milk'],
-  ['feed', '🌾', 'Purchase animal feed', 'for every animal on the farm'],
-  ['supplies', '🧰', 'Purchase farming supplies', 'seeds and tools'],
-  ['materials', '🧱', 'Purchase construction materials', 'wood and stone for shelters'],
-  ['orders', '📜', 'Customer orders', 'deliver goods for 10% more · daily streak bonus'],
+  ['animals', '🐔', 'Buy animals', 'chickens, goats, cows, horses'],
+  ['sell', '💰', 'Sell produce', 'eggs and milk'],
+  ['feed', '🌾', 'Buy feed', 'for every animal'],
+  ['materials', '🧱', 'Building materials', 'wood and stone'],
+  ['orders', '📜', 'Customer orders', '10% extra · daily streak'],
+  ['supplies', '🧰', 'Supplies', 'seeds and tools — coming soon'],
 ];
 const VEHICLES_UNLOCKED = false;      // (vehicles are not sold yet — the menu shows them once they are)
 
@@ -126,44 +134,43 @@ export class FarmUI {
     if (I.nests) return this._coopBox(bd, k, a, I, compact);
     if (a && a.grow) return this._stableBox(bd, k, a, I, compact);
     const prods = I.products.length ? I.products : (a.product ? [a.product] : []), noun = NOUN[prods[0]] || 'product';
-    const row = (l, v, cls = '') => `<div class="fi-r ${cls}"><span>${l}</span><b>${v}</b></div>`;
-    let h = `<div class="fi-t">${a.icon} ${FARM_TITLE[bd.type] || k.name.toUpperCase()} <small>plot ${bd.plot + 1}</small></div>`;
-    h += row(`Total ${plural(a.name)}`, `${I.count} / ${k.capacity}`);
-    if (!I.count) return h + `<div class="fi-note">No ${plural(a.name)} yet — buy some from the farmer at the Farm Store.</div>`;
+    const S = stats(compact), row = S.row;
+    let h = `<div class="fi-t">${a.icon} ${FARM_TITLE[bd.type] || k.name.toUpperCase()} <small>plot ${bd.plot + 1}</small></div>`, warn = '';
+    h += row(compact ? `Total ${plural(a.name)}` : plural(a.name), `${I.count} / ${k.capacity}`);
+    if (!I.count) return h + S.tiles() + `<div class="fi-note">No ${plural(a.name)} yet — buy some from the farmer at the Farm Store.</div>`;
     if (prods.length) {
-      if (I.paused) h += `<div class="fi-warn">⏸ Production Paused – Feed Required</div>`;
-      else if (I.full) h += `<div class="fi-warn">📦 Storage full — sell or upgrade the storage</div>`;
+      if (I.paused) warn = `<div class="fi-warn">⏸ Production paused — feed required</div>`;
+      else if (I.full) warn = `<div class="fi-warn">📦 Storage full — sell or upgrade the storage</div>`;
       else h += row(`Next ${noun} in`, isFinite(I.nextMs) ? left(I.nextMs) : 'feed first');
     }
     h += row('Feed due in', I.dueMs <= 0 ? `now · ${I.hungry} hungry` : left(I.dueMs), I.dueMs <= 0 ? 'bad' : I.dueMs < 15 * 60e3 ? 'warn' : '');
-    h += row('Feeding duration', compact ? `${I.feedHours} h` : `${I.feedHours} h · ${I.feedCost} feed each`, compact ? 'fi-opt' : '');
-    if (prods.length) h += row(`${noun === 'egg' ? 'Eggs' : 'Milk'} available`, prods.map(p => `${e.cat(p).icon} ${e.qty(p)}`).join(' · '));
-    if (!compact) h += row('Feed in storage', `🌾 ${e.qty('feed')}`, e.qty('feed') < I.need ? 'warn' : '');
-    return h;
+    if (compact) h += row('Feeding duration', `${I.feedHours} h`, 'fi-opt');
+    if (prods.length) h += row(compact ? `${noun === 'egg' ? 'Eggs' : 'Milk'} available` : 'in storage', prods.map(p => `${e.cat(p).icon} ${e.qty(p)}`).join(' · '));
+    if (!compact) h += row('feed in store', `🌾 ${e.qty('feed')}`, e.qty('feed') < I.need ? 'warn' : '');
+    return compact ? h + warn : h + warn + S.tiles();
   }
 
   // the chicken farm: every chicken has its own egg timer and nest box; the panel shows the shortest timer
   // (the next egg), the eggs waiting to be collected and the feeding. Colours: green laying · yellow an egg
   // is almost there · blue eggs ready · red feed required.
   _coopBox(bd, k, a, I, compact) {
-    const e = this.eco, feed = e.qty('feed');
-    const row = (l, v, cls = '') => `<div class="fi-r ${cls}"><span>${l}</span><b>${v}</b></div>`;
+    const e = this.eco, feed = e.qty('feed'), S = stats(compact), row = S.row;
     let h = `<div class="fi-t">${a.icon} ${FARM_TITLE[bd.type]} <small>plot ${bd.plot + 1}</small></div>`;
-    h += row('Total chickens', `${I.count} / ${k.capacity}`);
-    if (!I.count) return h + `<div class="fi-note">No chickens yet — buy some from the farmer at the Farm Store.</div>`;
+    h += row(compact ? 'Total chickens' : 'chickens', `${I.count} / ${k.capacity}`);
+    if (!I.count) return h + S.tiles() + `<div class="fi-note">No chickens yet — buy some from the farmer at the Farm Store.</div>`;
     const st = I.paused ? ['red', '⚠ Feed required'] : I.ready ? ['blue', compact ? `🥚 ${I.ready} egg${I.ready > 1 ? 's' : ''} ready` : `🥚 ${eggsText(I.ready)}`]
       : I.soon ? ['yellow', `⏳ Next egg in ${clock(I.nextMs)}`] : isFinite(I.nextMs) ? ['green', '🐣 Laying eggs'] : ['red', '⚠ Feed required'];
     h += `<div class="fi-st ${st[0]}">${st[1]}</div>`;
     const kinds = Object.entries(I.kinds).map(([t, n]) => { const c = e.cat(t); return compact ? `${c.icon} ${n}` : `${c.icon} ${n} ${esc(c.variety || c.name)}`; });
-    h += row('Varieties', kinds.join(compact ? ' ' : ' · '), compact ? 'fi-opt' : 'fi-wrap');
-    h += row(compact ? 'Eggs ready' : 'Eggs ready to collect', I.ready ? Object.entries(I.readyBy).filter(([, n]) => n).map(([p, n]) => `${e.cat(p).icon} ${n}`).join(' · ') : '0', I.ready ? 'blue' : '');
+    h += row(compact ? 'Eggs ready' : 'eggs ready', I.ready ? Object.entries(I.readyBy).filter(([, n]) => n).map(([p, n]) => `${e.cat(p).icon} ${n}`).join(' · ') : '0', I.ready ? 'blue' : '');
     const allFull = I.nestsFull && I.nestsFull >= I.fed;
-    h += row('Next egg in', isFinite(I.nextMs) ? clock(I.nextMs) : allFull && !I.paused ? 'nests full' : 'feed first', isFinite(I.nextMs) ? (I.soon ? 'yellow' : 'green') : allFull && !I.paused ? 'blue' : 'bad');
-    h += row(compact ? 'Feeding left' : 'Feeding remaining', I.dueMs <= 0 ? `Feed required · ${I.hungry} hungry` : clock(I.dueMs), I.dueMs <= 0 ? 'bad' : I.dueMs < 15 * 60e3 ? 'warn' : 'green');
-    h += row(compact ? 'Feed needed' : 'Feed required / available', `${I.need} · 🌾 ${feed}`, feed < I.need ? 'bad' : '');
-    if (I.nestsFull) h += `<div class="fi-warn blue">🪺 ${I.nestsFull} nest${I.nestsFull > 1 ? 's' : ''} full — collect the eggs so ${I.nestsFull > 1 ? 'they keep' : 'it keeps'} laying</div>`;
-    if (!compact) h += `<button class="fu-go wide collect" data-x="collect" data-b="${bd.id}" ${!I.ready || this.busy ? 'disabled' : ''}>${I.ready ? `🥚 Collect ${I.ready} egg${I.ready > 1 ? 's' : ''}` : '🪺 No eggs to collect yet'}</button>`;
-    return h;
+    h += row(compact ? 'Next egg in' : 'next egg', isFinite(I.nextMs) ? clock(I.nextMs) : allFull && !I.paused ? 'nests full' : 'feed first', isFinite(I.nextMs) ? (I.soon ? 'yellow' : 'green') : allFull && !I.paused ? 'blue' : 'bad');
+    h += row(compact ? 'Feeding left' : 'fed for', I.dueMs <= 0 ? `hungry · ${I.hungry}` : clock(I.dueMs), I.dueMs <= 0 ? 'bad' : I.dueMs < 15 * 60e3 ? 'warn' : 'green');
+    h += row(compact ? 'Feed needed' : 'feed needed · in store', `${I.need} · 🌾 ${feed}`, feed < I.need ? 'bad' : '');
+    h += row(compact ? 'Varieties' : 'varieties', kinds.join(compact ? ' ' : ' · '), compact ? 'fi-opt' : 'fi-wrap');
+    const warn = I.nestsFull ? `<div class="fi-warn blue">🪺 ${I.nestsFull} nest${I.nestsFull > 1 ? 's' : ''} full — collect the eggs so ${I.nestsFull > 1 ? 'they keep' : 'it keeps'} laying</div>` : '';
+    if (compact) return h + warn;
+    return h + S.tiles() + warn + `<button class="fu-go wide collect" data-x="collect" data-b="${bd.id}" ${!I.ready || this.busy ? 'disabled' : ''}>${I.ready ? `🥚 Collect ${I.ready} egg${I.ready > 1 ? 's' : ''}` : '🪺 No eggs to collect yet'}</button>`;
   }
   // the animals of a shelter, one row each (moved every second while the popup is open)
   _animalRows(bd) {
@@ -233,11 +240,11 @@ export class FarmUI {
   _store() {
     if (!this.tab) {
       const menu = STORE_MENU.concat(VEHICLES_UNLOCKED ? [['vehicles', '🚜', 'Purchase vehicles', 'carts and tractors']] : []);
-      return `<div class="fu-npc"><span class="fu-ico">🧑‍🌾</span><span><b>Farmer:</b> “How can I help you? Do you want to purchase or sell anything?”</span></div>
+      return `<div class="fu-npc"><span class="fu-ico">🧑‍🌾</span><span class="fu-say"><b>Farmer</b>“Morning! Buying or selling today?”</span></div>
         <div class="fu-menu">${menu.map(([t, i, l, s]) => `<button data-x="tab" data-t="${t}"><span class="fu-ico">${i}</span><span><b>${l}</b><small>${s}</small></span></button>`).join('')}</div>
-        <div class="fu-sub">Selling in bulk, today's prices and the trade log are at the Market next door.</div>`;
+        <div class="fu-sub fu-c">Prices and the trade log are at the Market next door.</div>`;
     }
-    const back = `<button class="fu-back" data-x="tab" data-t="">‹ Back to the menu</button>`;
+    const back = `<button class="fu-back" data-x="tab" data-t="">‹ Back</button>`;
     if (this.tab === 'animals') return back + this.eco.items('animal').map(k => this._animalRow(k)).join('');
     if (this.tab === 'sell') return back + this._sellRows();
     if (this.tab === 'feed') return back + this._goodRows(['feed']) + '<div class="fu-sub">Each animal eats its feed at the trough: one feeding keeps it fed (and producing) for 2 hours.</div>';
@@ -349,22 +356,21 @@ export class FarmUI {
   }
   // a stable: horses, how many are ready (Level 10 at home), out on rent, the next level, feeding
   _stableBox(bd, k, a, I, compact) {
-    const e = this.eco, now = e.serverNow(), feed = e.qty('feed'), hs = e.animalsIn(bd.id).map(x => e.horseOf(x, now));
-    const row = (l, v, cls = '') => `<div class="fi-r ${cls}"><span>${l}</span><b>${v}</b></div>`;
+    const e = this.eco, now = e.serverNow(), feed = e.qty('feed'), hs = e.animalsIn(bd.id).map(x => e.horseOf(x, now)), S = stats(compact), row = S.row;
     let h = `<div class="fi-t">🐎 ${FARM_TITLE[bd.type] || k.name.toUpperCase()} <small>plot ${bd.plot + 1}</small></div>`;
-    h += row('Total horses', `${I.count} / ${k.capacity}`);
-    if (!I.count) return h + '<div class="fi-note">No horses yet — buy a baby horse or a grown one from the farmer at the Farm Store.</div>';
+    h += row(compact ? 'Total horses' : 'horses', `${I.count} / ${k.capacity}`);
+    if (!I.count) return h + S.tiles() + '<div class="fi-note">No horses yet — buy a baby horse or a grown one from the farmer at the Farm Store.</div>';
     const ready = hs.filter(x => x.ready).length, away = hs.filter(x => x.away).length, next = Math.min(...hs.map(x => x.nextMs));
     const growing = hs.filter(x => x.level < x.max).length;
     const st = I.paused ? ['red', '⚠ Feed required'] : ready ? ['blue', `🐎 ${ready} ready to rent or sell`] : isFinite(next) ? ['green', '🌱 Growing'] : ['red', '⚠ Feed required'];
     h += `<div class="fi-st ${st[0]}">${st[1]}</div>`;
-    h += row('Levels', hs.map(x => x.level).join(' · '), 'fi-opt');
-    h += row(compact ? 'Ready (Lv 10)' : 'Ready (Level 10, at home)', ready, ready ? 'blue' : '');
-    if (away) h += row('Out on rent', away, 'blue');
-    if (growing) h += row('Next level in', isFinite(next) ? clock(next) : 'feed first', isFinite(next) ? 'green' : 'bad');
-    h += row(compact ? 'Feeding left' : 'Feeding remaining', I.dueMs <= 0 ? `Feed required · ${I.hungry} hungry` : clock(I.dueMs), I.dueMs <= 0 ? 'bad' : I.dueMs < 15 * 60e3 ? 'warn' : 'green');
-    h += row(compact ? 'Feed needed' : 'Feed required / available', `${I.need} · 🌾 ${feed}`, feed < I.need ? 'bad' : '');
-    return h;
+    h += row(compact ? 'Levels' : 'levels', hs.map(x => x.level).join(' · '), compact ? 'fi-opt' : 'fi-wrap');
+    h += row(compact ? 'Ready (Lv 10)' : 'ready (Lv 10)', ready, ready ? 'blue' : '');
+    if (away) h += row(compact ? 'Out on rent' : 'out on rent', away, 'blue');
+    if (growing) h += row(compact ? 'Next level in' : 'next level', isFinite(next) ? clock(next) : 'feed first', isFinite(next) ? 'green' : 'bad');
+    h += row(compact ? 'Feeding left' : 'fed for', I.dueMs <= 0 ? `Feed required · ${I.hungry} hungry` : clock(I.dueMs), I.dueMs <= 0 ? 'bad' : I.dueMs < 15 * 60e3 ? 'warn' : 'green');
+    h += row(compact ? 'Feed needed' : 'feed needed · in store', `${I.need} · 🌾 ${feed}`, feed < I.need ? 'bad' : '');
+    return compact ? h : h + S.tiles();
   }
   // the farm storage: what it holds, the next level, and storing logs / stones from the team's materials
   _storage() {
@@ -406,11 +412,11 @@ export class FarmUI {
   _shelter(bd) {
     const e = this.eco, k = e.cat(bd.type), a = e.cat(k.animal), list = e.animalsIn(bd.id), free = k.capacity - list.length;
     const kinds = e.items('animal').filter(x => x.shelter === bd.type);
-    const how = a.nest ? `🌾 Feed them at the trough inside the pen: open the gate, walk to the trough and press E. One feed keeps a chicken laying for ${a.feedMinutes >= 60 ? `${a.feedMinutes / 60} h` : `${a.feedMinutes} min`}; each one has its own egg timer. Eggs wait in the nest boxes (up to ${a.nest} each) until someone collects them — a full nest stops laying.`
-      : a.grow ? `🌾 Feed them at the trough inside the pen (open the gate, walk to the trough, press E). A fed horse grows a level every ${Math.round(1 / a.grow)} h, up to Level ${a.maxLevel}. Level ${a.maxLevel} horses can be rented out — customers ask at the Market's Orders tab — or sold here; older and rarer horses sell for more.`
-      : `🌾 Feed them at the trough inside the pen: open the gate, walk to the trough and press E. Fed animals produce for ${a.feedHours || 2} h; hungry ones stop and get weak after a day.`;
+    const how = a.nest ? `Feed them at the trough in the pen (open the gate, press E). Fed hens lay into their nest boxes — collect the eggs before a nest fills up (${a.nest} each).`
+      : a.grow ? `Feed them at the trough (E). A fed horse grows a level every ${Math.round(1 / a.grow)} h up to Level ${a.maxLevel}; then rent it out (Market → Orders) or sell it here.`
+      : `Feed them at the trough in the pen (E). Fed animals produce for ${a.feedHours || 2} h; hungry ones stop.`;
     return `<div class="fi-box fi-live" data-b="${bd.id}">${this._infoBox(bd)}</div>
-      <div class="fu-sub">${how}</div>
+      <div class="fu-tip">🌾 ${how}</div>
       <div class="${a.grow ? 'fu-horses' : 'fu-animals'}" data-b="${bd.id}">${this._animalRows(bd)}</div>
       ${free > 0 ? `<div class="fu-sub" style="margin-top:8px"><b>Add ${plural(kind(a))} to this ${k.name.toLowerCase()} (${free} free)</b></div>${kinds.map(x => this._animalRow(x, bd.id)).join('')}` : '<div class="fu-sub">This shelter is full. Build another on an empty plot.</div>'}`;
   }

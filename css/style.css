@@ -1139,3 +1139,164 @@ body.farm #pauseLeave { display: none; }
 #overlay[data-mode="zombie"] #leaveBtn:hover { background: rgba(226, 83, 58, .12); }
 #overlay[data-mode="zombie"] #leaveBtn.sure { background: linear-gradient(#e2533a, #a8301f); color: #fff; border-color: #e2533a; box-shadow: 0 0 14px rgba(226, 83, 58, .4); }
 #overlay[data-mode="zombie"] #leaveHint { color: #8f8c78; opacity: 1; }
+
+/* =====================================================================
+   Farm popups (Farm Store, Market, Fish Market, plots, shelters, troughs, storage):
+   the farm signboard look — barn-red sign header, cream paper, wood frame
+   ===================================================================== */
+#farmUI { background: rgba(20, 28, 14, .5); }
+#farmUI .fubox { padding: 0 0 14px; color: #3d2b1a; background: #f7efdb; border: 7px solid #7a4e2a; border-radius: 18px;
+  box-shadow: inset 0 0 0 2px #a8754a, 0 24px 60px rgba(0,0,0,.5); width: min(620px, calc(100vw - 24px)); }
+#farmUI .shead { position: sticky; top: 0; z-index: 2; margin: 0 0 12px; padding: 12px 14px 12px 18px; border-bottom: 4px solid #f3e6c8;
+  background: repeating-linear-gradient(180deg, #a5392a 0 24px, #8e2e21 24px 26px); box-shadow: 0 3px 0 #7a4e2a; }
+#farmUI #fuTitle { display: flex; align-items: center; gap: 9px; min-width: 0; color: #fff4dc; font: 400 22px/1.15 "Alfa Slab One", Georgia, serif; letter-spacing: .02em; text-shadow: 0 2px 0 #5e1f15; }
+#farmUI #fuTitle .ic { width: 24px; height: 24px; flex: none; color: #f6d877; }
+#farmUI .sbtns #fuClose { width: 36px; height: 36px; padding: 0; border-radius: 50%; background: rgba(255, 244, 220, .16); color: transparent; position: relative; overflow: hidden; font-size: 0; }
+#farmUI .sbtns #fuClose::before, #farmUI .sbtns #fuClose::after { content: ''; position: absolute; left: 10px; right: 10px; top: 17px; height: 2.5px; border-radius: 2px; background: #fff4dc; transform: rotate(45deg); }
+#farmUI .sbtns #fuClose::after { transform: rotate(-45deg); }
+#farmUI .sbtns #fuClose:hover { background: rgba(255, 244, 220, .3); }
+#farmUI #fuBody { padding: 0 18px; }
+/* the money / feed / wood / stone chips */
+#farmUI .fu-head { gap: 6px; margin-bottom: 12px; }
+#farmUI .fu-chip { display: inline-flex; align-items: center; gap: 5px; background: #ece0c2; color: #4a3520; border: 1px solid #d6c29a; border-radius: 999px; padding: 4px 11px; font-size: 13px; }
+#farmUI .fu-chip .ic { width: 16px; height: 16px; }
+/* the farmer / fisherman */
+#farmUI .fu-npc { gap: 12px; background: none; border: 0; padding: 0; margin-bottom: 12px; }
+#farmUI .fu-npc > .fu-ico { width: 46px; height: 46px; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: #e9f0d8; box-shadow: inset 0 0 0 2px #cfdcb0; }
+#farmUI .fu-npc > .fu-ico .ic { width: 32px; height: 32px; }
+#farmUI .fu-npc > span:last-child { position: relative; flex: 1; background: #fffaee; border: 1px solid #e3d3ad; border-radius: 12px; padding: 9px 12px; font-size: 14px; color: #4a3520; }
+#farmUI .fu-npc > span:last-child::before { content: ''; position: absolute; left: -7px; top: 15px; width: 12px; height: 12px; background: #fffaee; border-left: 1px solid #e3d3ad; border-bottom: 1px solid #e3d3ad; transform: rotate(45deg); }
+#farmUI .fu-say b { display: block; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: #8e2e21; margin-bottom: 1px; }
+/* menu cards */
+#farmUI .fu-menu { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px; }
+#farmUI .fu-menu button { flex-direction: column; align-items: flex-start; gap: 6px; padding: 12px; background: #fffaee; color: #3d2b1a; border: 1px solid #e3d3ad; border-radius: 12px; box-shadow: 0 2px 0 #eadcbc; transition: transform .1s, border-color .15s; }
+#farmUI .fu-menu button:hover { border-color: #a9d38e; transform: translateY(-1px); background: #fffdf5; }
+#farmUI .fu-menu .fu-ico { width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border-radius: 10px; background: #e9f0d8; }
+#farmUI .fu-menu .fu-ico .ic { width: 28px; height: 28px; }
+#farmUI .fu-menu b { font-size: 14.5px; }
+#farmUI .fu-menu small { color: #957654; opacity: 1; font-size: 12px; }
+#farmUI .fu-back { color: #7a5530; font-size: 14px; padding: 0 0 10px; }
+#farmUI .fu-tabs { padding: 4px; gap: 4px; background: #ece0c2; border: 1px solid #d6c29a; border-radius: 999px; flex-wrap: wrap; }
+#farmUI .fu-tabs button { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 5px; background: transparent; color: #6b5233; padding: 7px 10px; white-space: nowrap; }
+#farmUI .fu-tabs button.on { background: linear-gradient(#6cbc45, #4f9d32); color: #fff; box-shadow: 0 2px 0 #3a7a22; }
+#farmUI .fu-tabs .ic { width: 15px; height: 15px; }
+/* list rows */
+#farmUI .fu-row { background: #fffaee; border: 1px solid #e3d3ad; border-radius: 12px; color: #3d2b1a; }
+#farmUI .fu-row.locked { background: #f3ead6; opacity: .9; }
+#farmUI .fu-ico .ic { width: 30px; height: 30px; }
+#farmUI .fu-name { color: #3d2b1a; }
+#farmUI .fu-name small { color: #9a7c58; opacity: 1; }
+#farmUI .fu-sub { color: #8a6f4e; opacity: 1; }
+#farmUI .fu-c { text-align: center; }
+#farmUI .fu-need { color: #c0482c; }
+#farmUI .fu-tip { display: flex; gap: 8px; margin: 10px 0 8px; padding: 8px 11px; font-size: 12.5px; line-height: 1.45; color: #6b5233; background: #efe5cc; border-radius: 10px; }
+#farmUI .fu-tip .ic { width: 16px; height: 16px; flex: none; margin-top: 1px; color: #6aa83c; }
+#farmUI .fu-qty button { background: #ece0c2; color: #4a3520; border: 1px solid #d6c29a; }
+#farmUI .fu-qty b { color: #3d2b1a; }
+#farmUI .fu-go { display: inline-flex; align-items: center; justify-content: center; gap: 6px; background: linear-gradient(#6cbc45, #4f9d32); color: #fff; box-shadow: 0 3px 0 #3a7a22; border-radius: 10px; text-shadow: 0 1px 1px rgba(0,0,0,.2); }
+#farmUI .fu-go .ic { width: 16px; height: 16px; }
+#farmUI .fu-go.sell { background: linear-gradient(#ffd25a, #e9ab26); color: #3d2a05; box-shadow: 0 3px 0 #a87412; text-shadow: none; }
+#farmUI .fu-go.alt { background: #ece0c2; color: #4a3520; box-shadow: 0 2px 0 #d1bb8c; text-shadow: none; }
+#farmUI .fu-go.collect { background: linear-gradient(#6fb6ff, #3f8de6); color: #fff; box-shadow: 0 3px 0 #2a64a8; }
+#farmUI .fu-go:disabled { opacity: .5; box-shadow: none; }
+#farmUI .fu-msg.ok { color: #2d7a24; } #farmUI .fu-msg.err { color: #c0392b; font-weight: 700; }
+#farmUI .fu-bar { background: #e6dcc3; }
+#farmUI .fu-caps .fu-cap { background: #ece0c2; color: #4a3520; }
+#farmUI .fu-table th, #farmUI .fu-table td { border-bottom-color: #e3d3ad; color: #3d2b1a; }
+#farmUI .fu-table th { color: #8a6f4e; opacity: 1; }
+#farmUI .fu-hist div { border-bottom-color: #e3d3ad; color: #3d2b1a; }
+#farmUI .fu-hist small { color: #9a7c58; opacity: 1; }
+/* a shelter: status, stat tiles, then one row per animal */
+#farmUI .fi-box { background: none; padding: 0; margin: 0 0 4px; }
+#farmUI .fi-t { display: none; }
+.fi-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 6px; margin: 8px 0; }
+.fi-tile { display: grid; gap: 1px; padding: 8px 10px; background: #fffaee; border: 1px solid #e3d3ad; border-radius: 10px; box-shadow: 0 2px 0 #eadcbc; }
+.fi-tile b { font-size: 17px; color: #3d2b1a; font-variant-numeric: tabular-nums; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.fi-tile b .ic { width: 17px; height: 17px; }
+.fi-tile small { font-size: 11.5px; color: #957654; }
+.fi-tile.fi-wrap { grid-column: 1 / -1; } .fi-tile.fi-wrap b { font-size: 14px; font-weight: 700; }
+.fi-tile.green b { color: #2d7a24; } .fi-tile.yellow b { color: #a87a10; } .fi-tile.blue b { color: #2a6fb8; } .fi-tile.warn b { color: #b8730f; }
+.fi-tile.bad { background: #fdeee6; border-color: #eab9a0; } .fi-tile.bad b { color: #c0392b; }
+#farmUI .fi-st { font-size: 14px; padding: 7px 11px; border-radius: 10px; margin: 0 0 4px; display: flex; align-items: center; gap: 6px; }
+#farmUI .fi-st .ic, #farmUI .fi-warn .ic { width: 17px; height: 17px; }
+.fi-st.green { --c: #2d7a24; } .fi-st.yellow { --c: #9a6a08; } .fi-st.blue { --c: #2a6fb8; } .fi-st.red { --c: #c0392b; }
+#farmUI .fi-st.green, #farmInfo .fi-st.green { background: #def0d0; color: #2d7a24; }
+#farmUI .fi-st.yellow, #farmInfo .fi-st.yellow { background: #f8ecc8; color: #9a6a08; }
+#farmUI .fi-st.blue, #farmInfo .fi-st.blue { background: #dde9f8; color: #2a6fb8; }
+#farmUI .fi-st.red, #farmInfo .fi-st.red { background: #fbe1d8; color: #c0392b; }
+#farmUI .fi-warn, #farmInfo .fi-warn { background: #fbe1d8; color: #b5402a; display: flex; align-items: center; gap: 6px; }
+#farmUI .fi-warn.blue, #farmInfo .fi-warn.blue { background: #dde9f8; color: #2a6fb8; }
+#farmUI .fi-note { color: #8a6f4e; opacity: 1; }
+#farmUI .fu-row.hen { border-left-width: 4px; padding: 7px 10px; }
+#farmUI .fu-row.hen.green .hen-t { color: #2d7a24; } #farmUI .fu-row.hen.yellow .hen-t { color: #9a6a08; }
+#farmUI .fu-row.hen.blue .hen-t { color: #2a6fb8; } #farmUI .fu-row.hen.red .hen-t { color: #c0392b; }
+#farmUI .fu-row.small .fu-ico .ic { width: 26px; height: 26px; }
+#farmUI .fu-animals, #farmUI .fu-horses { display: grid; gap: 6px; }
+#farmUI .fu-animals .fu-row, #farmUI .fu-horses .fu-row { margin-bottom: 0; }
+/* orders */
+#farmUI .or-head { color: #3d2b1a; } #farmUI .or-head small { color: #8a6f4e; opacity: 1; }
+#farmUI .or-streak { background: #fdf0dc; border-color: #f0c98e; color: #8a4a0e; } #farmUI .or-streak small { color: #9a6a3a; opacity: 1; }
+#farmUI .or-dots i { background: #ecdcbc; }
+#farmUI .or-card { background: #fffaee; border-color: #e9b94a; color: #3d2b1a; }
+#farmUI .or-card.horse { border-color: #c98a4a; }
+#farmUI .or-item { border-top-color: #eadcbc; } #farmUI .or-item.ok b { color: #2d7a24; } #farmUI .or-item.need b { color: #c0482c; }
+#farmUI .or-pay b { color: #1d6a34; } #farmUI .or-pay small { color: #8a6f4e; opacity: 1; }
+#farmUI .or-wait { background: #fffaee; border: 1px solid #e3d3ad; color: #3d2b1a; } #farmUI .or-wait.done { color: #2d7a24; }
+#farmUI .or-past { color: #8a6f4e; opacity: 1; }
+/* fish market */
+#farmUI .fu-npc.fish > .fu-ico { background: #dcebf3; box-shadow: inset 0 0 0 2px #b7d3e2; }
+#farmUI .fr-card { background: #fffaee; border-color: #e3d3ad; color: #3d2b1a; }
+#farmUI .fr-card.on { border-color: #6cc46a; }
+#farmUI .fr-price { color: #a8730c; } #farmUI .fr-stat, #farmUI .fr-note { color: #6b5233; opacity: 1; }
+#farmUI .fr-tag { background: #ece0c2; color: #4a3520; } #farmUI .fr-tag.on { background: #def0d0; color: #2d7a24; }
+#farmUI .fr-table td.on { color: #2d7a24; }
+@media (max-height: 560px), (max-width: 700px) {
+  #farmUI .fubox { padding: 0 0 10px; border-width: 5px; border-radius: 14px; }
+  #farmUI .shead { top: 0; margin-bottom: 8px; padding: 8px 10px 8px 14px; }
+  #farmUI #fuTitle { font-size: 17px; }
+  #farmUI #fuBody { padding: 0 12px; }
+  #farmUI .fu-menu { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+  .fi-tiles { grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); }
+  .fi-tile { padding: 6px 8px; } .fi-tile b { font-size: 15px; }
+}
+
+/* the plot panel on the HUD (standing at a shelter): a small parchment card with a red sign strip */
+#farmInfo, #farmInfo.panel { background: rgba(247, 239, 219, .95); color: #3d2b1a; border: 3px solid #7a4e2a; border-radius: 12px; padding: 0 0 6px; overflow: hidden;
+  box-shadow: inset 0 0 0 1px #a8754a, 0 6px 18px rgba(0,0,0,.35); backdrop-filter: none; }
+#farmInfo .fi-t { margin: 0 0 4px; padding: 6px 10px; color: #fff4dc; background: repeating-linear-gradient(180deg, #a5392a 0 14px, #8e2e21 14px 15px); font-size: 12px; letter-spacing: .06em; }
+#farmInfo .fi-t small { color: #fff4dc; opacity: .7; }
+#farmInfo .fi-t .ic { color: #f6d877; }
+#farmInfo .fi-r { margin: 0 10px; border-top-color: #e6d8b8; color: #5a4229; }
+#farmInfo .fi-r:first-of-type { border-top: 0; }
+#farmInfo .fi-r b { color: #3d2b1a; }
+#farmInfo .fi-r.green b { color: #2d7a24; } #farmInfo .fi-r.yellow b { color: #9a6a08; } #farmInfo .fi-r.blue b { color: #2a6fb8; }
+#farmInfo .fi-r.warn b { color: #b8730f; } #farmInfo .fi-r.bad b { color: #c0392b; }
+#farmInfo .fi-st, #farmInfo .fi-warn { margin: 4px 8px; }
+#farmInfo .fi-note { margin: 2px 10px; color: #8a6f4e; opacity: 1; }
+
+/* =====================================================================
+   Big map: a framed, zoomable map (scroll / pinch to zoom, drag to move)
+   ===================================================================== */
+#bigmap, body.touch #bigmap { pointer-events: auto; background: rgba(8, 10, 14, .6); z-index: 6; }
+#bigmapPanel { position: relative; width: min(1100px, calc(100vw - 32px)); height: min(820px, calc(100vh - 32px)); height: min(820px, calc(100dvh - 32px));
+  border: 6px solid #2b2f25; border-radius: 18px; overflow: hidden; background: #1d2a1c; box-shadow: inset 0 0 0 2px #4a3a22, 0 24px 60px rgba(0,0,0,.6); }
+body.farm #bigmapPanel { border-color: #7a4e2a; box-shadow: inset 0 0 0 2px #a8754a, 0 24px 60px rgba(0,0,0,.6); }
+#bigmapCanvas, body.touch #bigmapCanvas { display: block; width: 100%; height: 100%; border: 0; border-radius: 0; box-shadow: none; cursor: grab; touch-action: none; }
+#bigmapCanvas.drag { cursor: grabbing; }
+.bm-title { position: absolute; top: 12px; left: 12px; display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; background: rgba(16,18,26,.72); color: #fff; font-weight: 800; font-size: 14px; pointer-events: none; }
+body.farm .bm-title { background: #a5392a; color: #fff4dc; font: 400 15px "Alfa Slab One", Georgia, serif; }
+.bm-title .ic { width: 15px; height: 15px; }
+.bm-close { position: absolute; top: 10px; right: 10px; width: 40px; height: 40px; border-radius: 50%; border: 0; display: flex; align-items: center; justify-content: center; background: rgba(16,18,26,.72); color: #fff; cursor: pointer; }
+.bm-close .ic { width: 18px; height: 18px; }
+.bm-tools { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); display: grid; gap: 6px; padding: 6px; border-radius: 14px; background: rgba(16,18,26,.62); }
+.bm-tools button { width: 40px; height: 40px; border-radius: 10px; border: 0; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,.12); color: #fff; cursor: pointer; }
+.bm-tools button:hover, .bm-close:hover { background: rgba(255,255,255,.24); }
+.bm-tools .ic { width: 20px; height: 20px; }
+.bm-hint { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); padding: 5px 12px; border-radius: 999px; background: rgba(16,18,26,.66); color: #e8e8e8; font-size: 12px; white-space: nowrap; pointer-events: none; }
+.bm-hint .touch-only { display: none; }
+body.touch .bm-hint .touch-only { display: inline; }
+@media (max-height: 520px) {
+  #bigmapPanel { width: calc(100vw - 16px); height: calc(100vh - 16px); height: calc(100dvh - 16px); border-width: 4px; border-radius: 14px; }
+  .bm-tools button, .bm-close { width: 36px; height: 36px; }
+  .bm-hint { display: none; }
+}
