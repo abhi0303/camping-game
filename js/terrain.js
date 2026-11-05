@@ -172,7 +172,7 @@ const _c = new THREE.Color();
 const GRASS = [0x3f7a35, 0x46833a, 0x4d8c3e, 0x3a7032, 0x427d36];
 const GRASS_N = [0x5c9a3a, 0x67a442, 0x70ab47, 0x568f37, 0x62a03f];     // brighter highland grass
 function terrainMesh(T, riverD, roadD) {
-  const { H, W } = T, pos = [], col = [];
+  const { H, W } = T, pos = [], col = [], grass = [];
   let seed = 7;
   const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
   const face = (ia, ib, ic) => {
@@ -183,14 +183,15 @@ function terrainMesh(T, riverD, roadD) {
     const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx, ny1 = Math.abs(ny) / Math.hypot(nx, ny, nz);
     const h = (a[1] + b[1] + c[1]) / 3, rd = (riverD[ia] + riverD[ib] + riverD[ic]) / 3, od = (roadD[ia] + roadD[ib] + roadD[ic]) / 3;
     const cx = (a[0] + b[0] + c[0]) / 3, cz = (a[2] + b[2] + c[2]) / 3;
+    let gk = 0;                                   // how much of the painted grass-and-mud ground this face gets
     if (h < W + 0.9 && rd < RIVER_HALF + 3) _c.set(h < W - 0.2 ? 0x6b5d42 : 0x9a8a62);
-    else if (od < 7.5) _c.set(0x7a6446).lerp(_c.clone().set(GRASS[0]), smoothstep(5.5, 7.5, od));
+    else if (od < 7.5) { gk = smoothstep(5.5, 7.5, od); _c.set(0x7a6446).lerp(_c.clone().set(GRASS[0]), gk); }
     else if (ny1 < 0.78) _c.set(cz > NORTH - 20 ? (rnd() > 0.5 ? 0x8f887a : 0x7e786c) : rnd() > 0.5 ? 0x7d7a70 : 0x6e6b62);
-    else if (Math.hypot(cx - START.x, cz - START.z) < 34 || Math.hypot(cx - CAMP.x, cz - CAMP.z) < 28) _c.set(rnd() > 0.5 ? 0x7fa652 : 0x77a04c);
+    else if (Math.hypot(cx - START.x, cz - START.z) < 34 || Math.hypot(cx - CAMP.x, cz - CAMP.z) < 28) { gk = 1; _c.set(rnd() > 0.5 ? 0x7fa652 : 0x77a04c); }
     else if (Math.hypot(cx - GIANT.x, cz - GIANT.z) < 40 || (Math.abs(cx - TOWER_ZONE.x) < TOWER_ZONE.hw + 4 && Math.abs(cz - TOWER_ZONE.z) < TOWER_ZONE.hd + 4)) _c.set(rnd() > 0.5 ? 0xa39463 : 0x9a8b5c);
-    else if (cz > NORTH) { _c.set(GRASS_N[(rnd() * GRASS_N.length) | 0]); if (h > 40) _c.lerp(_c.clone().set(0x7b8a5a), Math.min(1, (h - 40) / 25)); }
-    else { _c.set(GRASS[(rnd() * GRASS.length) | 0]); if (h > T.campH - 8) _c.lerp(_c.clone().set(0x6f9c48), 0.5); }
-    for (let k = 0; k < 3; k++) col.push(_c.r, _c.g, _c.b);
+    else if (cz > NORTH) { gk = 1; _c.set(GRASS_N[(rnd() * GRASS_N.length) | 0]); if (h > 40) { const a = Math.min(1, (h - 40) / 25); _c.lerp(_c.clone().set(0x7b8a5a), a); gk = 1 - a * 0.7; } }
+    else { gk = 1; _c.set(GRASS[(rnd() * GRASS.length) | 0]); if (h > T.campH - 8) _c.lerp(_c.clone().set(0x6f9c48), 0.5); }
+    for (let k = 0; k < 3; k++) { col.push(_c.r, _c.g, _c.b); grass.push(gk); }
   };
   for (let j = 0; j < SEGZ; j++) for (let i = 0; i < SEGX; i++) {
     const a = j * NX + i, b = a + 1, c = a + NX, d = c + 1;
@@ -199,11 +200,91 @@ function terrainMesh(T, riverD, roadD) {
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  g.setAttribute('aGrass', new THREE.Float32BufferAttribute(grass, 1));
   g.computeVertexNormals();
-  const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }));
+  const m = new THREE.Mesh(g, groundMaterial());
   m.receiveShadow = true;
   return m;
 }
+
+/* ---------- the painted ground: bright low-poly grass with brown mud patches ----------
+   Drawn by the terrain's shader from the world position (no texture, no extra geometry, no seams):
+   the ground is split into small irregular cells (about 1.3 m). Each grass cell gets one of four greens
+   (clustered so lighter and darker meadows form), and mud is decided per cell from a slow noise, so the
+   mud patches have jagged, faceted edges with a darker green rim. Mud cells vary in brown, with dark
+   clumps and small pebbles. Far away the detail fades to calm colours (no shimmer). Faces that are not
+   grass (road verges, river banks, rock slopes, sandy build zones) keep their own colour (aGrass = 0).
+   Lighting, shadows, fog and day / night work as before (only the surface colour changes). */
+const GROUND = { g0: 0x4f9a2c, g1: 0x60ad35, g2: 0x73bf42, g3: 0x89d052, edge: 0x3f7f24, m0: 0x8a5a2c, m1: 0x9e6c38, m2: 0x6a4222 };
+function groundMaterial() {
+  const mat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
+  const u = {};
+  for (const k in GROUND) u['uGr_' + k] = { value: new THREE.Color(GROUND[k]) };
+  mat.onBeforeCompile = sh => {
+    Object.assign(sh.uniforms, u);
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nattribute float aGrass;\nvarying float vGrass;\nvarying vec3 vGWorld;')
+      .replace('#include <project_vertex>', '#include <project_vertex>\nvGrass = aGrass;\nvGWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\n' + GROUND_GLSL)
+      .replace('#include <color_fragment>', `#include <color_fragment>
+        if (vGrass > 0.01) {
+          float far = smoothstep(40.0, 120.0, distance(vGWorld, cameraPosition));
+          diffuseColor.rgb = mix(diffuseColor.rgb, groundColor(vGWorld.xz, far), vGrass);
+        }`);
+  };
+  mat.customProgramCacheKey = () => 'ground-v3';
+  return mat;
+}
+const GROUND_GLSL = /* glsl */`
+varying float vGrass; varying vec3 vGWorld;
+uniform vec3 uGr_g0, uGr_g1, uGr_g2, uGr_g3, uGr_edge, uGr_m0, uGr_m1, uGr_m2;
+float gh12(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
+vec2 gh22(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973)); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.xx + p3.yz) * p3.zy); }
+float gnoise(vec2 p) {
+  vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(gh12(i), gh12(i + vec2(1.0, 0.0)), f.x), mix(gh12(i + vec2(0.0, 1.0)), gh12(i + vec2(1.0, 1.0)), f.x), f.y);
+}
+float gmud(vec2 p) { return gnoise(p * 0.065) * 0.55 + gnoise(p * 0.17 + 7.3) * 0.3 + gnoise(p * 0.5 - 3.1) * 0.15; }
+// nearest cell of an irregular grid (scale: cells per metre): cell id, offset from p to its centre, distance²
+vec2 gcell(vec2 p, float scale, out vec2 off, out float d1) {
+  vec2 q = p * scale, ip = floor(q), fp = fract(q), id = ip; d1 = 9.0; off = vec2(0.0);
+  for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
+    vec2 o = vec2(float(i), float(j)), r = o + 0.1 + gh22(ip + o) * 0.8 - fp; float d = dot(r, r);
+    if (d < d1) { d1 = d; off = r; id = ip + o; }
+  }
+  return id;
+}
+vec3 groundColor(vec2 p, float far) {
+  vec2 off; float d1;
+  vec2 id = gcell(p, 0.75, off, d1);
+  vec2 cp = p + off / 0.75;                                  // the cell's centre (world)
+  float h = gh12(id * 1.7 + 3.1);
+  float m = mix(gmud(cp), gmud(p), far);
+  const float T = 0.665;
+  vec3 col;
+  if (m > T) {                                               // mud
+    col = mix(uGr_m0, uGr_m1, 0.3 + 0.45 * gnoise(cp * 0.35) + (h - 0.5) * 0.2);
+    if (h > 0.9) col = mix(col, uGr_m2, 0.8);               // dark clumps of earth
+    col *= 0.97 + 0.06 * gnoise(p * 0.9);
+    if (far < 0.6) {                                         // small pebbles in the mud
+      vec2 o2; float e;
+      vec2 id2 = gcell(p, 2.4, o2, e);
+      float ph = gh12(id2 + 11.0);
+      // dark earth lumps (lit on one side), now and then a grey stone
+      if (ph > 0.86 && e < 0.06) col = (ph > 0.975 ? vec3(0.30, 0.29, 0.30) : uGr_m2 * 0.9) * (1.0 + clamp(o2.y, -0.25, 0.25) * 0.8);
+    }
+    col = mix(col, (uGr_m0 + uGr_m1) * 0.5, far * 0.6);
+  } else {                                                   // grass
+    // tones in soft meadow blobs; cells only make their edges jagged
+    float tone = clamp(gnoise(cp * 0.11) * 0.7 + gnoise(cp * 0.031) * 0.45 + (h - 0.5) * 0.16 - 0.08, 0.0, 1.0);
+    col = tone < 0.3 ? uGr_g0 : tone < 0.55 ? uGr_g1 : tone < 0.8 ? uGr_g2 : uGr_g3;
+    if (m > T - 0.03) col = mix(col, uGr_edge, 0.6);         // a darker rim around the mud
+    col *= 1.0 + clamp(-off.y, -0.7, 0.7) * 0.04 * (1.0 - far); // each clump lit a little from one side
+    col = mix(col, (uGr_g1 + uGr_g2) * 0.5, far * 0.55);
+  }
+  return col;
+}`;
 
 function strip(pos, col, x0, z0, x1, z1, nx0, nz0, nx1, nz1, w0, w1, y0, y1, color) {
   _c.set(color);

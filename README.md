@@ -265,7 +265,7 @@ Global: **M** map, **K** sound, **B** mic on / off (co-op), **R** RV back to the
 - `js/net.js`, `js/multiplayer.js`, `js/remote.js`, `js/voice.js` – peer-to-peer networking (with auto-reconnect), co-op session, other players' avatars, voice chat
 - `js/touch.js`, `js/input.js` – mobile controls, keyboard/mouse/touch input
 - `js/save.js` – save/load + checkpoint flags
-- `js/terrain.js`, `js/world.js`, `js/obstacles.js` – map, jungle, road blocks
+- `js/terrain.js`, `js/world.js`, `js/obstacles.js` – map, jungle, road blocks. The ground is painted by the terrain's shader from the world position: bright low-poly grass in several greens with brown mud patches (jagged, faceted edges, earth lumps and pebbles inside), fading to calm colours far away — no texture and no seams. Spiky grass clumps, leafy plants and pebbles are scattered on top as instanced meshes (half as many on phones)
 - `js/day-night.js` – day and night: the clock (IST), the sun's position, sky, stars and moon, fog, clouds, sunlight / moonlight and shadows, and the lamps (halos, torch flames and smoke, the few real lights that follow the player)
 - `js/bridge.js`, `js/bridgeEditor.js`, `js/materials.js` – bridge physics, designer, materials
 - `js/rv.js`, `js/rvModel.js`, `js/rvInterior.js`, `js/rvDims.js` – the RV

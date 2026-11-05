@@ -23,6 +23,7 @@ export class World {
     this.W = T.W;
     scene.add(T.mesh, T.roadMesh, T.waterMesh);
     this._vegetation();
+    this._groundDecor();
     const b = new GeoBuilder();
     this._trailhead(b);
     this._camp(b);
@@ -145,6 +146,50 @@ export class World {
         const im = new THREE.InstancedMesh(t.geo, MAT.solid, list.length);
         list.forEach((mm, i) => im.setMatrixAt(i, mm));
         im.castShadow = t.shadow; im.receiveShadow = !t.shadow;
+        im.computeBoundingSphere();
+        this.scene.add(im);
+        (this.vegMeshes || (this.vegMeshes = [])).push(im);
+      }
+    }
+  }
+
+  // Small things on the ground that go with the painted grass and mud (js/terrain.js): spiky grass clumps,
+  // leafy plants and pebbles. Instanced and chunked like the jungle (one draw call per chunk and kind), no
+  // shadows, no colliders. They use their own random numbers, so the jungle, crates and colliders stay
+  // exactly where they were. Phones get about half.
+  _groundDecor() {
+    let seed = 9137;
+    const rnd = (a = 0, b = 1) => { seed = (seed * 16807) % 2147483647; return a + (seed / 2147483647) * (b - a); };
+    const geo = fn => { const b = new GeoBuilder(); fn(b); return b.build().children[0].geometry; };
+    const T = this.T, k = this.lite ? 0.55 : 1;
+    const kinds = [
+      { geo: geo(grassClump), n: 2600, sc: [0.7, 1.35], road: 5.0 },
+      { geo: geo(leafyPlant), n: 650, sc: [0.6, 1.2], road: 5.4 },
+      { geo: geo(pebble), n: 1400, sc: [0.12, 0.42], road: 4.8, flat: true, tints: [0x8e8c92, 0x9a978f, 0x86725e, 0x7a6a5c] },   // one mesh, coloured per pebble
+    ];
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), sv = new THREE.Vector3(), p = new THREE.Vector3(), e = new THREE.Euler();
+    for (const t of kinds) {
+      const chunks = Array.from({ length: CHX * CHZ }, () => []), n = Math.round(t.n * k);
+      let placed = 0, tries = 0;
+      while (placed < n && tries < n * 20) {
+        tries++;
+        const x = rnd(-230, 230), z = rnd(-230, 708), y = T.heightAt(x, z);
+        if (T.roadDistAt(x, z) < t.road || T.riverDistAt(x, z) < RIVER_HALF + 1.2 || y < T.W + 0.6) continue;
+        if (Math.abs(T.heightAt(x + 1.5, z) - T.heightAt(x - 1.5, z)) > 1.6 || Math.abs(T.heightAt(x, z + 1.5) - T.heightAt(x, z - 1.5)) > 1.6) continue;   // no cliffs
+        if (Math.hypot(x - START.x, z - START.z) < 16 || Math.hypot(x - CAMP.x, z - CAMP.z) < 16 || Math.hypot(x - GIANT.x, z - GIANT.z) < 34
+          || (Math.abs(x - TOWER_ZONE.x) < TOWER_ZONE.hw + 3 && Math.abs(z - TOWER_ZONE.z) < TOWER_ZONE.hd + 3)) continue;
+        const sc = rnd(t.sc[0], t.sc[1]);
+        e.set(t.flat ? rnd(-0.3, 0.3) : 0, rnd(0, Math.PI * 2), t.flat ? rnd(-0.3, 0.3) : 0); q.setFromEuler(e);
+        p.set(x, y - (t.flat ? sc * 0.25 : 0.05), z); sv.set(sc, sc * (t.flat ? rnd(0.6, 1) : rnd(0.85, 1.2)), sc);
+        const ci = clamp(Math.floor((x - X0) / (SX / CHX)), 0, CHX - 1) + CHX * clamp(Math.floor((z - Z0) / (SZ / CHZ)), 0, CHZ - 1);
+        chunks[ci].push({ m: m.compose(p, q, sv).clone(), c: t.tints ? t.tints[Math.floor(rnd(0, t.tints.length))] : 0 });
+        placed++;
+      }
+      for (const list of chunks) {
+        if (!list.length) continue;
+        const im = new THREE.InstancedMesh(t.geo, MAT.solid, list.length), tc = new THREE.Color();
+        list.forEach((o, i) => { im.setMatrixAt(i, o.m); if (t.tints) im.setColorAt(i, tc.set(o.c)); });
+        im.castShadow = false; im.receiveShadow = true;
         im.computeBoundingSphere();
         this.scene.add(im);
         (this.vegMeshes || (this.vegMeshes = [])).push(im);
@@ -447,6 +492,25 @@ function pineTall(b) {
   b.cyl(0.26, 0.4, 5, 6, 0, 2.5, 0, 0x5e4128);
   for (let i = 0; i < 4; i++) b.add(new THREE.ConeGeometry(3.0 - i * 0.6, 3.6, 7), i % 2 ? 0x2c6436 : 0x34723f, 0, 5 + i * 2.2, 0, 0, i * 0.5, 0);
 }
+// a spiky clump of grass: tapered three-sided blades leaning out, light and dark greens
+function grassClump(b) {
+  const cols = [0x5aa832, 0x6fbd3f, 0x84cc4c, 0x4c9a2b];
+  for (let i = 0; i < 7; i++) {
+    const a = i / 7 * Math.PI * 2 + (i % 2) * 0.3, lean = 0.35 + (i % 3) * 0.12, h = 0.45 + (i % 3) * 0.14;
+    b.add(new THREE.ConeGeometry(0.07, h, 3), cols[i % 4], Math.cos(a) * 0.09, h * 0.45, Math.sin(a) * 0.09, Math.sin(a) * lean, 0, -Math.cos(a) * lean);
+  }
+  b.add(new THREE.ConeGeometry(0.08, 0.62, 3), 0x6fbd3f, 0, 0.3, 0);
+}
+// a small leafy plant: broad pointed leaves around a centre
+function leafyPlant(b) {
+  const cols = [0x5fb23a, 0x76c447, 0x4f9e30];
+  for (let i = 0; i < 6; i++) {
+    const a = i / 6 * Math.PI * 2;
+    b.group(0, 0.06, 0, 0, a, 0, () => b.add(new THREE.OctahedronGeometry(0.22, 0), cols[i % 3], 0, 0.1, 0.24, -0.55, 0, 0, 'solid', 0.75, 0.18, 1.5));
+  }
+  b.add(new THREE.OctahedronGeometry(0.12, 0), 0x86d052, 0, 0.18, 0, 0, 0.4, 0, 'solid', 1, 1.4, 1);
+}
+function pebble(b) { b.add(new THREE.IcosahedronGeometry(1, 0), 0xffffff, 0, 0.4, 0, 0.2, 0.4, 0, 'solid', 1.25, 0.7, 1); }   // white: tinted per instance
 function grassTuft(b) {
   for (let i = 0; i < 5; i++) b.box(0.08, 0.55, 0.02, Math.cos(i * 1.3) * 0.12, 0.25, Math.sin(i * 1.3) * 0.12, i % 2 ? 0x6aa843 : 0x7cb850, 'solid', (i - 2) * 0.2, i * 1.2, 0);
 }
