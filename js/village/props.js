@@ -100,3 +100,29 @@ export function pots(b) {
   for (let i = 0; i < 4; i++) { const x = i * 0.45, r = 0.16 + (i % 2) * 0.06; b.add(new THREE.SphereGeometry(r, 7, 5), col[i % 3], x, r * 0.9, 0, 0, 0, 0, 'solid', 1, 0.9, 1); b.cyl(r * 0.5, r * 0.6, 0.1, 7, x, r * 1.75, 0, col[(i + 1) % 3]); }
 }
 export { woodPile, barrel };
+
+/* ---------- for the villagers (js/village/ai.js) ---------- */
+// a charpai: a wooden cot strung with rope, for sitting outside the house (local +z: the side you sit on)
+export function charpai(b) {
+  for (const [x, z] of [[-0.9, -0.42], [0.9, -0.42], [-0.9, 0.42], [0.9, 0.42]]) b.box(0.08, 0.44, 0.08, x, 0.22, z, C.woodD);
+  for (const s of [-1, 1]) { b.box(1.95, 0.07, 0.07, 0, 0.4, s * 0.43, C.wood); b.box(0.07, 0.07, 0.92, s * 0.94, 0.4, 0, C.wood); }
+  for (let i = 0; i < 8; i++) b.box(1.8, 0.02, 0.06, 0, 0.42, -0.36 + i * 0.103, i % 2 ? 0xd8c8a0 : 0xc8b48a);
+  for (let i = 0; i < 6; i++) b.box(0.05, 0.025, 0.82, -0.75 + i * 0.3, 0.425, 0, 0xbca47a);
+  b.box(0.5, 0.08, 0.62, -0.62, 0.47, -0.02, 0xc84a3a); b.box(0.5, 0.02, 0.64, -0.62, 0.5, -0.02, 0xe0b040);
+}
+// a football goal: two posts and a bar (local x = 0 the goal line, the net behind it toward -x)
+export function goal(b) {
+  const W = 0xf2efe6, N = 0xdedad0;
+  for (const s of [-1, 1]) { b.box(0.08, 1.12, 0.08, 0, 0.56, s * 1.1, W); b.box(0.04, 1.32, 0.04, -0.36, 0.53, s * 1.1, N, 'solid', 0, 0, 0.6); b.box(0.75, 0.04, 0.04, -0.37, 0.03, s * 1.1, N); }
+  b.box(0.08, 0.08, 2.28, 0, 1.12, 0, W);
+  b.box(0.04, 0.04, 2.2, -0.73, 0.03, 0, N);
+  for (let z = -0.9; z <= 0.91; z += 0.3) b.box(0.012, 1.3, 0.012, -0.36, 0.53, z, N, 'solid', 0, 0, 0.6);
+  for (let y = 0.25; y < 1.1; y += 0.28) b.box(0.012, 0.012, 2.2, -(1.12 - y) * 0.62, y, 0, N);
+}
+// a football: a faceted ball, white with dark patches
+export function football() {
+  const g = new THREE.IcosahedronGeometry(0.11, 1), n = g.attributes.position.count, col = new Float32Array(n * 3), w = new THREE.Color(0xf4f2ec), k = new THREE.Color(0x222226);
+  for (let f = 0; f < n / 3; f++) { const c = f % 5 === 0 ? k : w; for (let v = 0; v < 3; v++) col.set([c.r, c.g, c.b], (f * 3 + v) * 3); }
+  g.setAttribute('color', new THREE.BufferAttribute(col, 3)); g.deleteAttribute('uv');
+  return g;
+}

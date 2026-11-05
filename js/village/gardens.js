@@ -96,7 +96,8 @@ function steppingStones(b, x, z0, z1, gAt, R) {
 export function buildGarden(b, H, gAt, seed, plant) {
   const S = H.spec, R = prng(seed * 131 + 7), w = S.shape === 'round' ? S.r * 2 + 1.5 : S.w, d = S.shape === 'round' ? S.r * 2 : S.d;
   const zA = d / 2 + (S.porch ? S.porch.d + 0.3 : 0.6), zB = d / 2 + S.garden - 0.15, half = w / 2 + 0.6;
-  if (zB - zA < 1.2) return;
+  if (zB - zA < 1.2) return null;
+  const info = { half, zA, zB, beds: [], bench: null };                     // (for the villagers: js/village/ai.js)
   const tidy = R() < 0.6, kinds = ['flowers', 'sunflowers', 'veg', 'bushes', 'fruit', 'flowers'];
   const pick = () => kinds[Math.floor(R(0, kinds.length))];
   const left = pick(), right = seed % 3 === 0 ? 'veg' : pick();
@@ -107,6 +108,7 @@ export function buildGarden(b, H, gAt, seed, plant) {
     const x0 = side < 0 ? -half + 0.3 : 0.9, x1 = side < 0 ? -0.9 : half - 0.3, z0 = zA, z1 = zB - 0.35;
     if (x1 - x0 < 0.8) continue;
     bed(b, kind, x0, z0, x1, z1, gAt, R, plant, tidy);
+    info.beds.push({ side, kind, x0, x1, z0, z1 });
   }
   // the fence along the lane, with a gap for the path
   const ft = ['picket', 'wood', 'stone', 'hedge', 'none', 'picket', 'wood'][seed % 7];
@@ -120,8 +122,9 @@ export function buildGarden(b, H, gAt, seed, plant) {
   // pots by the door, and a bench or a barrel
   const dz = d / 2 + (S.porch ? S.porch.d : 0) + 0.35;
   if (R() < 0.8) { pot(b, -0.95, gAt(-0.95, dz), dz, R, R() < 0.6); pot(b, 0.95, gAt(0.95, dz), dz, R, R() < 0.6); }
-  if (R() < 0.45) { const x = side2(R) * (half - 1.0), z = zA + 0.5; bench(b, x, gAt(x, z), z, Math.PI); }
+  if (R() < 0.45) { const x = side2(R) * (half - 1.0), z = zA + 0.5; bench(b, x, gAt(x, z), z, Math.PI); info.bench = { x, z }; }
   else if (R() < 0.6) { const x = side2(R) * (half - 0.4), z = d / 2 - 0.2; barrel(b, x, gAt(x, z), z, C.wood); }
+  return info;
 }
 const side2 = R => (R() < 0.5 ? -1 : 1);
 // one bed: flowers, sunflowers, vegetables, bushes or a fruit tree

@@ -44,7 +44,20 @@ export function addAnimAttributes(mesh, n) {
   mesh.geometry.setAttribute('iAnim', a); mesh.geometry.setAttribute('iAnim2', b);
 }
 // gait per kind: leg swing (radians at full walk), one full step cycle (m), walking speed for a full swing (m/s)
-export const GAIT = { goat: { amp: 0.5, cycle: 0.95, ref: 0.55 }, chicken: { amp: 0.75, cycle: 0.24, ref: 0.32 } };
+export const GAIT = { goat: { amp: 0.5, cycle: 0.95, ref: 0.55 }, chicken: { amp: 0.75, cycle: 0.24, ref: 0.32 }, cow: { amp: 0.34, cycle: 1.5, ref: 0.32 }, horse: { amp: 0.38, cycle: 1.75, ref: 0.42 } };
+
+/* ---------- cows and horses ---------- */
+// standing, they graze: the head goes down to the grass for a while (nodding a little as they crop it), comes
+// up to look about, goes down again; walking, the head is carried low and bobs. The tail swishes now and then,
+// with a quick flick from time to time (flies). head: how far down (radians) · tail: the swish angle
+export function grazePose(a, ms, walking, out) {
+  const t = ms / 1000, k = a.k, u = (t + k * 97) % 16, horse = a.type.startsWith('horse');
+  const down = walking ? 0.25 : u < 10 ? Math.min(1, u / 1.2, (10 - u) / 1.2) : 0;
+  out.head = walking ? 0.22 + Math.sin(t * 3.2 + k * 9) * 0.05 : ease(Math.max(0, down)) * (horse ? 1.25 : 1.2) + (down > 0.9 ? Math.sin(t * 2.4 + k * 3) * 0.07 : -0.08);
+  const flick = (t + k * 31) % 7 < 0.9 ? Math.sin(t * 11) * 0.45 : 0;
+  out.tail = Math.sin(t * 1.7 + k * 5) * 0.22 + flick;
+  return out;
+}
 
 /* ---------- goats ---------- */
 const FIGHT = 35, WINDOWS = [[0, 10], [20, 5]];        // a 35 s cycle: butting 0–10 s, rest 10 s, butting 20–25 s, rest 10 s

@@ -12,7 +12,7 @@ const FILES = [
     'items', 'gear', 'drone', 'bridge', 'bridgeEditor', 'obstacles', 'materials', 'minimap', 'net', 'multiplayer', 'remote', 'save', 'utils',
     'zombies', 'survival', 'combat', 'voice', 'structures', 'designer', 'giants', 'app', 'icons', 'ambience', 'birds', 'grass', 'music', 'flora',
     'farm/config', 'farm/api', 'farm/logins', 'farm/farm', 'farm/menu', 'farm/panel',
-    'farm/layout', 'farm/props', 'farm/models', 'farm/npc', 'farm/farmland', 'farm/economy', 'farm/farmui', 'farm/notebook', 'farm/animals', 'village/layout', 'village/houses', 'village/gardens', 'village/props', 'village/animals', 'village/index',
+    'farm/layout', 'farm/props', 'farm/models', 'farm/npc', 'farm/farmland', 'farm/economy', 'farm/farmui', 'farm/notebook', 'farm/animals', 'village/layout', 'village/houses', 'village/gardens', 'village/props', 'village/animals', 'village/characters', 'village/animations', 'village/navigation', 'village/schedule', 'village/interactions', 'village/ai', 'village/index',
     'fishing/sim', 'fishing/models', 'fishing/thumbs', 'fishing/area', 'fishing/fishing', 'fishing/marketui'].map(f => `./js/${f}.js`),
 ];
 const LIBS = [

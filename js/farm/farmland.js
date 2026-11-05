@@ -12,9 +12,10 @@ import { shelterModel, penGround, gateModel, signboard, wallSign, storageModel, 
 import { C, FARM_MAT, crate, barrel, eggStack, milkCan, hayBale, sack, lampPost, woodPile, stoneBin, fenceRun } from './props.js';
 import { FarmerNPC } from './npc.js';
 import { flambeau } from '../day-night.js';
-import { rigMaterial, rigDepthMaterial, addAnimAttributes, GAIT, goatPose, chickenExtras } from './animals.js';
+import { rigMaterial, rigDepthMaterial, addAnimAttributes, GAIT, goatPose, chickenExtras, grazePose } from './animals.js';
 
 const MAX_PER_TYPE = 64;
+const ORIGIN = { x: 0, z: 0, yaw: 0 };
 const SPEED = { chicken: 1.6, chicken_brown: 1.5, chicken_dark: 1.4, goat: 0.8, cow: 0.45, horse: 0.6,
   horse_bay: 0.6, horse_chestnut: 0.62, horse_black: 0.58, horse_white: 0.6, horse_palomino: 0.64, horse_pinto: 0.6 };
 const GATE_OPEN = Math.PI * 0.52;
@@ -377,8 +378,9 @@ export class Farmland {
       const chick = a.type.startsWith('chicken'), sick = a.health !== undefined && a.health < 40 ? 0.06 : 0, i = n[a.type];
       let x, z, yaw, y, pitch = 0, pivot = 0;
       const anim = m.geometry.attributes.iAnim;
-      if (anim) {                                       // goats and chickens: real steps, head and wings (js/farm/animals.js)
-        const G = chick ? GAIT.chicken : GAIT.goat;
+      if (anim) {                                       // goats, chickens, cows, horses: real steps, head, wings / tail (js/farm/animals.js)
+        const big = a.type === 'cow' || a.type.startsWith('horse');
+        const G = chick ? GAIT.chicken : big ? (a.type === 'cow' ? GAIT.cow : GAIT.horse) : GAIT.goat;
         let st = this.animSt.get(a.id);
         if (!st) this.animSt.set(a.id, st = { x: 0, z: 0, ph: a.k * 10, w: 0, init: false, clash: 0 });
         let F, lx, lz, lyaw, head, lift = 0, hop = 0, flap = 0;
@@ -386,6 +388,9 @@ export class Farmland {
           const wl = this.wanderLocal(a, serverMs), ce = chickenExtras(a, serverMs, wl.walking, this._ce);
           F = a.home ? a.home.F : PLOTS[a.plot]; lx = wl.x; lz = wl.z; lyaw = wl.yaw; head = ce.head; hop = ce.hop; flap = ce.flap;
           if (head > 0.5) lift = 0.18;                   // leaning into a peck
+        } else if (big) {                                 // cows and horses wander and graze
+          const p = this.posOf(a, serverMs), g = grazePose(a, serverMs, p.walking, this._gp || (this._gp = {}));
+          F = ORIGIN; lx = p.x; lz = p.z; lyaw = p.yaw; head = g.head; flap = g.tail;
         } else {
           const P = goatPose(a, serverMs, this, this._pose);
           F = P.F; lx = P.x; lz = P.z; lyaw = P.yaw; head = P.head; lift = P.lift; pivot = -0.24;   // (rears up on its hind legs)
@@ -400,7 +405,7 @@ export class Farmland {
         if (d < 1.5) st.ph += d / G.cycle * Math.PI * 2;
         const speed = dt > 0 && d < 1.5 ? d / dt : 0;
         st.w += (Math.min(1, speed / G.ref) - st.w) * (1 - Math.exp(-9 * dt));
-        const bob = Math.abs(Math.sin(st.ph)) * (chick ? 0.012 : 0.014) * st.w;
+        const bob = Math.abs(Math.sin(st.ph)) * (chick ? 0.012 : big ? 0.025 : 0.014) * st.w;
         y = this.H(x, z) + 0.035 + bob + hop;
         anim.setXYZW(i, st.ph, G.amp * st.w, head, chick ? Math.sin(st.ph * 2) * 0.024 * st.w : 0);
         m.geometry.attributes.iAnim2.setX(i, flap);

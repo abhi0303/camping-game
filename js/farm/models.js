@@ -509,21 +509,60 @@ const HORSE_COATS = {
 };
 function horse(b, o) {
   b.box(0.5, 0.56, 1.35, 0, 1.25, 0, o.body);
-  b.box(0.26, 0.6, 0.3, 0, 1.68, 0.62, o.body, 'solid', 0.55, 0, 0);
-  b.box(0.24, 0.26, 0.56, 0, 1.98, 0.92, o.body, 'solid', 0.45, 0, 0);
-  b.box(0.07, 0.5, 0.36, 0, 1.82, 0.56, o.mane, 'solid', 0.55, 0, 0);
-  if (o.blaze) b.box(0.08, 0.04, 0.3, 0, 2.11, 0.98, o.blaze, 'solid', 0.45, 0, 0);
-  for (const x of [-0.07, 0.07]) b.box(0.05, 0.12, 0.04, x, 2.16, 0.78, o.body);
-  if (o.patches) {
-    b.box(0.52, 0.34, 0.42, 0, 1.3, 0.28, o.patches); b.box(0.52, 0.28, 0.3, 0, 1.36, -0.42, o.patches);
-    b.box(0.27, 0.3, 0.2, 0, 1.75, 0.66, o.patches, 'solid', 0.55, 0, 0);
-  }
-  for (const x of [-0.17, 0.17]) for (const z of [-0.5, 0.5]) {
+  rig(b, [2, 0, 1.42, 0.5], () => {                                    // neck and head (lower to graze)
+    b.box(0.26, 0.6, 0.3, 0, 1.68, 0.62, o.body, 'solid', 0.55, 0, 0);
+    b.box(0.24, 0.26, 0.56, 0, 1.98, 0.92, o.body, 'solid', 0.45, 0, 0);
+    b.box(0.07, 0.5, 0.36, 0, 1.82, 0.56, o.mane, 'solid', 0.55, 0, 0);
+    if (o.blaze) b.box(0.08, 0.04, 0.3, 0, 2.11, 0.98, o.blaze, 'solid', 0.45, 0, 0);
+    for (const x of [-0.07, 0.07]) b.box(0.05, 0.12, 0.04, x, 2.16, 0.78, o.body);
+    for (const x of [-0.125, 0.125]) b.box(0.012, 0.04, 0.04, x, 2.02, 0.98, 0x111111);     // eyes
+    if (o.patches) b.box(0.27, 0.3, 0.2, 0, 1.75, 0.66, o.patches, 'solid', 0.55, 0, 0);
+  });
+  if (o.patches) { b.box(0.52, 0.34, 0.42, 0, 1.3, 0.28, o.patches); b.box(0.52, 0.28, 0.3, 0, 1.36, -0.42, o.patches); }
+  for (const x of [-0.17, 0.17]) for (const z of [-0.5, 0.5]) rig(b, [1, (x < 0) === (z > 0) ? 0 : Math.PI, 0.98, z], () => {
     b.cyl(0.06, 0.055, 0.5, 5, x, 0.73, z, o.body);                    // upper leg
     b.cyl(0.055, 0.05, 0.42, 5, x, 0.27, z, o.socks);                  // lower leg
     b.cyl(0.06, 0.065, 0.07, 5, x, 0.035, z, 0x2a2420);                // hoof
-  }
-  b.box(0.1, 0.55, 0.1, 0, 1.0, -0.72, o.mane, 'solid', -0.3, 0, 0);
+  });
+  rig(b, [3, 1e-4, 1.26, 0], () => b.box(0.1, 0.55, 0.1, 0, 1.0, -0.72, o.mane, 'solid', -0.3, 0, 0));   // tail (swishes)
+}
+// a cow (white with black patches): a faceted barrel body, an udder, jointed legs with dark hooves, a neck and
+// a head with a pink muzzle, ears and short horns, a tail with a dark tuft. Faces +z, feet at y = 0.
+const COW = { coat: 0xf4f1ea, patch: 0x2a2622, udder: 0xe8a8a0, nose: 0xe8a8a0, hoof: 0x2a2420, horn: 0xe8e0c8, eye: 0x1a1612, ear: 0xe8d8d0 };
+function cow(b, o) {
+  const ico = (r, d = 1) => new THREE.IcosahedronGeometry(r, d);
+  b.add(ico(1), o.coat, 0, 1.02, 0.02, 0, 0, 0, 'solid', 0.33, 0.31, 0.7);
+  b.add(ico(1, 0), o.coat, 0, 1.07, 0.42, 0, 0, 0, 'solid', 0.3, 0.29, 0.3);                                   // chest
+  b.add(ico(1, 0), o.patch, 0.2, 1.08, 0.22, 0, 0, 0, 'solid', 0.15, 0.17, 0.24);
+  b.add(ico(1, 0), o.patch, -0.21, 1.0, -0.2, 0, 0, 0, 'solid', 0.14, 0.2, 0.27);
+  b.add(ico(1, 0), o.patch, 0.05, 1.3, -0.32, 0, 0, 0, 'solid', 0.18, 0.06, 0.2);
+  b.add(new THREE.DodecahedronGeometry(0.1, 0), o.udder, 0, 0.7, -0.27, 0, 0, 0, 'solid', 1, 0.7, 1.15);
+  for (const x of [-0.035, 0.035]) for (const z of [-0.31, -0.23]) b.cyl(0.01, 0.014, 0.06, 4, x, 0.62, z, o.udder);
+  for (const x of [-0.19, 0.19]) for (const z of [0.42, -0.44]) rig(b, [1, (x < 0) === (z > 0) ? 0 : Math.PI, 0.86, z], () => {
+    const fz = z > 0 ? 0.02 : -0.015;
+    limb(b, [x, 0.86, z], [x, 0.42, z + fz], 0.085, 0.06, o.coat, 6);
+    b.add(new THREE.DodecahedronGeometry(0.058, 0), o.coat, x, 0.41, z + fz);
+    limb(b, [x, 0.41, z + fz], [x, 0.07, z], 0.052, 0.046, o.coat, 6);
+    b.cyl(0.05, 0.056, 0.07, 6, x, 0.035, z + 0.005, o.hoof);
+  });
+  rig(b, [3, 1e-4, 1.24, 0], () => {                                                                           // tail (swishes)
+    limb(b, [0, 1.24, -0.68], [0, 0.64, -0.75], 0.025, 0.02, o.coat, 4);
+    b.add(new THREE.ConeGeometry(0.05, 0.17, 5), o.patch, 0, 0.58, -0.75, Math.PI, 0, 0);
+  });
+  rig(b, [2, 0, 1.1, 0.55], () => {                                                                            // neck and head (graze)
+    limb(b, [0, 1.08, 0.52], [0, 1.2, 0.84], 0.17, 0.13, o.coat, 7);
+    b.group(0, 1.17, 0.95, 0.55, 0, 0, () => {
+      b.box(0.26, 0.24, 0.34, 0, 0, 0, o.coat);
+      b.box(0.27, 0.12, 0.2, 0, 0.07, -0.02, o.patch);                                                         // a dark patch over the eyes
+      b.box(0.25, 0.16, 0.14, 0, -0.05, 0.21, o.nose);                                                         // muzzle
+      for (const x of [-0.06, 0.06]) b.box(0.03, 0.03, 0.01, x, -0.04, 0.285, 0x5a3a36);                       // nostrils
+      for (const sx of [-1, 1]) {
+        b.box(0.012, 0.035, 0.035, sx * 0.133, 0.05, 0.06, o.eye);
+        b.box(0.14, 0.05, 0.08, sx * 0.19, 0.06, -0.08, o.ear, 'solid', 0, 0, sx * 0.25);
+        limb(b, [sx * 0.09, 0.12, -0.1], [sx * 0.18, 0.22, -0.12], 0.025, 0.012, o.horn, 4);
+      }
+    });
+  });
 }
 function geomOf(fn) { const b = new GeoBuilder(); fn(b); return b.build().children[0].geometry; }
 // a model whose parts can move (js/farm/animals.js): every vertex gets aRig = [kind, a, b, c]
@@ -629,16 +668,8 @@ export const ANIMAL_GEO = {
   chicken_brown: () => rigOf(b => chicken(b, { body: 0x9a5a2a, neck: 0xc8822e, head: 0xb06a28, wing: 0x6e3c1c, tail: 0x1e2a22, tail2: 0x2e4a34, longTail: true, comb: 0xd8342a, beak: 0xd8a040, legs: 0xc89a40, size: 1.05 })),
   chicken_dark: () => rigOf(b => chicken(b, { body: 0x2a2a2e, neck: 0x34343a, head: 0x2e2e32, wing: 0x1c1d24, tail: 0x15161c, tail2: 0x22304a, longTail: true, comb: 0x5a1a2a, beak: 0x3a3a3a, legs: 0x2a2a2a, size: 1.0 })),
   goat: () => rigOf(b => goat(b, GOAT_COAT)),
-  cow: () => geomOf(b => {
-    b.box(0.62, 0.62, 1.4, 0, 1.05, 0, 0xf4f1ea);
-    b.box(0.02, 0.36, 0.42, 0.315, 1.1, 0.2, 0x2a2622); b.box(0.02, 0.3, 0.5, -0.315, 1.0, -0.3, 0x2a2622); b.box(0.4, 0.02, 0.36, 0, 1.365, -0.1, 0x2a2622);
-    b.box(0.4, 0.42, 0.46, 0, 1.25, 0.86, 0xf4f1ea);
-    b.box(0.3, 0.2, 0.14, 0, 1.12, 1.12, 0xe8a8a0);
-    for (const s of [-1, 1]) b.cyl(0.025, 0.04, 0.18, 4, s * 0.17, 1.52, 0.8, 0xe8e0c8, 0, 0, -s * 0.9);
-    for (const x of [-0.22, 0.22]) for (const z of [-0.5, 0.5]) leg(b, x, z, 0.76, 0.07, 0xe8e4dc);
-    b.box(0.14, 0.12, 0.18, 0, 0.7, 0.2, 0xe8a8a0);
-  }),
+  cow: () => rigOf(b => cow(b, COW)),
   // horses in six colours (catalog horse_*); 'horse' is the bay one (worlds from before the colours)
-  horse: () => geomOf(b => horse(b, HORSE_COATS.horse_bay)),
-  ...Object.fromEntries(Object.keys(HORSE_COATS).map(k => [k, () => geomOf(b => horse(b, HORSE_COATS[k]))])),
+  horse: () => rigOf(b => horse(b, HORSE_COATS.horse_bay)),
+  ...Object.fromEntries(Object.keys(HORSE_COATS).map(k => [k, () => rigOf(b => horse(b, HORSE_COATS[k]))])),
 };

@@ -180,7 +180,8 @@ const notebook = new Notebook({ eco: farmEco, materials, hooks: uiHooks, worldNa
 farmUI.book = notebook;
 // fishing (Farm World): the Fish Market, the docks on the river and the mini-game; the server checks catches
 const fishArea = new FishingArea(scene, world);
-const village = new Village(scene, world);           // Sonpur village behind the Market (js/village)
+const village = new Village(scene, world);
+const villageViewers = [];           // Sonpur village behind the Market (js/village)
 const fishing = new Fishing({ scene, area: fishArea, eco: farmEco, player, gear, remotes, input, audio, toast: m => toast(m), haptic: ms => app.haptic(ms),
   beforeStart: () => { if (combat.out) combat.setOut(false); if (farmUI.isOpen) farmUI.close(); },
   openMarket: () => farmUI.open('fish'), onCatch: () => { farmEco.fished = true; },
@@ -915,6 +916,12 @@ function step(dt) {
   survival.update(dt, input);
   if (farm.active) {
     farmland.update(dt, farmEco.serverNow(), player.mode === 'foot' ? player.pos : null);
+    if (village.on) {                   // the villagers (their day follows the shared clock)
+      villageViewers.length = 0;
+      villageViewers.push(player.mode === 'foot' ? player.pos : player.rv.root.position);
+      for (const r of remotes.map.values()) if (r.pos) villageViewers.push(r.pos);
+      village.update(dt, world.dayNight.now(), villageViewers);
+    }
     fishArea.update(dt, player.mode === 'foot' ? player.pos : null);
     if ((plotInfoT -= dt) <= 0) { plotInfoT = 0.25; farmUI.renderInfo(player.mode === 'foot' ? farmland.plotAt(player.pos) : null); }
   } else if (plotInfoT !== 1) { plotInfoT = 1; farmUI.renderInfo(null); }

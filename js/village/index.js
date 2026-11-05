@@ -5,7 +5,7 @@
 // (js/terrain.js), adds collisions, keeps the wild flowers off lanes and gardens, and draws the village on the
 // map. Static parts are merged into a few chunk meshes (one per area and material); the many plants and the
 // trees are instanced. Windows light up at night and lamps glow (js/day-night.js, the shared IST clock).
-// `spots` keeps the doors, benches and the square for the villagers of the next phase.
+// The villagers (js/village/ai.js) live in it: they get the doors, gardens, pens, props and benches from here.
 import * as THREE from 'three';
 import { GeoBuilder, MAT } from '../utils.js';
 import { C, lampPost, bench, barrel, woodPile } from '../farm/props.js';
@@ -15,6 +15,7 @@ import { HOUSES, HALL, buildHouse } from './houses.js';
 import { buildGarden, PLANTS, SHADOW_PLANTS } from './gardens.js';
 import { buildPen, PEN_SIZE, ANIMALS } from './animals.js';
 import { well, cart, haystack, clothesline, hearth, shed, stall, tableSet, pots } from './props.js';
+import { Villagers } from './ai.js';
 import { VILLAGE_NAME, SQUARE, LANES, VILLAGE_CLEAR, BOUNDS, laneDist, laneSegments, placeHouses, inside, plot } from './layout.js';
 
 const CHUNK = 32;
@@ -37,12 +38,17 @@ export class Village {
     this.on = true;
     const W = this.world, T = W.T, R = prng(2024);
     W.clearArea(VILLAGE_CLEAR);
+    // everything solid the village adds is marked as the village's (the villagers' paths keep clear of it)
+    const addCollider = W.addCollider;
+    W.addCollider = c => { c.village = true; return addCollider.call(W, c); };
     this.chunks = new Map(); this.plants = {}; this.trees = {};
     const chunk = (x, z) => { const k = Math.floor((x - BOUNDS.x0) / CHUNK) + ',' + Math.floor((z - BOUNDS.z0) / CHUNK); if (!this.chunks.has(k)) this.chunks.set(k, new GeoBuilder()); return this.chunks.get(k); };
     const gIn = F => (lx, lz) => { const p = Village.at(F, lx, lz); return T.heightAt(p.x, p.z) - F.y; };
     const plantIn = F => (kind, lx, lz, yaw = 0, s = 1) => {
-      if (W.lite && (kind === 'daisy' || kind === 'yellow') && R() < 0.45) return;
       const p = Village.at(F, lx, lz);
+      // phones grow fewer garden flowers: picked by position, so the village's own random numbers (and with them
+      // where the trees and props go, and the villagers' paths) are the same on every device
+      if (W.lite && (kind === 'daisy' || kind === 'yellow')) { const h = Math.sin(p.x * 12.9898 + p.z * 78.233) * 43758.5453; if (h - Math.floor(h) < 0.45) return; }
       (this.plants[kind] || (this.plants[kind] = [])).push([p.x, T.heightAt(p.x, p.z) - 0.03, p.z, F.yaw + yaw, s]);
     };
     // the village hall on the north side of the square, facing it
@@ -61,7 +67,7 @@ export class Village {
       const b = chunk(H.x, H.z), F = { x: H.x, z: H.z, yaw: H.yaw, y: H.base };
       b.group(H.x, H.base, H.z, 0, H.yaw, 0, () => {
         buildHouse(b, H, gIn(F), i + 1);
-        buildGarden(b, H, gIn(F), i + 3, plantIn(F));
+        H.garden = buildGarden(b, H, gIn(F), i + 3, plantIn(F));
       });
       this._houseColliders(H);
       const door = Village.at(F, 0, (H.spec.shape === 'round' ? H.spec.r : H.spec.d / 2) + (H.spec.porch ? H.spec.porch.d : 0) + 0.9);
@@ -77,10 +83,15 @@ export class Village {
     this._lamps(chunk);
     this._sign();
     this._trees(R);
+    // the villagers: their paths and places, the football green, cots outside some houses
+    W.addCollider = addCollider;
+    this.people = new Villagers(this);
+    this.people.prepare((x, z) => chunk(x, z));
     // build the meshes
     const mats = { ...MAT, win0: W.dayNight.windowMats[0], win1: W.dayNight.windowMats[1], win2: W.dayNight.windowMats[2] };
     for (const b of this.chunks.values()) { const g = b.build(mats); g.traverse(o => { if (o.isMesh) { o.matrixAutoUpdate = false; o.updateMatrix(); } }); this._add(g); }
     this._instanced();
+    this.people.start(o => this._add(o));
     // the lanes and the square on the ground, the grass and flowers kept off them, the map
     const segs = laneSegments();
     T.setVillageGround && T.setVillageGround(segs, SQUARE, BOUNDS);
@@ -91,11 +102,15 @@ export class Village {
   blocked(x, z) {
     if (x < BOUNDS.x0 || x > BOUNDS.x1 || z < BOUNDS.z0 || z > BOUNDS.z1) return false;
     if (Math.hypot(x - SQUARE.x, z - SQUARE.z) < SQUARE.r + 0.5) return true;
+    if (this.people && this.people._inField(x, z, 0.4)) return true;
     if (laneDist(x, z).d < 0.4) return true;
     for (const H of this.houses) { const S = H.spec, w = S.shape === 'round' ? S.r * 2 + 1.5 : S.w + 1.4; if (inside({ ...H, z: H.z + Math.cos(H.yaw) * S.garden / 2, x: H.x + Math.sin(H.yaw) * S.garden / 2 }, x, z, w, (S.shape === 'round' ? S.r * 2 : S.d) + S.garden + 0.6)) return true; }
     for (const P of this.pens) if (inside(P, x, z, PEN_SIZE.hw * 2 + 0.4, PEN_SIZE.z1 - PEN_SIZE.z0 + 0.4)) return true;
     return false;
   }
+
+  // every frame (Farm World): ms = the shared clock, viewers = players' positions
+  update(dt, ms, viewers) { if (this.people) this.people.update(dt, ms, viewers); }
 
   /* ---------- parts ---------- */
   _houseColliders(H) {
@@ -127,6 +142,7 @@ export class Village {
       const b = chunk(P.x, P.z);
       let home;
       b.group(P.x, P.y, P.z, 0, P.yaw, 0, () => { home = buildPen(b, kind, gIn(P)); });
+      P.kind = kind; P.house = H;
       this.pens.push(P);
       // the fence: you can't walk into the yard
       for (const [ax, az, bx, bz] of [[-PEN_SIZE.hw, PEN_SIZE.z1, PEN_SIZE.hw, PEN_SIZE.z1], [-PEN_SIZE.hw, PEN_SIZE.z0, -PEN_SIZE.hw, PEN_SIZE.z1], [PEN_SIZE.hw, PEN_SIZE.z0, PEN_SIZE.hw, PEN_SIZE.z1], [-PEN_SIZE.hw, PEN_SIZE.z0, PEN_SIZE.hw, PEN_SIZE.z0]]) {
@@ -156,6 +172,7 @@ export class Village {
     put(sx, sz, Math.PI / 2, () => stall(b));
     this.world.addCollider({ x: sx, z: sz, r: 1.1 }); this.world.addCollider({ x: sx, z: sz + 1.2, r: 0.7 }); this.world.addCollider({ x: sx, z: sz - 1.2, r: 0.7 });
     this.spots.stall = { x: sx + 1.4, z: sz, yaw: -Math.PI / 2 };
+    this.spots.stallAt = { x: sx, z: sz };
     for (const a of [0.2, 1.75, 3.35, 4.9]) { const x = Q.x + Math.cos(a) * (Q.r - 0.4), z = Q.z + Math.sin(a) * (Q.r - 0.4); put(x, z, a, () => lampPost(b, 0, 0, 0, 0)); this.world.addCollider({ x, z, r: 0.2 }); }
     put(Q.x + 3.2, Q.z - Q.r + 1.2, 0.4, () => pots(b));
     put(Q.x - 2.6, Q.z - Q.r + 0.9, 0, () => barrel(b, 0, 0, 0, C.wood));
@@ -188,6 +205,7 @@ export class Village {
         else pots(b);
       });
       if (what !== 'line' && what !== 'pots') this.world.addCollider({ x: p.x, z: p.z, r: what === 'cart' || what === 'shed' ? 1.1 : what === 'hay' ? 1.2 : 0.7 });
+      (this.spots.props || (this.spots.props = [])).push({ what, x: p.x, z: p.z, yaw, house: H });
       n++;
     }
   }
