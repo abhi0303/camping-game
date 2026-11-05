@@ -247,6 +247,8 @@ The road ends at the **Giant Plateau**. It's daytime, with no zombies: you get *
 
 Farm World: **N** farm notebook, **O** order slip, **R** parks the RV back in front of the Farm Store. Opening a world puts the RV on the road right in front of the Farm Store, with you standing outside it.
 
+Leaving a Zombie Trail game: **Esc → Exit to main menu** (tap twice). Solo and the host save first and the start screen offers **Continue**; when the host leaves, the friends carry on solo; a guest just leaves the room.
+
 Global: **M** map, **K** sound, **B** mic on / off (co-op), **R** RV back to the last checkpoint, **Tab** hide help, **Esc** pause (co-op: player list, ping, mic, kick).
 
 ## The trail

@@ -695,7 +695,9 @@ let flash = '';
 try { flash = sessionStorage.getItem('rv-flash') || ''; sessionStorage.removeItem('rv-flash'); } catch (e) { /* ignore */ }
 // Farm World screens (tabs: Zombie Trail / Farm World)
 const farmMenu = new FarmMenu({ enter: enterFarm, defaultName: () => { try { return localStorage.getItem('rv-name') || ''; } catch (e) { return ''; } } });
-if (flash) { if (farmMenu.mode === 'farm') farmMenu.status('⚠ ' + flash, true); else M.status.textContent = '⚠ ' + flash; }
+let flashOk = false;
+try { flashOk = !!sessionStorage.getItem('rv-flash-ok'); sessionStorage.removeItem('rv-flash-ok'); } catch (e) { /* ignore */ }
+if (flash) { const t = flashOk ? flash : '⚠ ' + flash; if (farmMenu.mode === 'farm') farmMenu.status(t, !flashOk); else M.status.textContent = t; }
 // Farm World: the RV parks on the store's side of the road, right in front of the Farm Store, its side door
 // facing the store, and you stand outside it (looking at the store). Extra RVs park behind it.
 function parkAtStore() {
@@ -786,8 +788,36 @@ function openMenu() {
   overlay.classList.remove('hidden');
   scoreT = 0; requestRender = true;
   if (farm.active) farm.refreshInfo(true).then(() => farmPanel.render(), () => {});
+  else leaveLabel();
 }
 $('play').addEventListener('click', resume);
+// Zombie Trail: leave the game (Esc menu). Solo and the host save first; the host's friends carry on solo;
+// a guest just leaves the room. Two taps, so it can't happen by accident.
+const leaveBtn = $('leaveBtn');
+let leaveT = 0;
+function leaveLabel() {
+  const guest = net.isGuest, host = net.online && net.isHost;
+  leaveBtn.classList.remove('sure'); clearTimeout(leaveT);
+  leaveBtn.innerHTML = `${icon('door')} ${guest ? 'Leave the room' : host ? 'Leave & close the room' : 'Exit to main menu'}`;
+  $('leaveHint').textContent = guest ? 'Back to the start screen — your friends keep playing'
+    : host ? 'Progress is saved · your friends carry on playing solo' : 'Progress is saved — press Continue to pick up where you left off';
+}
+function leaveGame() {
+  const guest = net.isGuest, host = net.online && net.isHost;
+  if (!guest) saveNow();
+  try { net.leave(); } catch (e) { /* ignore */ }
+  try { sessionStorage.setItem('rv-flash-ok', '1'); } catch (e) { /* ignore */ }
+  backToMenu(guest ? 'You left the room.' : host ? 'You closed the room — your progress is saved.' : 'Progress saved — press Continue to pick up where you left off.', 'zombie');
+}
+leaveBtn.addEventListener('click', e => {
+  e.preventDefault(); e.stopPropagation();
+  if (!leaveBtn.classList.contains('sure')) {
+    leaveBtn.classList.add('sure'); leaveBtn.innerHTML = `${icon('door')} Tap again to leave`;
+    clearTimeout(leaveT); leaveT = setTimeout(leaveLabel, 3000);
+    return;
+  }
+  leaveBtn.disabled = true; leaveGame();
+});
 // tap outside the menu card = back to the game
 overlay.addEventListener('click', e => { if (e.target === overlay && started) resume(); });
 // phones have no Esc key: the ☰ button opens the same menu
