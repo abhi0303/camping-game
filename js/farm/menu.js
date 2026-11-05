@@ -2,6 +2,7 @@
 // (worlds saved on this device, create a world, log in to a world, accept an invite).
 import { api, apiReady, LOGIN_GONE } from './api.js';
 import { Logins } from './logins.js';
+import { icon } from '../icons.js';
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -25,7 +26,7 @@ export class FarmMenu {
     for (const id of ['fcPin', 'fjPin', 'fiPin', 'fnPin']) $(id).addEventListener('input', e => { e.target.value = e.target.value.replace(/\D/g, '').slice(0, 6); });
     // a pasted invite link fills the world code and the invite code (the installed app can't open links)
     const pasted = v => { const l = fromLink(v); if (!l) return false; $('fnCode').value = l.code; if (l.invite) $('fnInvite').value = l.invite; return true; };
-    $('fjCode').addEventListener('input', e => { const v = e.target.value, l = fromLink(v); e.target.value = l ? l.code : cleanCode(v); if (l && l.invite) { pasted(v); this.status('That was an invite link: it is filled in under “Join with an invite”.'); $('fnName').focus(); } });
+    $('fjCode').addEventListener('input', e => { const v = e.target.value, l = fromLink(v); e.target.value = l ? l.code : cleanCode(v); if (l && l.invite) { pasted(v); this.setForm('new'); this.status('That was an invite link: it is filled in under “Join with invite”.'); $('fnName').focus(); } });
     $('fnCode').addEventListener('input', e => { const v = e.target.value; if (!pasted(v)) e.target.value = cleanCode(v); });
     $('fnInvite').addEventListener('input', e => { const v = e.target.value; if (!pasted(v)) e.target.value = cleanInvite(v); });
     $('fnGo').onclick = () => this.joinCode();
@@ -35,12 +36,15 @@ export class FarmMenu {
     const enterKey = (ids, btn) => ids.forEach(id => $(id).addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); $(btn).click(); } }));
     enterKey(['fcName', 'fcWorld', 'fcPin'], 'fcGo'); enterKey(['fjCode', 'fjName', 'fjPin'], 'fjGo'); enterKey(['fiName', 'fiPin'], 'fiGo'); enterKey(['fnCode', 'fnInvite', 'fnName', 'fnPin'], 'fnGo');
     this.ui.saved.addEventListener('click', e => this._savedClick(e));
+    // one form at a time: create · join with an invite · log in
+    $('fTabs').addEventListener('click', e => { const b = e.target.closest('[data-ftab]'); if (b) { this.setForm(b.dataset.ftab); const f = document.querySelector(`.fbox[data-ftab="${b.dataset.ftab}"] input`); if (f) f.focus(); } });
+    this.setForm('create');
     // ?farm=CODE&invite=XXXX (invite link) or ?farm=CODE
     const q = new URLSearchParams(location.search);
     this.fromLink = !!q.get('farm');
     const code = cleanCode(q.get('farm')), invite = String(q.get('invite') || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
     if (code && invite) this._showInvite(code, invite);
-    else if (code) $('fjCode').value = code;
+    else if (code) { $('fjCode').value = code; this.setForm('open'); }
     // tabs
     let mode = 'zombie';
     try { mode = sessionStorage.getItem('rv-mode-next') || localStorage.getItem('rv-mode') || 'zombie'; sessionStorage.removeItem('rv-mode-next'); } catch (e) { /* ignore */ }
@@ -65,6 +69,12 @@ export class FarmMenu {
       else if (!first) this.status('');
     }
   }
+  // show one of the three forms (create | new | open)
+  setForm(tab) {
+    this.form = tab;
+    for (const b of document.querySelectorAll('#fTabs [data-ftab]')) b.classList.toggle('on', b.dataset.ftab === tab);
+    for (const f of document.querySelectorAll('.fbox[data-ftab]')) f.classList.toggle('off', f.dataset.ftab !== tab);
+  }
   // hide the start screens once a game runs
   hide() { $('modeTabs').classList.add('hidden'); $('menuFarm').classList.add('hidden'); $('overlay').classList.add('playing'); }
 
@@ -83,27 +93,28 @@ export class FarmMenu {
   /* ---------- worlds this device is logged in to ---------- */
   renderSaved() {
     const list = Logins.all();
-    this.ui.saved.innerHTML = list.map(L => `<div class="fworld" data-code="${esc(L.code)}">
-      <div class="fw-main"><div class="fw-name">🌾 ${esc(L.roomName || 'Farm World')}</div>
-      <div class="fw-sub">code ${esc(L.code)} · you are ${esc(L.name)}${L.isOwner ? ' (owner)' : ''}<span data-live="${esc(L.code)}"></span></div></div>
-      <button class="mbig" data-play="${esc(L.code)}">▶ Play</button><button class="fw-x" data-forget="${esc(L.code)}" title="Forget this world on this device">✕</button></div>`).join('');
+    this.ui.saved.classList.toggle('has', list.length > 0);
+    this.ui.saved.innerHTML = (list.length ? `<div class="fm-h"><span>Your ${list.length > 1 ? 'worlds' : 'world'}</span></div>` : '') + list.map(L => `<div class="fworld" data-code="${esc(L.code)}">
+      <div class="fw-main"><div class="fw-name">${icon('wheat')}<span>${esc(L.roomName || 'Farm World')}</span></div>
+      <div class="fw-sub"><span class="fw-code">${esc(L.code)}</span><span>${esc(L.name)}${L.isOwner ? ` · ${icon('crown')}owner` : ''}</span><span class="fw-live" data-live="${esc(L.code)}"></span></div></div>
+      <button class="mbig fw-play" data-play="${esc(L.code)}">${icon('play')} Play</button><button class="fw-x" data-forget="${esc(L.code)}" title="Forget this world on this device">${icon('close')}</button></div>`).join('');
     if (apiReady()) for (const L of list) this._live(L);
   }
   async _live(L) {
     const span = this.ui.saved.querySelector(`[data-live="${L.code}"]`);
     try {
       const i = await api.info(L);
-      if (span) span.textContent = ` · 👥 ${i.members.length}/${i.maxMembers} members · ${i.online ? `🟢 ${i.online} playing now` : 'nobody playing now'}`;
+      if (span) span.innerHTML = `${icon('users')}${i.members.length}/${i.maxMembers}<i class="fw-dot${i.online ? ' on' : ''}"></i>${i.online ? `${i.online} playing now` : 'nobody playing'}`;
       Logins.touch(L.code, { roomName: i.room.name, name: i.me.name, seat: i.me.seat, isOwner: i.me.isOwner });
     } catch (e) {
-      if (span && LOGIN_GONE.has(e.code)) span.textContent = e.code === 'room_not_found' ? ' · ⚠ this world was deleted' : ' · ⚠ log in again';
+      if (span && LOGIN_GONE.has(e.code)) { span.classList.add('bad'); span.innerHTML = `${icon('warn')}${e.code === 'room_not_found' ? 'this world was deleted' : 'log in again'}`; }
     }
   }
   _savedClick(e) {
     const play = e.target.closest('[data-play]'), forget = e.target.closest('[data-forget]');
     if (play) { const L = Logins.get(play.dataset.play); if (L) this._run(() => this._open(L)); return; }
     if (forget) {
-      if (!forget.classList.contains('sure')) { forget.classList.add('sure'); forget.textContent = 'Forget?'; setTimeout(() => { if (forget.isConnected) { forget.classList.remove('sure'); forget.textContent = '✕'; } }, 2500); return; }
+      if (!forget.classList.contains('sure')) { forget.classList.add('sure'); forget.textContent = 'Forget?'; setTimeout(() => { if (forget.isConnected) { forget.classList.remove('sure'); forget.innerHTML = icon('close'); } }, 2500); return; }
       Logins.forget(forget.dataset.forget); this.renderSaved();
     }
   }

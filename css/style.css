@@ -963,3 +963,78 @@ body.farm #overlay.playing #pauseRoom { margin: 0 20px; }
   .fm-mem { padding: 6px 8px; gap: 8px; } .fm-av { width: 28px; height: 28px; font-size: 13px; }
   .fm-btn { padding: 8px 10px; font-size: 13px; }
 }
+
+/* =====================================================================
+   Start menu, Farm World tab: the same farm signboard (sign, cream paper, one form at a time)
+   ===================================================================== */
+.fbox.off { display: none !important; }
+#fTabs, #menuFarm .fm-other { display: none; }
+#overlay[data-mode="farm"]:not(.playing) { background: rgba(20, 28, 14, .5); }
+#overlay[data-mode="farm"]:not(.playing) .card {
+  width: min(560px, calc(100vw - 24px)); padding: 0 0 14px; color: #3d2b1a; background: #f7efdb;
+  border: 7px solid #7a4e2a; border-radius: 18px; box-shadow: inset 0 0 0 2px #a8754a, 0 24px 60px rgba(0,0,0,.5);
+}
+#overlay[data-mode="farm"]:not(.playing) .card > h1 {
+  margin: 0 0 12px; padding: 14px 16px 12px; color: #fff4dc; font: 400 34px/1.1 "Alfa Slab One", Georgia, serif; letter-spacing: .02em;
+  background: repeating-linear-gradient(180deg, #a5392a 0 26px, #8e2e21 26px 28px); border-bottom: 5px solid #f3e6c8; box-shadow: 0 3px 0 #7a4e2a;
+  text-shadow: 0 2px 0 #5e1f15, 0 3px 8px rgba(0,0,0,.35);
+}
+#overlay[data-mode="farm"]:not(.playing) .mtabs { margin: 0 20px 8px; padding: 4px; gap: 4px; background: #ece0c2; border: 1px solid #d6c29a; border-radius: 999px; display: flex; }
+#overlay[data-mode="farm"]:not(.playing) .mtabs button { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px; background: transparent; color: #6b5233; font-size: 14px; padding: 8px 12px; }
+#overlay[data-mode="farm"]:not(.playing) .mtabs button.on { background: linear-gradient(#6cbc45, #4f9d32); color: #fff; box-shadow: 0 2px 0 #3a7a22; }
+#overlay[data-mode="farm"]:not(.playing) #mSub { margin: 0 24px 10px; color: #7a6040; opacity: 1; font-size: 14px; }
+#overlay[data-mode="farm"]:not(.playing) #menuFarm { margin: 0 20px; text-align: left; }
+#overlay[data-mode="farm"]:not(.playing) .finfo, #overlay[data-mode="farm"]:not(.playing) .grid,
+#overlay[data-mode="farm"]:not(.playing) .card > p.dim { display: none !important; }
+/* your worlds */
+#overlay[data-mode="farm"] .fsaved { gap: 8px; margin-bottom: 4px; }
+#overlay[data-mode="farm"] .fsaved .fm-h { margin-top: 2px; }
+#overlay[data-mode="farm"] .fworld { gap: 10px; background: #fffaee; border: 1px solid #e3d3ad; border-radius: 12px; padding: 10px 12px; box-shadow: 0 2px 0 #eadcbc; }
+#overlay[data-mode="farm"] .fworld .fw-name { display: flex; align-items: center; gap: 7px; font-size: 17px; color: #3d2b1a; }
+#overlay[data-mode="farm"] .fworld .fw-name span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+#overlay[data-mode="farm"] .fworld .fw-name .ic { width: 18px; height: 18px; color: #6aa83c; flex: none; }
+#overlay[data-mode="farm"] .fworld .fw-sub { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin-top: 4px; font-size: 12.5px; color: #8a6f4e; opacity: 1; }
+#overlay[data-mode="farm"] .fw-sub .ic { width: 13px; height: 13px; margin-right: 3px; vertical-align: -2px; }
+.fw-code { font: 800 12px ui-monospace, Menlo, monospace; letter-spacing: .14em; color: #8e2e21; background: #f6e7c4; border-radius: 5px; padding: 1px 6px; }
+.fw-live { display: inline-flex; align-items: center; } .fw-live.bad { color: #b5402a; font-weight: 700; }
+.fw-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #c2b292; margin: 0 5px 0 8px; } .fw-dot.on { background: #3fae33; }
+#overlay[data-mode="farm"] .fworld .fw-play { display: inline-flex; align-items: center; gap: 6px; background: linear-gradient(#6cbc45, #4f9d32); color: #fff; box-shadow: 0 3px 0 #3a7a22; padding: 10px 18px; border-radius: 10px; }
+#overlay[data-mode="farm"] .fworld .fw-play .ic { width: 15px; height: 15px; }
+#overlay[data-mode="farm"] .fworld .fw-x { color: #a08a6a; width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center; border-radius: 8px; }
+#overlay[data-mode="farm"] .fworld .fw-x:hover { background: #f1e3c0; }
+#overlay[data-mode="farm"] .fworld .fw-x .ic { width: 15px; height: 15px; }
+#overlay[data-mode="farm"] .fworld .fw-x.sure { color: #fff; background: #c9472f; width: auto; padding: 0 8px; font-size: 12px; }
+/* another world: the three-way switch and one form */
+#overlay[data-mode="farm"] #fTabs { display: flex; gap: 4px; padding: 4px; background: #ece0c2; border: 1px solid #d6c29a; border-radius: 12px; margin: 2px 0 8px; }
+#overlay[data-mode="farm"] .fm-other { display: flex; }
+#overlay[data-mode="farm"] .fsaved:not(.has) ~ .fm-other { display: none; }
+#fTabs button { flex: 1; pointer-events: auto; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 0; background: transparent; color: #6b5233; border-radius: 9px; padding: 8px 6px; font-weight: 800; font-size: 13px; white-space: nowrap; }
+#fTabs button .ic { width: 15px; height: 15px; }
+#fTabs button.on { background: #fffaee; color: #3d2b1a; box-shadow: 0 1px 0 #d6c29a, 0 2px 6px rgba(90,60,20,.12); }
+#overlay[data-mode="farm"] .fgrid { display: block; margin: 0; }
+#overlay[data-mode="farm"] .fbox { background: #fffaee; border: 1px solid #e3d3ad; border-radius: 12px; padding: 12px; gap: 8px; color: #3d2b1a; }
+#overlay[data-mode="farm"] .fgrid .fhead { display: none; }
+.fm-hint { display: none; }
+#overlay[data-mode="farm"] .fm-hint { display: block; font-size: 13px; color: #8a6f4e; margin-bottom: 2px; }
+.fm-pair { display: grid; gap: 8px; }
+#overlay[data-mode="farm"] .fm-pair { grid-template-columns: 1fr 1fr; }
+#overlay[data-mode="farm"] .fbox input { background: #f8f1df; color: #3d2b1a; border: 1px solid #d6c29a; border-radius: 10px; padding: 10px 12px; }
+#overlay[data-mode="farm"] .fbox input::placeholder { color: #a8916e; }
+#overlay[data-mode="farm"] .fbox input:focus { outline: none; border-color: #6aa83c; box-shadow: 0 0 0 3px rgba(106,168,60,.2); background: #fffdf5; }
+#overlay[data-mode="farm"] .fbox .mbig { display: inline-flex; align-items: center; justify-content: center; gap: 7px; background: linear-gradient(#6cbc45, #4f9d32); color: #fff; box-shadow: 0 3px 0 #3a7a22; border-radius: 10px; margin-top: 2px; }
+#overlay[data-mode="farm"] .fbox .mbig .ic { width: 16px; height: 16px; }
+#overlay[data-mode="farm"] .fbox.finvite { background: #eef6e2; border: 2px solid #a9d38e; margin-bottom: 8px; }
+#overlay[data-mode="farm"] .fbox.finvite .fhead { color: #2d6e1f; display: flex; align-items: center; gap: 6px; }
+#overlay[data-mode="farm"] .fbox.finvite .fsub { color: #5d7a48; opacity: 1; }
+#overlay[data-mode="farm"] #fStatus { margin: 8px 0 0; color: #7a5530; text-align: center; min-height: 0; }
+#overlay[data-mode="farm"] #fStatus.err { color: #b5402a; font-weight: 700; }
+#overlay[data-mode="farm"] .fm-foot-note { margin: 8px 2px 0; color: #9a7c58; opacity: 1; text-align: center; line-height: 1.45; }
+@media (max-height: 520px), (max-width: 560px) {
+  #overlay[data-mode="farm"]:not(.playing) .card > h1 { font-size: 24px; padding: 9px 12px 8px; margin-bottom: 8px; }
+  #overlay[data-mode="farm"]:not(.playing) #mSub { display: none; }
+  #overlay[data-mode="farm"] .fworld { padding: 8px 10px; }
+  #overlay[data-mode="farm"] .fbox { padding: 10px; gap: 6px; }
+  #overlay[data-mode="farm"] .fbox input { padding: 8px 10px; }
+  #fTabs button { font-size: 12px; padding: 7px 4px; }
+}
+@media (max-width: 420px) { #overlay[data-mode="farm"] .fm-pair { grid-template-columns: 1fr; } #fTabs button .ic { display: none; } }

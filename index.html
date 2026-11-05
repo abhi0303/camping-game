@@ -149,32 +149,37 @@
           <input id="fiPin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="Choose a PIN (4–6 digits)" autocomplete="new-password" />
           <button id="fiGo" class="mbig"><i data-ic="wheat"></i> Join this world</button>
         </div>
+        <div class="fm-h fm-other"><span>Another world</span></div>
+        <div id="fTabs" class="fm-seg"><button data-ftab="create"><i data-ic="plus"></i> Create</button><button data-ftab="new"><i data-ic="invite"></i> Join with invite</button><button data-ftab="open"><i data-ic="key"></i> Log in</button></div>
         <div class="fgrid">
-          <div class="fbox">
+          <div class="fbox" data-ftab="create">
             <div class="fhead"><i data-ic="plus"></i> Create a new world</div>
+            <div class="fm-hint">Start your own farm. Your PIN lets you open it on other devices.</div>
             <input id="fcName" maxlength="16" placeholder="Your name" autocomplete="off" />
             <input id="fcWorld" maxlength="32" placeholder="World name (optional)" autocomplete="off" />
             <input id="fcPin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="Choose a PIN (4–6 digits)" autocomplete="new-password" />
-            <button id="fcGo" class="mbig">Create world</button>
+            <button id="fcGo" class="mbig"><i data-ic="sprout"></i> Create world</button>
           </div>
-          <div class="fbox" id="fNew">
+          <div class="fbox" id="fNew" data-ftab="new">
             <div class="fhead"><i data-ic="invite"></i> New here? Join with an invite</div>
-            <input id="fnCode" maxlength="300" placeholder="WORLD CODE (or link)" autocomplete="off" autocapitalize="characters" spellcheck="false" />
-            <input id="fnInvite" maxlength="300" placeholder="INVITE CODE" autocomplete="off" autocapitalize="characters" spellcheck="false" />
-            <input id="fnName" maxlength="16" placeholder="Your name" autocomplete="off" />
-            <input id="fnPin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="Choose a PIN (4–6 digits)" autocomplete="new-password" />
+            <div class="fm-hint">Got an invite from a friend? Type the world code and the invite code they sent you.</div>
+            <div class="fm-pair"><input id="fnCode" maxlength="300" placeholder="WORLD CODE (or link)" autocomplete="off" autocapitalize="characters" spellcheck="false" />
+            <input id="fnInvite" maxlength="300" placeholder="INVITE CODE" autocomplete="off" autocapitalize="characters" spellcheck="false" /></div>
+            <div class="fm-pair"><input id="fnName" maxlength="16" placeholder="Your name" autocomplete="off" />
+            <input id="fnPin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="Choose a PIN (4–6 digits)" autocomplete="new-password" /></div>
             <button id="fnGo" class="mbig"><i data-ic="wheat"></i> Join this world</button>
           </div>
-          <div class="fbox">
+          <div class="fbox" data-ftab="open">
             <div class="fhead"><i data-ic="key"></i> Open a world you belong to</div>
+            <div class="fm-hint">Already a farmhand? Log in with the world code, your name and your PIN.</div>
             <input id="fjCode" maxlength="300" placeholder="WORLD CODE" autocomplete="off" autocapitalize="characters" spellcheck="false" />
-            <input id="fjName" maxlength="16" placeholder="Your name in that world" autocomplete="off" />
-            <input id="fjPin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="Your PIN" autocomplete="current-password" />
-            <button id="fjGo" class="mbig alt">Log in &amp; play</button>
+            <div class="fm-pair"><input id="fjName" maxlength="16" placeholder="Your name in that world" autocomplete="off" />
+            <input id="fjPin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="Your PIN" autocomplete="current-password" /></div>
+            <button id="fjGo" class="mbig alt"><i data-ic="play"></i> Log in &amp; play</button>
           </div>
         </div>
         <p id="fStatus" class="small"></p>
-        <p class="small dim">New friend? The world's owner makes an invite (Esc menu → Invite a friend). Open the link, or — in the installed app — type the world code and invite code under “Join with an invite”. Remember your PIN: you need it on other devices.</p>
+        <p class="small dim fm-foot-note">New friend? The world's owner makes an invite (Esc menu → Invite a friend). Open the link, or — in the installed app — type both codes under “Join with invite”. Remember your PIN: you need it on other devices.</p>
       </div>
       <div id="menuPause" class="hidden">
         <div id="pauseHead"></div>
