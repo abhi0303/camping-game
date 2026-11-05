@@ -210,10 +210,10 @@ function terrainMesh(T, riverD, roadD) {
 /* ---------- the painted ground: a bright, clean low-poly meadow with soft dirt patches ----------
    Drawn by the terrain's shader from the world position (no texture, no extra geometry, no seams):
    - the grass is a calm surface of soft, roughly hexagonal patches (about 1.2 m) in close lime shades
-     (TONE_STEPS), a touch darker where the grass tufts grow thick;
+     (TONE_STEPS), a touch darker in places;
    - dirt: where a slow noise is high the ground is light orange-brown earth with a few darker lumps and
      tiny stones, plus small spots of bare soil here and there; edges fray naturally;
-   - the grass tufts and flowers standing on it are js/grass.js; far away the facets calm down (no shimmer).
+   - the flowers standing on it are js/grass.js; far away the facets calm down (no shimmer).
    Faces that are not grass (road verges, river banks, rock slopes, sandy build zones) keep their own colour
    (aGrass = 0). Lighting, shadows, fog and day / night work as before (only the surface colour changes).
    The same palette and dirt noise are used by js/grass.js. */
@@ -277,7 +277,7 @@ vec3 groundColor(vec2 p, float far) {
   vec2 dir = normalize(gh22(id + 4.0) - 0.5 + 0.001);
   float side = dot(off, dir) > 0.0 ? 1.0 : -1.0;                           // which half of the facet (very subtle)
   float facet = mix(1.0 + (h - 0.5) * 0.08 + side * 0.015, 1.0, far);
-  float thick = smoothstep(0.45, 0.85, gnoise(p * 0.16 + vec2(3.1, -8.2)));  // where tufts grow thick (js/grass.js densAt)
+  float thick = smoothstep(0.45, 0.85, gnoise(p * 0.16 + vec2(3.1, -8.2)));  // slightly darker meadow spots
   facet *= 1.0 - 0.07 * thick;
   // the dirt's edge frays: small bits decide one by one near the boundary
   float edge = (mud - (MUD_T - 0.035)) / 0.035;

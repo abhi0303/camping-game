@@ -1,18 +1,12 @@
-// Grass tufts and wild flowers around the player, standing on the painted meadow (js/terrain.js), in the style
-// of a bright stylised low-poly meadow:
-//   - grass tufts (small, medium, tall) made of broad, flat, pointed blades folded along a crease (two facets
-//     per blade), bending outward, dark green at the base, bright lime in the middle, light lime at the tips;
-//   - white daisies and yellow flowers with chunky flat petals around a raised centre, purple lavender spikes,
-//     all with broad leaves at the base.
-// Foliage lighting: every face's normal is bent up toward the sky, so blades are lit softly like the ground
-// (bright from every side, the two facets still a little different), with a gentle glow in daylight. They
-// sway in the wind and are pressed down around the player's feet.
-// They grow in natural patches — thick in some places, open ground in others, flowers in little groups —
+// Wild flowers around the player, standing on the painted meadow (js/terrain.js): white daisies and yellow
+// flowers with chunky flat petals around a raised centre and broad leaves at the base. Foliage lighting: every
+// face's normal is bent up toward the sky, so they are lit softly like the ground, with a gentle glow in
+// daylight. They sway in the wind and are pressed down around the player's feet. They grow in little groups —
 // never on dirt, roads, river banks, cliffs, farm pens, paths, rocks, bushes or tree trunks.
-// Six instanced meshes (one draw call each). They cover a circle around the player; when the player has
-// moved a few metres the circle is filled again, a slice per frame, so the game never stutters. Every spot
-// on the map always gets the same plant (from the spot's own hash), so nothing jumps around as you walk.
-// The circle's size and density follow the graphics quality.
+// Two instanced meshes (one draw call each). They cover a circle around the player; when the player has moved
+// a few metres the circle is filled again, a slice per frame, so the game never stutters. Every spot on the map
+// always gets the same flower (from the spot's own hash), so nothing jumps around as you walk. The circle's
+// size follows the graphics quality.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { MUD_T, SOIL_T } from './terrain.js';
@@ -38,8 +32,6 @@ function gnoise(x, y) {
 }
 export const mudAt = (x, z) => Math.max(gnoise(x * 0.065, z * 0.065) * 0.55 + gnoise(x * 0.17 + 7.3, z * 0.17 + 7.3) * 0.3 + gnoise(x * 0.5 - 3.1, z * 0.5 - 3.1) * 0.15,
   gnoise(x * 0.3 + 31.7, z * 0.3 + 31.7) * 0.78 + gnoise(x * 0.9 - 9.3, z * 0.9 - 9.3) * 0.22 - SOIL_T + MUD_T);
-// where the grass grows thick (the ground shader darkens the soil a little there: js/terrain.js)
-export const densAt = (x, z) => gnoise(x * 0.16 + 3.1, z * 0.16 - 8.2);
 
 /* ---------- models ---------- */
 const lin = hex => new THREE.Color(hex);                       // (linear colour for vertex colours)
@@ -80,20 +72,6 @@ function leaf(h, w, lean, cols) {
   return tris([[L0, S0, L1, c0, c0, c1], [S0, S1, L1, c0, c1, c1], [L1, S1, T, c1, c1, c2], [S0, R0, R1, c0, c0, c1], [S0, R1, S1, c0, c1, c1], [S1, R1, T, c1, c1, c2]]);
 }
 const place = (g, yaw, out) => { g.rotateY(yaw); g.translate(Math.sin(yaw) * out, 0, Math.cos(yaw) * out); return g; };
-// a tuft: blades around a centre, the outer ones low and leaning out, the inner ones tall and upright
-function tuft(n, hMin, hMax, wk, seed) {
-  const parts = [], base = lin(0x3f8f26), mid = lin(0x72c63d), tip = lin(0xb2e86a);
-  for (let i = 0; i < n; i++) {
-    const r = k => fract(Math.sin((i + 1) * 12.9898 * k + seed * 78.233) * 43758.5453);
-    const inner = i < Math.ceil(n * 0.3);
-    const h = (inner ? hMax * (0.85 + r(2) * 0.15) : hMin + (hMax - hMin) * r(2) * 0.85);
-    const lean = inner ? 0.12 + r(3) * 0.2 : 0.35 + r(3) * 0.45;
-    const s = 0.88 + r(6) * 0.2, yl = r(7) > 0.7 ? 1.06 : 1;   // every blade its own shade; a few a touch more yellow
-    const cols = [base, mid, tip].map(c => new THREE.Color(c.r * s * yl, c.g * s, c.b * s / yl));
-    parts.push(place(leaf(h, h * wk * (0.85 + r(4) * 0.3), lean, cols), i / n * Math.PI * 2 + r(1) * 0.8, inner ? 0.01 + r(5) * 0.02 : 0.03 + r(5) * 0.06));
-  }
-  return softNormals(mergeGeometries(parts), 0.6);
-}
 // broad leaves at the foot of a flower
 function baseLeaves(n, h, seed) {
   const parts = [], cols = [lin(0x3b8a24), lin(0x5fb534), lin(0x8fd556)];
@@ -125,25 +103,13 @@ function yellowFlower() {
   return softNormals(mergeGeometries([baseLeaves(4, 0.16, 2), stem(0.33, 0, 0, -0.06), head(0.09, 5, 0xffd02e, 0xf09a1c, -0.02, 0.33, 0, 0.3),
     stem(0.22, -0.06, 0.03, 0.2), head(0.065, 5, 0xffd84a, 0xf09a1c, -0.104, 0.215, 0.03, 0.55)]), 0.45);
 }
-function lavender() {
-  const parts = [baseLeaves(5, 0.2, 3)];
-  [[0, 0, 0.46], [0.07, 0.04, 0.38], [-0.06, 0.05, 0.41]].forEach(([x, z, h]) => {
-    parts.push(stem(h, x, z));
-    for (let k = 0; k < 7; k++) {                                   // chunky purple florets up the spike
-      const b = solidCol(clean(new THREE.OctahedronGeometry(0.036 - k * 0.0028, 0)), k % 2 ? 0x9a6cf0 : 0x7d4fdc);
-      b.scale(1.15, 1.25, 1.15); b.rotateY(k * 0.7); b.translate(x, h - k * 0.042, z); parts.push(b);
-    }
-  });
-  return softNormals(mergeGeometries(parts), 0.45);
-}
-
 const WHITE = new THREE.Color(1, 1, 1);
 
 export class Grass {
   constructor(scene, world) {
     this.scene = scene; this.world = world; this.kx = null; this.job = null; this.rev = -1;
-    // [0] small, [1] medium, [2] tall tufts, [3] daisies, [4] yellow flowers, [5] lavender
-    this.geos = [tuft(12, 0.18, 0.34, 0.34, 1), tuft(17, 0.3, 0.55, 0.3, 2), tuft(21, 0.45, 0.82, 0.26, 3), daisy(), yellowFlower(), lavender()];
+    // [0] white daisies, [1] yellow flowers
+    this.geos = [daisy(), yellowFlower()];
     this.time = { value: 0 }; this.pressAt = { value: new THREE.Vector3(1e5, 1e5, 0) }; this.glow = { value: 0.16 };
     const mat = this.mat = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
     mat.onBeforeCompile = sh => {
@@ -162,7 +128,7 @@ export class Grass {
         .replace('#include <normal_fragment_begin>', THREE.ShaderChunk.normal_fragment_begin.replace('normal *= faceDirection;', ''))
         .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += diffuseColor.rgb * uGlow;');   // soft daylight glow
     };
-    mat.customProgramCacheKey = () => 'grass-v4';
+    mat.customProgramCacheKey = () => 'grass-v5';
     this.setQuality('medium');
   }
   setQuality(name) {
@@ -170,8 +136,7 @@ export class Grass {
     if (this.Q === Q) return;
     this.Q = Q;
     const max = Math.ceil(Math.PI * (Q.r / Q.step) ** 2) + 64;
-    // most spots hold a tuft; flowers are fewer
-    this.caps = [max, Math.ceil(max * 0.6), Math.ceil(max * 0.3), Math.ceil(max * 0.18), Math.ceil(max * 0.18), Math.ceil(max * 0.18)];
+    this.caps = [Math.ceil(max * 0.18), Math.ceil(max * 0.18)];
     for (const m of this.meshes || []) { this.scene.remove(m); m.dispose(); }
     this.meshes = this.geos.map((g, v) => {
       const m = new THREE.InstancedMesh(g, this.mat, this.caps[v]);
@@ -186,7 +151,7 @@ export class Grass {
   }
   // daylight glow: none at night (dark: 0 day .. 1 night)
   setDark(dark) { this.glow.value = 0.16 * (1 - Math.min(1, dark * 1.3)); }
-  // may a plant grow at (x, z)? (not on roads, water, cliffs, dirt, building zones, farm pens, paths or objects)
+  // may a flower grow at (x, z)? (not on roads, water, cliffs, dirt, building zones, farm pens, paths or objects)
   _ok(x, z) {
     const W = this.world, T = W.T;
     if (T.roadDistAt(x, z) < 5.6 || T.riverDistAt(x, z) < RIVER_HALF + 1.3) return false;   // (the jungle floor can lie below the river's level)
@@ -218,26 +183,24 @@ export class Grass {
       const ai = J.i0 + (J.k % J.n), aj = J.j0 + Math.floor(J.k / J.n);
       const h1 = gh12(ai * 1.31 + 0.7, aj * 0.97 + 3.3), h2 = gh12(ai * 0.73 + 9.1, aj * 1.17 + 1.9), h3 = gh12(ai + 17.7, aj + 5.3);
       const x = (ai + 0.1 + h1 * 0.8) * s, z = (aj + 0.1 + h2 * 0.8) * s;
-      // patches: thick grass in some places, open ground in others; flowers in little groups
-      const dens = densAt(x, z), bloom = gnoise(x * 0.09 - 5.5, z * 0.09 + 2.7);
-      const flower = bloom > 0.56 && h3 > 0.85;
-      if (!flower && h3 > dens * 1.35 - 0.1) continue;
+      // flowers in little groups
+      const bloom = gnoise(x * 0.09 - 5.5, z * 0.09 + 2.7);
+      if (bloom <= 0.56 || h3 <= 0.85) continue;
       const dx = x - J.cx, dz = z - J.cz, d2 = dx * dx + dz * dz;
       if (d2 > r2 || !this._ok(x, z)) continue;
-      const v = flower ? (h1 < 0.4 ? 3 : h1 < 0.72 ? 4 : 5) : h2 < 0.45 ? 0 : h2 < 0.82 ? 1 : 2, st = this.stage[v];   // flowers: more daisies, fewer lavender
+      const v = h1 < 0.55 ? 0 : 1, st = this.stage[v];             // a few more daisies than yellow flowers
       if (st.n >= this.caps[v]) continue;
       const edge = Math.min(1, (1 - Math.sqrt(d2) / Q.r) * 5);   // shrink near the circle's edge (no hard border)
-      const size = (flower ? 1.15 + h2 * 0.35 : 0.95 + h1 * 0.5) * (0.35 + 0.65 * edge);
+      const size = (1.15 + h2 * 0.35) * (0.35 + 0.65 * edge);
       q.setFromAxisAngle(up, h3 * 40);
-      m.compose(p.set(x, T.heightAt(x, z) - 0.02, z), q, sc.set(size, size * (flower ? 0.8 + h1 * 0.45 : 0.85 + h2 * 0.3), size));
+      m.compose(p.set(x, T.heightAt(x, z) - 0.02, z), q, sc.set(size, size * (0.8 + h1 * 0.45), size));
       m.toArray(st.mat, st.n * 16);
-      // a light tint per plant: tufts a little lighter / darker / yellower, flowers as they are
-      if (flower) c.copy(WHITE); else { const b = 0.9 + h1 * 0.16; c.setRGB(b * (1 + (h2 - 0.5) * 0.08), b, b * (1 - (h2 - 0.5) * 0.1)); }
+      c.copy(WHITE);                                               // flowers keep their own colours
       st.col[st.n * 3] = c.r; st.col[st.n * 3 + 1] = c.g; st.col[st.n * 3 + 2] = c.b;
       st.n++;
     }
     if (J.k < tot) return;
-    // done: show the new plants
+    // done: show the new flowers
     this.meshes.forEach((mesh, v) => {
       const st = this.stage[v];
       mesh.instanceMatrix.array.set(st.mat.subarray(0, st.n * 16));

@@ -158,7 +158,7 @@ export class World {
   }
 
   // Small things on the ground that go with the painted grass and mud (js/terrain.js): leafy plants and
-  // pebbles, grey rocks and round bushes (the grass tufts and flowers near the player are js/grass.js). Instanced and chunked like the jungle (one draw call per chunk and kind), no
+  // pebbles, grey rocks and round bushes (the flowers near the player are js/grass.js). Instanced and chunked like the jungle (one draw call per chunk and kind), no
   // shadows, no colliders. They use their own random numbers, so the jungle, crates and colliders stay
   // exactly where they were. Phones get about half.
   _groundDecor() {
