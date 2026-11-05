@@ -12,6 +12,7 @@ import { shelterModel, penGround, gateModel, signboard, wallSign, storageModel, 
 import { C, FARM_MAT, crate, barrel, eggStack, milkCan, hayBale, sack, lampPost, woodPile, stoneBin, fenceRun } from './props.js';
 import { FarmerNPC } from './npc.js';
 import { flambeau } from '../day-night.js';
+import { rigMaterial, rigDepthMaterial, addAnimAttributes, GAIT, goatPose, chickenExtras } from './animals.js';
 
 const MAX_PER_TYPE = 64;
 const SPEED = { chicken: 1.6, chicken_brown: 1.5, chicken_dark: 1.4, goat: 0.8, cow: 0.45, horse: 0.6,
@@ -27,7 +28,8 @@ export class Farmland {
     this.scene = scene; this.world = world; this.hooks = hooks;
     this.on = false; this.st = null; this.built = new Map(); this.byPlot = new Map(); this.list = []; this.decor = [];
     this.signs = new Map(); this.markers = new Map(); this.storage = null; this.t = 0;
-    this._m = new THREE.Matrix4(); this._q = new THREE.Quaternion(); this._p = new THREE.Vector3(); this._s = new THREE.Vector3(1, 1, 1); this._e = new THREE.Euler();
+    this._m = new THREE.Matrix4(); this._q = new THREE.Quaternion(); this._p = new THREE.Vector3(); this._s = new THREE.Vector3(1, 1, 1); this._e = new THREE.Euler(0, 0, 0, 'YXZ');
+    this.animSt = new Map(); this._pose = {}; this._ce = {};          // per-animal step phase etc. (this screen only)
   }
   H(x, z) { return this.world.heightAt(x, z); }
   // ground height in a local frame, relative to the frame's own ground
@@ -67,8 +69,11 @@ export class Farmland {
     this._lamps();
     // animals: one instanced mesh per kind (the store's goats use the goat mesh too)
     this.inst = {};
+    const rigMat = rigMaterial(), rigDepth = rigDepthMaterial();
     for (const [type, geo] of Object.entries(ANIMAL_GEO)) {
-      const m = new THREE.InstancedMesh(geo(), FARM_MAT.solid, MAX_PER_TYPE);
+      const g = geo(), rigged = !!g.attributes.aRig;                 // goats and chickens walk with moving legs (js/farm/animals.js)
+      const m = new THREE.InstancedMesh(g, rigged ? rigMat : FARM_MAT.solid, MAX_PER_TYPE);
+      if (rigged) { addAnimAttributes(m, MAX_PER_TYPE); m.customDepthMaterial = rigDepth; }
       m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); m.count = 0; m.castShadow = true; m.frustumCulled = false;
       this.scene.add(m); this.inst[type] = m;
     }
@@ -257,7 +262,8 @@ export class Farmland {
     this.wall(G, -hu, -hv, hu, -hv, 0.25, 0.6, cols); this.wall(G, -hu, hv, hu, hv, 0.25, 0.6, cols);
     this.wall(G, -hu, -hv, -hu, hv, 0.25, 0.6, cols); this.wall(G, hu, -hv, hu, hv, 0.25, 0.6, cols);
     this.goatField = { F: G, pen: { x0: -hu + 0.8, x1: hu - 0.8, z0: -hv + 0.8, z1: hv - 0.8 } };
-    this.decor = ['gA', 'gB', 'gC', 'gD'].map(id => ({ id, type: 'goat', k: hash(id), field: true }));
+    this.decor = ['gA', 'gB', 'gC', 'gD'].map((id, gi) => ({ id, type: 'goat', k: hash(id), field: true, gi, gn: 4, gk: hash('field') }));
+    this.decor[0].partner = this.decor[1]; this.decor[1].partner = this.decor[0];      // these two always butt heads
     const wm = windmillModel(); this.wheel = wm.wheel;
     this.place(wm.group, WINDMILL); this.dot(WINDMILL, 0, 0, 1.2, cols);
     // lamps and the roadside sign
@@ -321,23 +327,37 @@ export class Farmland {
     this._storage(st.storageLevel || 1);
     const plotOf = new Map(st.buildings.map(b => [b.id, b.plot]));
     this.list = st.animals.filter(a => this.inst[a.type] && plotOf.has(a.shelter)).map(a => ({ ...a, plot: plotOf.get(a.shelter), k: hash(a.id) }));
+    // goats by shed: the first two (by id) are the pair that butts heads; the others eat and drink
+    const sheds = new Map();
+    for (const a of this.list) if (a.type === 'goat') { if (!sheds.has(a.shelter)) sheds.set(a.shelter, []); sheds.get(a.shelter).push(a); }
+    for (const [sid, g] of sheds) {
+      g.sort((x, y) => (x.id < y.id ? -1 : 1));
+      g.forEach((a, i) => { a.gi = i; a.gn = g.length; a.gk = hash(sid); a.partner = g.length >= 2 && i < 2 ? g[1 - i] : null; });
+    }
   }
   // the server answered this player's gate request
   gateDone(id) { const s = this.built.get(id); if (s) s.gate.pending = 0; }
 
-  // where an animal is at a moment of the shared (server) clock: it walks around its pen for a while,
-  // then stops and grazes. Only the clock and the animal's id decide it, so every screen agrees.
-  posOf(a, serverMs) {
-    const t = serverMs / 1000, k = a.k, sp = SPEED[a.type] || 1;
-    const F = a.field ? this.goatField.F : PLOTS[a.plot], R = a.field ? this.goatField.pen : PEN;
+  plotFrame(i) { return PLOTS[i]; }
+  // where an animal wanders at a moment of the shared (server) clock, in its pen's own coordinates: it walks
+  // around for a while, then stops (chickens stop and go every few seconds). Only the clock and the animal's id
+  // decide it, so every screen agrees.
+  wanderLocal(a, serverMs) {
+    const t = serverMs / 1000, k = a.k, sp = SPEED[a.type] || 1, chick = a.type.startsWith('chicken');
+    const R = a.field ? this.goatField.pen : PEN;
     const cx = (R.x0 + R.x1) / 2, cz = (R.z0 + R.z1) / 2, hx = (R.x1 - R.x0) / 2, hz = (R.z1 - R.z0) / 2;
-    const at = tt => toWorld(F, cx + hx * 0.92 * Math.sin(tt * 0.11 + k * 40) * Math.cos(tt * 0.043 + k * 17), cz + hz * 0.92 * Math.sin(tt * 0.083 + k * 23));
-    // walking speed swings between slow grazing and trotting; tt is its integral over time, so the animal
-    // moves smoothly (multiplying the clock by a changing speed would make it jump)
-    const T = t + k * 1000, ph = 0.05 * T + k * 31, pace = 0.5 + 0.5 * Math.sin(ph);
-    const tt = sp * (0.8 * T - 10 * Math.cos(ph));
-    const w = at(tt), w2 = at(tt + 0.6), walking = pace > 0.35;
-    return { x: w.x, z: w.z, walking, yaw: Math.atan2(w2.x - w.x, w2.z - w.z) + (walking ? 0 : Math.sin(t * 0.7 + k * 5) * 0.3) };
+    const at = tt => ({ x: cx + hx * 0.92 * Math.sin(tt * 0.11 + k * 40) * Math.cos(tt * 0.043 + k * 17), z: cz + hz * 0.92 * Math.sin(tt * 0.083 + k * 23) });
+    // speed swings between standing still and walking; tt is its integral over time, so the animal moves
+    // smoothly: speed ∝ 1 + sin(w·T + φ)  →  tt = 0.6·sp·(T − cos(w·T + φ) / w)
+    const w = chick ? 0.9 : 0.05, T = t + k * 1000, ph = w * T + k * 31;
+    const tt = 0.6 * sp * (T - Math.cos(ph) / w);
+    const p = at(tt), p2 = at(tt + 0.6), walking = Math.sin(ph) > -0.5;
+    return { x: p.x, z: p.z, walking, yaw: Math.atan2(p2.x - p.x, p2.z - p.z) + (walking ? 0 : Math.sin(t * 0.7 + k * 5) * 0.3) };
+  }
+  // the same in world coordinates (cows and horses)
+  posOf(a, serverMs) {
+    const F = a.field ? this.goatField.F : PLOTS[a.plot], l = this.wanderLocal(a, serverMs), w = toWorld(F, l.x, l.z);
+    return { x: w.x, z: w.z, walking: l.walking, yaw: l.yaw + (F.yaw || 0) };
   }
   update(dt, serverMs, me) {
     if (!this.on) return;
@@ -354,18 +374,53 @@ export class Farmland {
       // a baby horse is small and grows with its level (Level 1 ~55 %, Level 10 full size)
       const size = a.level && a.type.startsWith('horse') ? 0.55 + 0.45 * (Math.min(10, a.level) - 1) / 9 : 1;
       this._s.setScalar(size);
-      const p = this.posOf(a, serverMs), sp = SPEED[a.type] || 1, chick = a.type.startsWith('chicken');
+      const chick = a.type.startsWith('chicken'), sick = a.health !== undefined && a.health < 40 ? 0.06 : 0, i = n[a.type];
+      let x, z, yaw, y, pitch = 0, pivot = 0;
+      const anim = m.geometry.attributes.iAnim;
+      if (anim) {                                       // goats and chickens: real steps, head and wings (js/farm/animals.js)
+        const G = chick ? GAIT.chicken : GAIT.goat;
+        let st = this.animSt.get(a.id);
+        if (!st) this.animSt.set(a.id, st = { x: 0, z: 0, ph: a.k * 10, w: 0, init: false, clash: 0 });
+        let F, lx, lz, lyaw, head, lift = 0, hop = 0, flap = 0;
+        if (chick) {
+          const wl = this.wanderLocal(a, serverMs), ce = chickenExtras(a, serverMs, wl.walking, this._ce);
+          F = PLOTS[a.plot]; lx = wl.x; lz = wl.z; lyaw = wl.yaw; head = ce.head; hop = ce.hop; flap = ce.flap;
+          if (head > 0.5) lift = 0.18;                   // leaning into a peck
+        } else {
+          const P = goatPose(a, serverMs, this, this._pose);
+          F = P.F; lx = P.x; lz = P.z; lyaw = P.yaw; head = P.head; lift = P.lift; pivot = -0.24;   // (rears up on its hind legs)
+          if (P.clash < 0) st.clash = 0;
+          else if (P.clash > st.clash) { st.clash = P.clash; if (a.gi === 0 && this.hooks.onClash) { const cw = toWorld(F, lx, lz); this.hooks.onClash(cw.x, cw.z); } }
+        }
+        const wp = toWorld(F, lx, lz);
+        x = wp.x; z = wp.z; yaw = lyaw + (F.yaw || 0);
+        // the legs step with how far it really moved since the last frame (no sliding, no floating)
+        const d = st.init ? Math.hypot(x - st.x, z - st.z) : 0;
+        st.x = x; st.z = z; st.init = true;
+        if (d < 1.5) st.ph += d / G.cycle * Math.PI * 2;
+        const speed = dt > 0 && d < 1.5 ? d / dt : 0;
+        st.w += (Math.min(1, speed / G.ref) - st.w) * (1 - Math.exp(-9 * dt));
+        const bob = Math.abs(Math.sin(st.ph)) * (chick ? 0.012 : 0.014) * st.w;
+        y = this.H(x, z) + 0.035 + bob + hop;
+        anim.setXYZW(i, st.ph, G.amp * st.w, head, chick ? Math.sin(st.ph * 2) * 0.024 * st.w : 0);
+        m.geometry.attributes.iAnim2.setX(i, flap);
+        pitch = lift + sick;
+      } else {                                          // cows and horses
+        const p = this.posOf(a, serverMs), sp = SPEED[a.type] || 1;
+        x = p.x; z = p.z; yaw = p.yaw;
+        y = this.H(x, z) + 0.035 + (p.walking ? Math.abs(Math.sin(t * 9 * sp + a.k * 9)) * 0.04 : 0);
+        pitch = (p.walking ? 0 : 0.08) + sick;
+      }
       const voice = me && (chick ? near.hen : a.type === 'goat' ? near.goat : null);
-      if (voice) { const d = Math.hypot(p.x - me.x, p.z - me.z); if (d < 22) { voice.n++; if (d < voice.d) { voice.d = d; voice.x = p.x; voice.z = p.z; } } }
-      const bob = p.walking ? Math.abs(Math.sin(t * 9 * sp + a.k * 9)) * (chick ? 0.05 : 0.04) : 0;
-      const sick = a.health !== undefined && a.health < 40 ? 0.06 : 0;
-      // standing chickens peck at the ground now and then
-      const peck = chick && !p.walking ? Math.max(0, Math.sin(t * 3 + a.k * 20)) * 0.35 : 0;
-      this._e.set(p.walking ? 0 : 0.08 + sick + peck, p.yaw, sick * 2);
+      if (voice) { const dv = Math.hypot(x - me.x, z - me.z); if (dv < 22) { voice.n++; if (dv < voice.d) { voice.d = dv; voice.x = x; voice.z = z; } } }
+      // rear up about the hind feet: shift so that point stays on the ground
+      if (pivot && pitch) { const oy = pivot * Math.sin(pitch), oz = pivot - pivot * Math.cos(pitch); y += oy; x += Math.sin(yaw) * oz; z += Math.cos(yaw) * oz; }
+      this._e.set(pitch, yaw, sick * 2);
       this._q.setFromEuler(this._e);
-      this._p.set(p.x, this.H(p.x, p.z) + 0.035 + bob, p.z);
+      this._p.set(x, y, z);
       m.setMatrixAt(n[a.type]++, this._m.compose(this._p, this._q, this._s));
     }
+    for (const type in this.inst) { const m = this.inst[type]; if (m.geometry.attributes.iAnim) { m.geometry.attributes.iAnim.needsUpdate = true; m.geometry.attributes.iAnim2.needsUpdate = true; } }
     for (const type in this.inst) { const m = this.inst[type]; m.count = n[type]; m.instanceMatrix.needsUpdate = true; }
     // gates swing; a closed gate blocks the way
     for (const s of this.built.values()) {

@@ -526,22 +526,41 @@ function horse(b, o) {
   b.box(0.1, 0.55, 0.1, 0, 1.0, -0.72, o.mane, 'solid', -0.3, 0, 0);
 }
 function geomOf(fn) { const b = new GeoBuilder(); fn(b); return b.build().children[0].geometry; }
+// a model whose parts can move (js/farm/animals.js): every vertex gets aRig = [kind, a, b, c]
+//   kind 0 body · 1 leg (a: step phase, b/c: hip y/z) · 2 head and neck (b/c: neck base y/z) · 3 wing (a: shoulder x, b: shoulder y)
+function rigOf(fn) {
+  const b = new GeoBuilder(), add = b.add.bind(b);
+  let cur = [0, 0, 0, 0];
+  b.add = (...args) => {
+    const g = add(...args), n = g.attributes.position.count, r = new Float32Array(n * 4);
+    for (let i = 0; i < n; i++) r.set(cur, i * 4);
+    g.setAttribute('aRig', new THREE.BufferAttribute(r, 4));
+    return g;
+  };
+  b.rig = (tag, f) => { const prev = cur; cur = tag; f(); cur = prev; };
+  fn(b);
+  return b.build().children[0].geometry;
+}
+const rig = (b, tag, f) => (b.rig ? b.rig(tag, f) : f());
 const leg = (b, x, z, h, r, c) => b.cyl(r, r * 0.8, h, 5, x, h / 2, z, c);
 // a chicken: body, neck, head, comb, wattles, beak, wings, tail, legs. Varieties change colours and shape.
 function chicken(b, o) {
   const s = o.size || 1;
   b.group(0, 0, 0, 0, 0, 0, () => {
     b.add(new THREE.DodecahedronGeometry(0.17 * s, 0), o.body, 0, 0.3 * s, 0, 0, 0, 0, 'solid', 1, 0.92, 1.3);
-    b.add(new THREE.DodecahedronGeometry(0.1 * s, 0), o.neck || o.body, 0, 0.42 * s, 0.13 * s, 0, 0, 0, 'solid', 1, 1.3, 1);
-    b.box(0.11 * s, 0.12 * s, 0.12 * s, 0, 0.52 * s, 0.17 * s, o.head || o.neck || o.body);
-    b.box(0.03 * s, 0.08 * s, 0.11 * s, 0, 0.61 * s, 0.17 * s, o.comb);
-    b.box(0.035 * s, 0.06 * s, 0.03 * s, 0, 0.45 * s, 0.22 * s, o.comb);
-    b.box(0.05 * s, 0.035 * s, 0.07 * s, 0, 0.51 * s, 0.25 * s, o.beak);
-    for (const x of [-0.034, 0.034]) b.box(0.02 * s, 0.02 * s, 0.02 * s, x * s, 0.54 * s, 0.215 * s, 0x111111);
-    for (const sx of [-1, 1]) b.add(new THREE.DodecahedronGeometry(0.1 * s, 0), o.wing, sx * 0.13 * s, 0.31 * s, -0.02 * s, 0, 0, sx * 0.2, 'solid', 0.45, 0.85, 1.35);
+    rig(b, [2, 0, 0.34 * s, 0.08 * s], () => {                                             // neck and head (bob, peck)
+      b.add(new THREE.DodecahedronGeometry(0.1 * s, 0), o.neck || o.body, 0, 0.42 * s, 0.13 * s, 0, 0, 0, 'solid', 1, 1.3, 1);
+      b.box(0.11 * s, 0.12 * s, 0.12 * s, 0, 0.52 * s, 0.17 * s, o.head || o.neck || o.body);
+      b.box(0.03 * s, 0.08 * s, 0.11 * s, 0, 0.61 * s, 0.17 * s, o.comb);
+      b.box(0.035 * s, 0.06 * s, 0.03 * s, 0, 0.45 * s, 0.22 * s, o.comb);
+      b.box(0.05 * s, 0.035 * s, 0.07 * s, 0, 0.51 * s, 0.25 * s, o.beak);
+      for (const x of [-0.034, 0.034]) b.box(0.02 * s, 0.02 * s, 0.02 * s, x * s, 0.54 * s, 0.215 * s, 0x111111);
+    });
+    for (const sx of [-1, 1]) rig(b, [3, sx * 0.09 * s, 0.37 * s, 0], () =>                // wings (flap when hopping)
+      b.add(new THREE.DodecahedronGeometry(0.1 * s, 0), o.wing, sx * 0.13 * s, 0.31 * s, -0.02 * s, 0, 0, sx * 0.2, 'solid', 0.45, 0.85, 1.35));
     if (o.longTail) for (let k = 0; k < 4; k++) b.box(0.03 * s, 0.32 * s, 0.05 * s, (k - 1.5) * 0.03 * s, 0.46 * s, -0.24 * s - k * 0.012, k % 2 ? o.tail : o.tail2 || o.tail, 'solid', -0.7 + k * 0.12, 0, 0);
     else b.box(0.1 * s, 0.14 * s, 0.1 * s, 0, 0.38 * s, -0.22 * s, o.tail, 'solid', 0.55, 0, 0);
-    for (const x of [-0.05, 0.05]) { leg(b, x * s, 0, 0.16 * s, 0.016 * s, o.legs); b.box(0.06 * s, 0.015 * s, 0.07 * s, x * s, 0.008, 0.02 * s, o.legs); }
+    for (const x of [-0.05, 0.05]) rig(b, [1, x < 0 ? 0 : Math.PI, 0.17 * s, 0], () => { leg(b, x * s, 0, 0.17 * s, 0.016 * s, o.legs); b.box(0.06 * s, 0.015 * s, 0.07 * s, x * s, 0.008, 0.02 * s, o.legs); });
   });
 }
 // a goat (Boer style): white faceted body, brown head and neck with a white blaze down the face, long droopy
@@ -568,16 +587,17 @@ function goat(b, o) {
   b.add(new THREE.DodecahedronGeometry(0.055, 0), o.udder, 0, 0.47, -0.17, 0, 0, 0, 'solid', 1, 0.75, 1);
   for (const x of [-0.022, 0.022]) b.cyl(0.008, 0.012, 0.04, 4, x, 0.43, -0.17, o.udder);
   // legs: upper leg, knee, shin, hoof (front legs a little forward)
-  for (const x of [-0.1, 0.1]) for (const z of [0.23, -0.24]) {
+  for (const x of [-0.1, 0.1]) for (const z of [0.23, -0.24]) rig(b, [1, (x < 0) === (z > 0) ? 0 : Math.PI, 0.58, z], () => {   // diagonal pairs step together
     const fz = z > 0 ? 0.015 : -0.01;
     limb(b, [x, 0.58, z], [x, 0.31, z + fz], 0.064, 0.042, o.coat, 6);
     b.add(new THREE.DodecahedronGeometry(0.042, 0), o.coat, x, 0.3, z + fz);
     limb(b, [x, 0.3, z + fz], [x, 0.05, z], 0.036, 0.031, o.shin, 6);
     b.cyl(0.034, 0.04, 0.055, 6, x, 0.027, z + 0.004, o.hoof);
-  }
+  });
   // tail: a short tuft pointing up and back
   b.add(new THREE.ConeGeometry(0.03, 0.11, 5), o.coat, 0, 0.82, -0.4, -0.55, 0, 0);
-  // neck (brown, like the head)
+  // neck (brown, like the head) and head: they turn down together from the neck base (eating, drinking, butting)
+  rig(b, [2, 0, 0.74, 0.27], () => {
   limb(b, [0, 0.74, 0.27], [0, 0.95, 0.43], 0.1, 0.075, o.head, 6);
   b.add(ico(1, 0), o.head, 0, 0.78, 0.3, 0.5, 0, 0, 'solid', 0.11, 0.1, 0.1);
   // head, tipped nose-down
@@ -602,12 +622,13 @@ function goat(b, o) {
     }
     b.add(new THREE.ConeGeometry(0.026, 0.1, 5), o.beard, 0, -0.12, 0.11, Math.PI + 0.25, 0, 0);            // beard
   });
+  });
 }
 export const ANIMAL_GEO = {
-  chicken: () => geomOf(b => chicken(b, { body: 0xf3efe6, wing: 0xe8e2d4, tail: 0xe0d8c6, comb: 0xd8342a, beak: 0xf0b030, legs: 0xf0b030 })),
-  chicken_brown: () => geomOf(b => chicken(b, { body: 0x9a5a2a, neck: 0xc8822e, head: 0xb06a28, wing: 0x6e3c1c, tail: 0x1e2a22, tail2: 0x2e4a34, longTail: true, comb: 0xd8342a, beak: 0xd8a040, legs: 0xc89a40, size: 1.05 })),
-  chicken_dark: () => geomOf(b => chicken(b, { body: 0x2a2a2e, neck: 0x34343a, head: 0x2e2e32, wing: 0x1c1d24, tail: 0x15161c, tail2: 0x22304a, longTail: true, comb: 0x5a1a2a, beak: 0x3a3a3a, legs: 0x2a2a2a, size: 1.0 })),
-  goat: () => geomOf(b => goat(b, GOAT_COAT)),
+  chicken: () => rigOf(b => chicken(b, { body: 0xf3efe6, wing: 0xe8e2d4, tail: 0xe0d8c6, comb: 0xd8342a, beak: 0xf0b030, legs: 0xf0b030 })),
+  chicken_brown: () => rigOf(b => chicken(b, { body: 0x9a5a2a, neck: 0xc8822e, head: 0xb06a28, wing: 0x6e3c1c, tail: 0x1e2a22, tail2: 0x2e4a34, longTail: true, comb: 0xd8342a, beak: 0xd8a040, legs: 0xc89a40, size: 1.05 })),
+  chicken_dark: () => rigOf(b => chicken(b, { body: 0x2a2a2e, neck: 0x34343a, head: 0x2e2e32, wing: 0x1c1d24, tail: 0x15161c, tail2: 0x22304a, longTail: true, comb: 0x5a1a2a, beak: 0x3a3a3a, legs: 0x2a2a2a, size: 1.0 })),
+  goat: () => rigOf(b => goat(b, GOAT_COAT)),
   cow: () => geomOf(b => {
     b.box(0.62, 0.62, 1.4, 0, 1.05, 0, 0xf4f1ea);
     b.box(0.02, 0.36, 0.42, 0.315, 1.1, 0.2, 0x2a2622); b.box(0.02, 0.3, 0.5, -0.315, 1.0, -0.3, 0x2a2622); b.box(0.4, 0.02, 0.36, 0, 1.365, -0.1, 0x2a2622);

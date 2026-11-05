@@ -152,6 +152,7 @@ survival.g.farmHud = () => farmHud();
 const farmland = new Farmland(scene, world, { onMarket: () => farmUI.open('market'), onStore: () => farmUI.open('store'), onStorage: () => farmUI.open('storage'),
   onPlot: i => farmUI.open('plot', i), onShelter: b => farmUI.open('shelter', b), onFeed: b => farmUI.open('feed', b),
   onCollect: b => farmUI.collect(b), eggsIn: b => (farmEco.ready ? farmEco.shelterInfo(b).ready : 0),
+  onClash: (x, z) => ambience.onKnock(x, z, listener),             // two goats butted heads (js/farm/animals.js)
   // gates: move at once here and for the others (PeerJS), then the server keeps it (shared and saved)
   onGate: (b, open) => {
     farmland.setGate(b.id, open, true); audio.thud(open ? 120 : 90, 0.07);

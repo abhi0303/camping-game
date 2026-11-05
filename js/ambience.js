@@ -5,7 +5,7 @@
 //   river    — flowing water when you're near it; at the docks while fishing, water lapping, little bubbles
 //              and fish jumping out of the water
 //   footsteps — soft steps on grass, gravel on the road, hollow knocks on wooden docks and the RV floor
-//   farm animals — walk up to the pens and the hens cluck ("buk-buk… ba-gawk!") and the goats bleat, from
+//   farm animals — two goats butting heads clack; walk up to the pens and the hens cluck ("buk-buk… ba-gawk!") and the goats bleat, from
 //              where they are, louder the closer you get (hens mostly sleep at night)
 // Everything is quiet and low-passed so it sits under the game. Inside the RV it sounds muffled.
 import { audio } from './audio.js';
@@ -167,6 +167,25 @@ export class Ambience {
     o.connect(am); am.connect(b1); am.connect(b2); b1.connect(g); b2.connect(g);
     const p = this._pan(pan); if (p) { g.connect(p); p.connect(this.bus); } else g.connect(this.bus);
     o.start(t); lfo.start(t); o.stop(t + d + 0.05); lfo.stop(t + d + 0.05);
+  }
+  // two goats' horns clashing: a hard double "clack" with a dull knock under it
+  knock(vol, pan) {
+    const ctx = this.ctx, t0 = ctx.currentTime + 0.01;
+    [[0, 1], [0.045, 0.45]].forEach(([dt, k]) => {
+      const t = t0 + dt, s = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+      s.buffer = this.white; f.type = 'bandpass'; f.frequency.value = rnd(1500, 1900); f.Q.value = 1.6;
+      s.connect(f); this._env(g, t, vol * k, 0.002, 0.05); this._wire(f, g, pan); s.start(t, Math.random() * 1.5); s.stop(t + 0.08);
+      const o = ctx.createOscillator(), og = ctx.createGain();
+      o.type = 'triangle'; o.frequency.setValueAtTime(rnd(240, 290), t); o.frequency.exponentialRampToValueAtTime(110, t + 0.07);
+      this._env(og, t, vol * k * 0.8, 0.002, 0.08); this._wire(o, og, pan); o.start(t); o.stop(t + 0.1);
+    });
+  }
+  // the goats butted heads at (x, z)
+  onKnock(x, z, listener) {
+    if (!this.ready || audio.muted || !listener) return;
+    const d = Math.hypot(x - listener.x, z - listener.z);
+    if (d > 28) return;
+    this.knock(0.16 * clamp(1 - d / 28, 0.1, 1), panOf(listener, x, z));
   }
   // one footstep. surface: grass | gravel | wood
   step(surface, vol) {
