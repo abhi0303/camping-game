@@ -344,7 +344,7 @@ export class Farmland {
   // decide it, so every screen agrees.
   wanderLocal(a, serverMs) {
     const t = serverMs / 1000, k = a.k, sp = SPEED[a.type] || 1, chick = a.type.startsWith('chicken');
-    const R = a.field ? this.goatField.pen : PEN;
+    const R = a.home ? a.home.R : a.field ? this.goatField.pen : PEN;
     const cx = (R.x0 + R.x1) / 2, cz = (R.z0 + R.z1) / 2, hx = (R.x1 - R.x0) / 2, hz = (R.z1 - R.z0) / 2;
     const at = tt => ({ x: cx + hx * 0.92 * Math.sin(tt * 0.11 + k * 40) * Math.cos(tt * 0.043 + k * 17), z: cz + hz * 0.92 * Math.sin(tt * 0.083 + k * 23) });
     // speed swings between standing still and walking; tt is its integral over time, so the animal moves
@@ -356,7 +356,7 @@ export class Farmland {
   }
   // the same in world coordinates (cows and horses)
   posOf(a, serverMs) {
-    const F = a.field ? this.goatField.F : PLOTS[a.plot], l = this.wanderLocal(a, serverMs), w = toWorld(F, l.x, l.z);
+    const F = a.home ? a.home.F : a.field ? this.goatField.F : PLOTS[a.plot], l = this.wanderLocal(a, serverMs), w = toWorld(F, l.x, l.z);
     return { x: w.x, z: w.z, walking: l.walking, yaw: l.yaw + (F.yaw || 0) };
   }
   update(dt, serverMs, me) {
@@ -384,7 +384,7 @@ export class Farmland {
         let F, lx, lz, lyaw, head, lift = 0, hop = 0, flap = 0;
         if (chick) {
           const wl = this.wanderLocal(a, serverMs), ce = chickenExtras(a, serverMs, wl.walking, this._ce);
-          F = PLOTS[a.plot]; lx = wl.x; lz = wl.z; lyaw = wl.yaw; head = ce.head; hop = ce.hop; flap = ce.flap;
+          F = a.home ? a.home.F : PLOTS[a.plot]; lx = wl.x; lz = wl.z; lyaw = wl.yaw; head = ce.head; hop = ce.hop; flap = ce.flap;
           if (head > 0.5) lift = 0.18;                   // leaning into a peck
         } else {
           const P = goatPose(a, serverMs, this, this._pose);

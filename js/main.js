@@ -39,6 +39,7 @@ import { MARKET, STORE, STORAGE, PLOTS, FARM_CENTER, FISH_MARKET, ROAD_U, ROAD_V
 import { FishingArea } from './fishing/area.js';
 import { Fishing } from './fishing/fishing.js';
 import { Notebook } from './farm/notebook.js';
+import { Village } from './village/index.js';
 import { Ambience } from './ambience.js';
 import { Birds } from './birds.js';
 import { Grass } from './grass.js';
@@ -179,6 +180,7 @@ const notebook = new Notebook({ eco: farmEco, materials, hooks: uiHooks, worldNa
 farmUI.book = notebook;
 // fishing (Farm World): the Fish Market, the docks on the river and the mini-game; the server checks catches
 const fishArea = new FishingArea(scene, world);
+const village = new Village(scene, world);           // Sonpur village behind the Market (js/village)
 const fishing = new Fishing({ scene, area: fishArea, eco: farmEco, player, gear, remotes, input, audio, toast: m => toast(m), haptic: ms => app.haptic(ms),
   beforeStart: () => { if (combat.out) combat.setOut(false); if (farmUI.isOpen) farmUI.close(); },
   openMarket: () => farmUI.open('fish'), onCatch: () => { farmEco.fished = true; },
@@ -305,6 +307,7 @@ function mapMarkers() {
   remotes.each((r, p) => markers.push({ x: p.x, z: p.z, dot: r.color, label: (r.s.dn ? 'DOWN · ' : '') + r.s.n, edge: true }));
   for (const z of zombies.list) if (z.st !== 4) markers.push({ x: z.x, z: z.z, dot: '#e0362a' });
   if (farm.active) {
+    if (village.on) markers.push({ x: village.spots.square.x, z: village.spots.square.z, icon: 'home', label: 'Sonpur village' });
     markers.push({ x: STORE.x, z: STORE.z, icon: 'store', label: 'Farm Store' }, { x: MARKET.x, z: MARKET.z, icon: 'market', label: 'Market' },
       { x: FARM_CENTER.x, z: FARM_CENTER.z, icon: 'plot', label: 'Farm' });
   }
@@ -726,6 +729,7 @@ async function enterFarm(L, status, isNew) {
   $('play').innerHTML = `${icon('play')} Back to the farm`;
   farmland.enable();                   // clear the ground, put up the market, the store and the plots
   fishArea.enable();                   // the Fish Market, the path and the docks on the river
+  village.enable({ farmland, minimap });   // the village behind the Market
   farmEco.start(L);
   startGame(r.role === 'host'
     ? (isNew || r.fresh ? `🌾 Welcome to ${L.roomName}! World code ${L.code} — invite friends from the menu (Esc)` : `🌾 Welcome back to ${L.roomName}`)
@@ -991,7 +995,7 @@ function debugStage(st, build) {
   if (build) { designer.show(build); designer._action('build'); designer.close(); }
   if (st === 'siege' || st === 'giants') survival._toStage(st);
 }
-window.__game = { debugStage, net, session, voice, birds, ambience, notebook, grass, farmPanel, minimap, structures, designer, giants, player, rvs, remotes, obstacles, bridgeWorld, materials, world, inv, gear, editor, input, rig, camera, zombies, survival, combat, applySave, collectSave, saveNow, farm, farmEco, farmUI, farmland, fishArea, fishing, dayNight: world.dayNight, get objI() { return objI; },
+window.__game = { renderer, debugStage, net, session, voice, birds, ambience, notebook, grass, farmPanel, minimap, village, structures, designer, giants, player, rvs, remotes, obstacles, bridgeWorld, materials, world, inv, gear, editor, input, rig, camera, zombies, survival, combat, applySave, collectSave, saveNow, farm, farmEco, farmUI, farmland, fishArea, fishing, dayNight: world.dayNight, get objI() { return objI; },
   // test hooks: advance the game n frames / pin the camera
   run: n => { for (let i = 0; i < n; i++) step(1 / 60); renderer.render(scene, camera); }, setCam: a => { freezeCam = a; } };
 

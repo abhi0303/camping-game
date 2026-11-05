@@ -82,15 +82,16 @@ function stem(h, x = 0, z = 0, lean = 0) {
   const g = clean(new THREE.CylinderGeometry(0.009, 0.013, h, 5, 1, true)); g.translate(0, h / 2, 0); g.rotateZ(lean); g.translate(x, 0, z);
   return solidCol(g, 0x4c9a2c);
 }
-// a flower head: chunky flat petals (six-sided, rounded) around a raised centre, tilted a little
-function head(r, n, petal, centre, x, y, z, tilt) {
+// a flower head: chunky flat petals (six-sided, rounded) around a raised centre, tilted a little.
+// flat: each petal is just its top face, and the centre a low cone (a fraction of the triangles)
+function head(r, n, petal, centre, x, y, z, tilt, flat = false) {
   const parts = [];
   for (let i = 0; i < n; i++) {
-    const g = solidCol(clean(new THREE.CylinderGeometry(0.5, 0.5, 1, 6)), petal);
-    g.scale(r * (n > 6 ? 0.62 : 0.85), 0.018, r * 0.95); g.translate(0, 0, r * 0.62); g.rotateX(-0.12); g.rotateY(i / n * Math.PI * 2);
+    const g = flat ? solidCol(clean(new THREE.CircleGeometry(0.5, 6).rotateX(-Math.PI / 2)), petal) : solidCol(clean(new THREE.CylinderGeometry(0.5, 0.5, 1, 6)), petal);
+    g.scale(r * (n > 6 ? 0.62 : 0.85), flat ? 1 : 0.018, r * 0.95); g.translate(0, flat ? 0.009 : 0, r * 0.62); g.rotateX(-0.12); g.rotateY(i / n * Math.PI * 2);
     parts.push(g);
   }
-  const mid = solidCol(clean(new THREE.CylinderGeometry(r * 0.36, r * 0.42, 0.045, 7)), centre); mid.translate(0, 0.02, 0);
+  const mid = solidCol(clean(flat ? new THREE.ConeGeometry(r * 0.42, 0.05, 6, 1, true) : new THREE.CylinderGeometry(r * 0.36, r * 0.42, 0.045, 7)), centre); mid.translate(0, 0.02, 0);
   parts.push(mid);
   const g = mergeGeometries(parts); g.rotateX(tilt); g.translate(x, y, z);
   return g;
@@ -102,6 +103,13 @@ function daisy() {
 function yellowFlower() {
   return softNormals(mergeGeometries([baseLeaves(4, 0.16, 2), stem(0.33, 0, 0, -0.06), head(0.09, 5, 0xffd02e, 0xf09a1c, -0.02, 0.33, 0, 0.3),
     stem(0.22, -0.06, 0.03, 0.2), head(0.065, 5, 0xffd84a, 0xf09a1c, -0.104, 0.215, 0.03, 0.55)]), 0.45);
+}
+// the lighter flower for garden beds, where there are hundreds: one head of flat petals and two leaves
+// (about 80 triangles instead of about 400)
+export function gardenFlower(yellow) {
+  return softNormals(mergeGeometries(yellow
+    ? [baseLeaves(2, 0.16, 2), stem(0.33, 0, 0, -0.06), head(0.09, 5, 0xffd02e, 0xf09a1c, -0.02, 0.33, 0, 0.3, true)]
+    : [baseLeaves(2, 0.17, 1), stem(0.36, 0, 0, 0.05), head(0.095, 8, 0xfbfbf6, 0xf5c533, 0.018, 0.36, 0, 0.3, true)]), 0.45);
 }
 const WHITE = new THREE.Color(1, 1, 1);
 

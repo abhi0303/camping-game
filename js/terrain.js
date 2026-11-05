@@ -162,6 +162,12 @@ export function buildTerrain() {
 
   const T = { H, heightAt, riverDistAt: bilin(riverD), roadDistAt: bilin(roadD), road, river, D, W, BED, campH, startH, valleyH, giantH };
   T.mesh = terrainMesh(T, riverD, roadD);
+  // the village's lanes and square, painted on the ground by its shader (js/village)
+  T.setVillageGround = (segs, sq, box) => {
+    const u = T.mesh.material.userData.ground, n = Math.min(24, segs.length);
+    for (let i = 0; i < n; i++) { u.uVSeg.value[i].set(segs[i][0], segs[i][1], segs[i][2], segs[i][3]); u.uVW.value[i] = segs[i][4]; }
+    u.uVN.value = n; u.uVBox.value.set(box.x0, box.z0, box.x1, box.z1); u.uVSq.value.set(sq.x, sq.z, sq.r);
+  };
   T.roadMesh = roadMesh(T);
   T.waterMesh = waterMesh(T);
   return T;
@@ -224,7 +230,9 @@ export const MUD_T = 0.68;
 export const SOIL_T = 0.86;          // small bare-soil spots (a second, finer noise) above this
 export function groundMaterial() {
   const mat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
-  const u = {};
+  const u = { uVN: { value: 0 }, uVSeg: { value: Array.from({ length: 24 }, () => new THREE.Vector4()) }, uVW: { value: new Float32Array(24) },
+    uVBox: { value: new THREE.Vector4(1e5, 1e5, -1e5, -1e5) }, uVSq: { value: new THREE.Vector3(1e5, 1e5, 0) },
+    uV_dirt: { value: new THREE.Color(0xc9a06a) }, uV_dirtD: { value: new THREE.Color(0xa77f4e) }, uV_stone: { value: new THREE.Color(0xc4bcab) }, uV_stoneD: { value: new THREE.Color(0xa59d8c) }, uV_grout: { value: new THREE.Color(0x7d7466) } };
   for (const k in GROUND) u['uGr_' + k] = { value: new THREE.Color(GROUND[k]) };
   mat.userData.ground = u;
   mat.onBeforeCompile = sh => {
@@ -240,12 +248,15 @@ export function groundMaterial() {
           diffuseColor.rgb = mix(diffuseColor.rgb, groundColor(vGWorld.xz, far), vGrass);
         }`);
   };
-  mat.customProgramCacheKey = () => 'ground-v14';
+  mat.customProgramCacheKey = () => 'ground-v15';
   return mat;
 }
 const GROUND_GLSL = /* glsl */`
 varying float vGrass; varying vec3 vGWorld;
 uniform vec3 uGr_g0, uGr_g1, uGr_g2, uGr_g3, uGr_m0, uGr_m1, uGr_m2;
+// the village (Farm World): its dirt lanes (segments ax, az, bx, bz with widths) and its paved square
+uniform int uVN; uniform vec4 uVSeg[24]; uniform float uVW[24]; uniform vec4 uVBox; uniform vec3 uVSq;
+uniform vec3 uV_dirt, uV_dirtD, uV_stone, uV_stoneD, uV_grout;
 const float MUD_T = ${MUD_T};
 float gh12(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
 vec2 gh22(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973)); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.xx + p3.yz) * p3.zy); }
@@ -270,7 +281,37 @@ vec2 gcell(vec2 p, float scale, out vec2 off) {
   }
   return id;
 }
+float vSegD(vec2 p, vec4 s) { vec2 ab = s.zw - s.xy; float t = clamp(dot(p - s.xy, ab) / max(dot(ab, ab), 1e-4), 0.0, 1.0); return length(p - s.xy - ab * t); }
+// the village's ground: a paved square of irregular stones, and packed-earth lanes with frayed edges. a: 1 inside
+vec4 villageGround(vec2 p, float far) {
+  if (uVN == 0 || p.x < uVBox.x || p.x > uVBox.z || p.y < uVBox.y || p.y > uVBox.w) return vec4(0.0);
+  float fray = (gnoise(p * 1.6) - 0.5) * 0.8 + (gnoise(p * 4.7 + 3.0) - 0.5) * 0.35;
+  float ds = length(p - uVSq.xy) - uVSq.z;
+  if (ds + fray * 0.6 < 0.0) {                                                  // the square: stones and grout
+    vec2 q = p * 1.25, ip = floor(q), fp = fract(q); float d1 = 9.0, d2 = 9.0; vec2 id = ip;
+    for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
+      vec2 o = vec2(float(i), float(j)), r = o + 0.15 + gh22(ip + o) * 0.7 - fp; float d = dot(r, r);
+      if (d < d1) { d2 = d1; d1 = d; id = ip + o; } else if (d < d2) d2 = d;
+    }
+    vec3 st = mix(uV_stone, uV_stoneD, gh12(id + 2.0)) * (0.94 + 0.12 * gh12(id + 7.0));
+    float edge = sqrt(d2) - sqrt(d1);
+    vec3 c = mix(uV_grout, st, smoothstep(0.04, 0.12, edge) * (1.0 - far) + far);
+    return vec4(c, 1.0);
+  }
+  float dl = 1e9;
+  for (int i = 0; i < 24; i++) { if (i >= uVN) break; dl = min(dl, vSegD(p, uVSeg[i]) - uVW[i] * 0.5); }
+  if (dl + fray < 0.0) {                                                         // a lane: packed earth, a little rutted
+    vec3 c = mix(uV_dirt, uV_dirtD, 0.35 + 0.5 * gnoise(p * 0.45)) * (0.95 + 0.1 * gnoise(p * 2.2));
+    if (far < 0.6) { vec2 q = p * 2.6, ip = floor(q), fp = fract(q); vec2 c2 = 0.2 + gh22(ip) * 0.6; float ph = gh12(ip + 5.0);
+      if (ph > 0.9 && length(fp - c2) < 0.14) c = mix(c, uV_stoneD, 0.7); }
+    return vec4(c, 1.0);
+  }
+  if (dl + fray < 0.7) return vec4(mix(uGr_g3, uV_dirt, 0.18), 0.5);                // a worn, drier verge
+  return vec4(0.0);
+}
 vec3 groundColor(vec2 p, float far) {
+  vec4 vg = villageGround(p, far);
+  if (vg.a > 0.99) return vg.rgb;
   float mud = gmud(p), tone = gtone(p);
   vec2 off; vec2 id = gcell(p, 0.85, off);                                 // soft, roughly hexagonal patches (~1.2 m)
   float h = gh12(id * 1.7 + 3.1);
@@ -293,6 +334,7 @@ vec3 groundColor(vec2 p, float far) {
     return col;
   }
   vec3 col = gpal(clamp(tone + (h - 0.5) * 0.5, 0.0, 1.0)) * facet;          // each patch one of the close limes
+  if (vg.a > 0.0) col = mix(col, vg.rgb, 0.55);
   if (edge > -0.6) col = mix(col, uGr_g3 * 1.02, 0.25 * clamp(edge + 0.6, 0.0, 1.0));   // a little lighter, drier grass by the dirt
   return col;
 }`;

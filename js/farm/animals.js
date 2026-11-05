@@ -53,6 +53,7 @@ const BUTT = 1.6;                                     // one butt: back off, rea
 const CONTACT = 0.52, BACK = 0.38;                    // half the distance between the two goats at the clash / backed off
 // where things are in a goat's home (local coordinates of its pen or field)
 function home(a, land) {
+  if (a.home) return a.home;                         // a village pen (js/village/animals.js)
   if (a.field) return { F: land.goatField.F, R: land.goatField.pen, fight: { x: 0, z: 0.4 },
     eat: [{ x: 3.1, z: -3.75, yaw: Math.PI }, { x: 3.9, z: -3.75, yaw: Math.PI }], drink: [{ x: -2.95, z: 3.8, yaw: 0 }, { x: -2.05, z: 3.8, yaw: 0 }] };
   return { F: land.plotFrame(a.plot), R: PEN, fight: { x: 0, z: 1.4 },

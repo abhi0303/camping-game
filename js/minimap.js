@@ -30,6 +30,13 @@ export class MiniMap {
     this.world.mapBoard.material.map = tex; this.world.mapBoard.material.needsUpdate = true;
   }
 
+  // Farm World's village: its lanes, square and houses on the map (drawn on the map images)
+  addVillage(v) {
+    this.world.villageMap = v;
+    drawVillage(this.base.getContext('2d'), RES, v);
+    if (this.hi && this.hi.done) drawVillage(this.hi.cv.getContext('2d'), RES * 2, v);
+    this.dirty = true;
+  }
   // the big map: opens zoomed in on the player with the mouse free (scroll = zoom, drag = move)
   toggleBig(on = !this.bigOpen) {
     if (on === this.bigOpen) return;
@@ -195,6 +202,21 @@ export class MiniMap {
   }
 }
 
+function drawVillage(g, res, v) {
+  const m = res / SX, p = (x, z) => [((x - X0) / SX) * res, ((Z1 - z) / SX) * res];
+  g.save(); g.lineCap = 'round'; g.lineJoin = 'round';
+  for (const [ax, az, bx, bz, w] of v.segs) { const [x0, y0] = p(ax, az), [x1, y1] = p(bx, bz); g.strokeStyle = '#c9a06a'; g.lineWidth = Math.max(1.5, w * m); g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke(); }
+  { const [x, y] = p(v.square.x, v.square.z); g.fillStyle = '#c4bcab'; g.beginPath(); g.arc(x, y, v.square.r * m, 0, 7); g.fill(); }
+  for (const H of v.houses) {
+    const [x, y] = p(H.x, H.z), col = '#' + new THREE.Color(H.col).getHexString();
+    g.save(); g.translate(x, y); g.rotate(-H.yaw);
+    g.fillStyle = 'rgba(30,20,10,.35)'; g.fillStyle = col; g.strokeStyle = 'rgba(40,25,15,.75)'; g.lineWidth = Math.max(0.6, 0.18 * m);
+    if (H.round) { g.beginPath(); g.arc(0, 0, H.w / 2 * m, 0, 7); g.fill(); g.stroke(); }
+    else { g.fillRect(-H.w / 2 * m, -H.d / 2 * m, H.w * m, H.d * m); g.strokeRect(-H.w / 2 * m, -H.d / 2 * m, H.w * m, H.d * m); }
+    g.restore();
+  }
+  g.restore();
+}
 // the map image, painted from the terrain: paint(rows) does a few rows at a time (Infinity: all of it)
 function basePainter(world, res) {
   const T = world.T, resz = Math.round(res * SZ / SX), cv = document.createElement('canvas'); cv.width = res; cv.height = resz;
@@ -240,6 +262,7 @@ function basePainter(world, res) {
             g.fillStyle = 'rgba(200, 240, 120, .35)'; g.beginPath(); g.arc(x - r * 0.25, y - r * 0.3, r * 0.4, 0, 7); g.fill();
           }
         }
+        if (world.villageMap) drawVillage(g, res, world.villageMap);
         P.done = true;
       }
       return P;
