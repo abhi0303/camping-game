@@ -44,6 +44,7 @@ import { GuardDogs } from './farm/dogs.js';
 import { Thieves } from './farm/thieves.js';
 import { Football } from './village/football.js';
 import { FarmGuide } from './farm/guide.js';
+import { DutchMill } from './farm/dutchmill.js';
 import { Ambience } from './ambience.js';
 import { Birds } from './birds.js';
 import { Grass } from './grass.js';
@@ -185,6 +186,7 @@ farmUI.book = notebook;
 // fishing (Farm World): the Fish Market, the docks on the river and the mini-game; the server checks catches
 const fishArea = new FishingArea(scene, world);
 const village = new Village(scene, world);
+const mill = new DutchMill(scene, world);   // the big Dutch windmill on the meadow east of the road
 const villageViewers = [];           // Sonpur village behind the Market (js/village)
 const fishing = new Fishing({ scene, area: fishArea, eco: farmEco, player, gear, remotes, input, audio, toast: m => toast(m), haptic: ms => app.haptic(ms),
   beforeStart: () => { if (combat.out) combat.setOut(false); if (farmUI.isOpen) farmUI.close(); },
@@ -348,6 +350,7 @@ function mapMarkers() {
   for (const z of zombies.list) if (z.st !== 4) markers.push({ x: z.x, z: z.z, dot: '#e0362a' });
   if (farm.active) {
     if (village.on) markers.push({ x: village.spots.square.x, z: village.spots.square.z, icon: 'home', label: 'Sonpur village' });
+    if (mill.on) markers.push({ x: mill.x, z: mill.z, icon: 'windmill', label: 'Windmill' });
     if (thieves.thiefPos) markers.push({ x: thieves.thiefPos.x, z: thieves.thiefPos.z, icon: 'thief', label: 'Thief!' });
     markers.push({ x: STORE.x, z: STORE.z, icon: 'store', label: 'Farm Store' }, { x: MARKET.x, z: MARKET.z, icon: 'market', label: 'Market' },
       { x: FARM_CENTER.x, z: FARM_CENTER.z, icon: 'plot', label: 'Farm' });
@@ -785,6 +788,7 @@ async function enterFarm(L, status, isNew) {
   farmland.enable();                   // clear the ground, put up the market, the store and the plots
   fishArea.enable();                   // the Fish Market, the path and the docks on the river
   village.enable({ farmland, minimap });   // the village behind the Market
+  mill.enable();                           // the big windmill
   if (village.people) village.people.onWhistle = (x, z) => ambience.onWhistle(x, z, listener);   // the night watchman
   dogs.enable(); thieves.enable();      // guard dogs and thieves
   football.enable();                    // football on the village green
@@ -982,6 +986,7 @@ function step(dt) {
       village.update(dt, world.dayNight.now(), villageViewers);
     }
     football.update(dt);
+    mill.update(farmEco.serverNow());
     fishArea.update(dt, player.mode === 'foot' ? player.pos : null);
     if ((plotInfoT -= dt) <= 0) { plotInfoT = 0.25; farmUI.renderInfo(player.mode === 'foot' ? farmland.plotAt(player.pos) : null); }
   } else if (plotInfoT !== 1) { plotInfoT = 1; farmUI.renderInfo(null); }
@@ -1066,7 +1071,7 @@ function debugStage(st, build) {
   if (build) { designer.show(build); designer._action('build'); designer.close(); }
   if (st === 'siege' || st === 'giants') survival._toStage(st);
 }
-window.__game = { renderer, dogs, thieves, football, debugStage, net, session, voice, birds, ambience, notebook, grass, farmPanel, minimap, village, structures, designer, giants, player, rvs, remotes, obstacles, bridgeWorld, materials, world, inv, gear, editor, input, rig, camera, zombies, survival, combat, applySave, collectSave, saveNow, farm, farmEco, farmUI, farmland, fishArea, fishing, dayNight: world.dayNight, get objI() { return objI; },
+window.__game = { renderer, dogs, thieves, football, mill, debugStage, net, session, voice, birds, ambience, notebook, grass, farmPanel, minimap, village, structures, designer, giants, player, rvs, remotes, obstacles, bridgeWorld, materials, world, inv, gear, editor, input, rig, camera, zombies, survival, combat, applySave, collectSave, saveNow, farm, farmEco, farmUI, farmland, fishArea, fishing, dayNight: world.dayNight, get objI() { return objI; },
   // test hooks: advance the game n frames / pin the camera
   run: n => { for (let i = 0; i < n; i++) step(1 / 60); renderer.render(scene, camera); }, setCam: a => { freezeCam = a; } };
 
