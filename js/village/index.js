@@ -90,7 +90,7 @@ export class Village {
     this.people.prepare((x, z) => chunk(x, z));
     // build the meshes
     const mats = { ...MAT, win0: W.dayNight.windowMats[0], win1: W.dayNight.windowMats[1], win2: W.dayNight.windowMats[2] };
-    for (const b of this.chunks.values()) { const g = b.build(mats); g.traverse(o => { if (o.isMesh) { o.matrixAutoUpdate = false; o.updateMatrix(); } }); this._add(g); }
+    for (const b of this.chunks.values()) { const g = b.build(mats); g.traverse(o => { if (o.isMesh) { o.matrixAutoUpdate = false; o.updateMatrix(); W.addFogCull(o); } }); this._add(g); }
     this._instanced();
     this.people.start(o => this._add(o));
     // the steps, porches and stone foundations are walked on (js/world.js surfaces)
@@ -308,7 +308,7 @@ export class Village {
       const im = new THREE.InstancedMesh(geo, MAT.solid, list.length);
       list.forEach(([x, y, z, yaw, sc], i) => im.setMatrixAt(i, m.compose(p.set(x, y, z), q.setFromAxisAngle(up, yaw), s.set(sc, sc, sc))));
       im.castShadow = shadow; im.receiveShadow = true; im.computeBoundingSphere();
-      this._add(im);
+      this._add(im); this.world.addFogCull(im);
     };
     for (const [kind, list] of Object.entries(this.plants)) if (list.length && PLANTS[kind]) make(PLANTS[kind](), list, SHADOW_PLANTS.has(kind));
     const tg = [geoOf(broadleafA), geoOf(broadleafB), geoOf(roundTree)];

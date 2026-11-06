@@ -43,6 +43,7 @@ import { Village } from './village/index.js';
 import { GuardDogs } from './farm/dogs.js';
 import { Thieves } from './farm/thieves.js';
 import { Football } from './village/football.js';
+import { FarmGuide } from './farm/guide.js';
 import { Ambience } from './ambience.js';
 import { Birds } from './birds.js';
 import { Grass } from './grass.js';
@@ -280,32 +281,51 @@ const STAGE_OBJ = { tbuild: 9, siege: 10, trail2: 11, cbuild: 12, giants: 13, wo
 // Farm World: the same trail to clear, then the north is yours to explore (no siege, no giants)
 const nearValley = () => anyRV(r => Math.hypot(r.root.position.x - VALLEY.x, r.root.position.z - VALLEY.z) < 70) || Math.hypot(player.pos.x - VALLEY.x, player.pos.z - VALLEY.z) < 70;
 const farmHas = fn => farmEco.ready && fn(farmEco.st);
-const FARM_OBJ = [
-  { text: 'Walk to the farm east of the trailhead (follow the FARM sign by the road)', done: () => inFarm(whereAmI().x, whereAmI().z) || farmHas(s => s.buildings.length > 0), at: () => FARM_CENTER },
-  { text: 'Get 20 wood: chop trees and store the logs at the farm storage — or buy wood at the Farm Store across the road', done: () => farmHas(s => s.inventory.wood >= 20 || s.buildings.length > 0), at: () => STORAGE },
-  { text: 'Build a chicken coop: walk up to a plot sign', done: () => farmHas(s => s.buildings.some(b => b.type === 'coop')), at: () => PLOTS[0] },
-  { text: 'Buy chickens (and feed) from the farmer at the Farm Store, across the road', done: () => farmHas(s => s.animals.some(a => a.type.startsWith('chicken'))), at: () => STORE },
-  { text: 'Feed the chickens every 2 hours: open the pen gate, walk to the trough, press E', done: () => farmHas(s => s.animals.length > 0) && farmEco.fedOnce, at: () => PLOTS[0] },
-  { text: 'Fed chickens lay an egg every few minutes — collect them at the nest boxes, then sell them at the Market', done: () => farmEco.sold, at: () => (farmEco.collected ? MARKET : PLOTS[0]) },
-  { text: 'Grow the farm: goats need a goat shed, cows a barn, horses a stable', done: () => farmHas(s => s.buildings.length >= 3), at: () => FARM_CENTER },
+// Farm World: the farm guide (js/farm/guide.js) — something to do now, then the next step for this farm; with the farm
+// grown, the trail to clear and the north to explore
+const guide = new FarmGuide({ eco: farmEco, where: () => whereAmI(), fishArea, village });
+const TRAIL_OBJ = [
   ...OBJ.slice(0, 8),
   { text: 'Explore north over the pass to Watchtower Valley (clear the road on the way)', done: nearValley, at: () => world.towerBenchPos },
-  { text: 'Go fishing: buy worms at the Fish Market (east of the Market), follow the path to the river docks and land a fish', done: () => farmEco.fished || farmHas(s => !!(s.fishing && s.fishing.mine)), at: () => (farmEco.qty('worms') ? fishArea.spots[1].stand : FISH_MARKET) },
   { text: 'Your world is saved online — any member can open it, together or alone', done: () => false, at: () => world.campPos },
 ];
-const objList = () => (survival.farm ? FARM_OBJ : OBJ);
-function updateObjective() {
-  const list = objList();
-  let changed = false;
-  if (!survival.farm && STAGE_OBJ[survival.stage] > objI) { objI = STAGE_OBJ[survival.stage]; changed = true; }
-  objI = Math.min(objI, list.length - 1);
-  while (objI < list.length - 1 && list[objI].done()) { objI++; changed = true; }
-  if (changed) { toast('✔ Objective complete!'); session.dirty = true; saveNow(); }
-  const txt = touchText(list[objI].text);
-  if (txt !== lastObj) {
-    if (lastObj) openObjective(6);              // a new goal: show it in full for a moment (phones)
-    lastObj = txt; hud.objective.innerHTML = `${icon('target')}<span>${escapeHTML(txt)}</span>`;
+let goal = null, goalN = -1;
+// the goal card: { head, n, total, text, at, urgent: { text, at, tone } | null }
+function currentGoal() {
+  if (survival.farm) {
+    const r = guide.get();
+    if (!r.allDone) return { head: 'Next goal', n: r.n, total: r.total, text: r.step.text, at: r.step.at, urgent: r.urgent };
+    let changed = false;
+    objI = Math.min(objI, TRAIL_OBJ.length - 1);
+    while (objI < TRAIL_OBJ.length - 1 && TRAIL_OBJ[objI].done()) { objI++; changed = true; }
+    if (changed) { toast('✔ Objective complete!'); session.dirty = true; saveNow(); }
+    return { head: 'Explore', n: objI, total: TRAIL_OBJ.length - 1, text: TRAIL_OBJ[objI].text, at: TRAIL_OBJ[objI].at(), urgent: r.urgent };
   }
+  let changed = false;
+  if (STAGE_OBJ[survival.stage] > objI) { objI = STAGE_OBJ[survival.stage]; changed = true; }
+  objI = Math.min(objI, OBJ.length - 1);
+  while (objI < OBJ.length - 1 && OBJ[objI].done()) { objI++; changed = true; }
+  if (changed) { toast('✔ Objective complete!'); session.dirty = true; saveNow(); }
+  return { head: 'Objective', n: objI, total: OBJ.length - 1, text: OBJ[objI].text, at: OBJ[objI].at(), urgent: null };
+}
+let goalT = 0;
+function updateObjective(dt = 0.12) {
+  if ((goalT -= dt) > 0 && goal) return;
+  goalT = 0.5;                                   // (twice a second is plenty)
+  const g = currentGoal(), first = !goal;
+  if (survival.farm && g.head === 'Next goal' && g.n > goalN && goalN >= 0) toast('✔ Farm goal done!');
+  if (g.head === 'Next goal') goalN = g.n;
+  goal = g;
+  const txt = touchText(g.text), now = g.urgent ? touchText(g.urgent.text) : '';
+  const key = g.head + g.n + txt + now;
+  if (key === lastObj) return;
+  if (lastObj && !first && !/loading/.test(lastObj)) openObjective(6);   // a new goal: show it in full for a moment (phones)
+  lastObj = key;
+  const pct = Math.round(100 * Math.min(1, g.n / Math.max(1, g.total)));
+  hud.objective.classList.toggle('has-now', !!now);
+  hud.objective.innerHTML = (now ? `<div class="og-now ${g.urgent.tone || ''}">${icon('bolt')}<span>${escapeHTML(now)}</span></div>` : '')
+    + `<div class="og-head"><span>${g.head}</span><b>${g.n} / ${g.total}</b></div><div class="og-bar"><i style="width:${pct}%"></i></div>`
+    + `<div class="og-t">${icon('target')}<span>${escapeHTML(txt)}</span></div>`;
 }
 let lastObj = '', objT = 0;
 function openObjective(sec) { hud.objective.classList.add('open'); clearTimeout(objT); objT = setTimeout(() => hud.objective.classList.remove('open'), sec * 1000); }
@@ -337,7 +357,7 @@ function mapMarkers() {
     for (const sp of fishArea.spots) markers.push({ x: sp.stand.x, z: sp.stand.z, icon: 'rod', label: sp.i === 1 ? 'Fishing docks' : '' });
   }
   if (drone.active) markers.push({ x: drone.pos.x, z: drone.pos.z, icon: 'drone' });
-  const ol = objList(), t = ol[Math.min(objI, ol.length - 1)].at(); markers.push({ x: t.x, z: t.z, ring: true, edge: true });
+  const t = goal ? (goal.urgent ? goal.urgent.at : goal.at) : null; if (t) markers.push({ x: t.x, z: t.z, ring: true, edge: true });
   return markers;
 }
 const me = { x: 0, z: 0, yaw: 0 };
@@ -363,7 +383,7 @@ function gatherLoads() {
 /* ---------- saving ---------- */
 function collectSave() {
   const bw = bridgeWorld;
-  return { v: 1, t: Date.now(), obj: objI, obst: obstacles.stateArray(), crates: world.crates.map(c => (c.taken ? 1 : 0)), mats: { ...materials.c },
+  return { v: 1, fv: 2, t: Date.now(), obj: objI, obst: obstacles.stateArray(), crates: world.crates.map(c => (c.taken ? 1 : 0)), mats: { ...materials.c },
     br: bw.design && bw.state === 'built' ? { d: bw.design, sp: bw.spent } : null, rvs: rvs.map(r => r.cp),
     bag: inv.backpack.map(it => (it ? it.type : null)), st: inv.sets.map(set => set.map(st => ({ id: st.id, s: inv.types(st) }))), sv: survival.state(), bs: structures.save() };
 }
@@ -393,7 +413,8 @@ function collectWorld() {
   delete s.t; delete s.bag; delete s.sv; delete s.bs;
   return s;
 }
-function applyWorld(w) { if (w && w.v === 1) applySave({ bag: [], ...w }); survival.setFarm(); }
+// (fv 2: the objective index counts the trail goals only — the farm's own goals come from the farm itself, js/farm/guide.js)
+function applyWorld(w) { if (w && w.v === 1) applySave({ bag: [], ...w, obj: w.fv === 2 ? w.obj : Math.max(0, (w.obj || 0) - 7) }); survival.setFarm(); }
 function manualSave() {
   if (farm.active) { toast(farm.saveSoon() ? '💾 Saving the world online…' : '💾 The player hosting the world saves it online'); return; }
   if (net.isGuest) { toast('In co-op the host saves the shared game'); return; }
@@ -468,6 +489,14 @@ const HELP = {
   lie: [['E', 'get up'], ['L', 'interior lights'], ['Mouse', 'look around']],
   drive: [['W / S', 'gas / brake + reverse'], ['A / D', 'steer'], ['Space', 'handbrake'], ['H', 'horn'], ['L', 'headlights'], ['V', 'chase / cockpit'], ['E', 'get out (when slow)'], ['Q', 'walk to the back'], ['M', 'map'], ['R', 'back to last checkpoint']],
 };
+// the controls card: open, or folded to a small "Controls · Tab" tab (remembered); it folds by itself 30 s into the game
+let helpAuto = 0;
+function setHelp(mini, remember = true) {
+  hud.help.classList.toggle('mini', mini);
+  if (remember) try { localStorage.setItem('rv-help', mini ? 'mini' : 'open'); } catch (e) { /* storage off */ }
+}
+try { if (localStorage.getItem('rv-help') === 'mini') hud.help.classList.add('mini'); } catch (e) { /* storage off */ }
+hud.help.addEventListener('click', () => setHelp(!hud.help.classList.contains('mini')));
 function stateName() {
   if (player.dead) return '☠ Eliminated — spectating';
   if (player.downed) return player.carried ? '⬇ Down — being carried' : '⬇ Down!';
@@ -650,6 +679,10 @@ function updateHUD(dt) {
   hudT -= dt;
   if (hudT > 0) return;
   hudT = 0.12; // DOM writes ~8x per second only
+  if (started && helpAuto >= 0 && (helpAuto += 0.12) > 30) {   // fold the controls card once you've been playing a while (unless you chose)
+    helpAuto = -1; let pref = null; try { pref = localStorage.getItem('rv-help'); } catch (e) { /* storage off */ }
+    if (!pref) setHelp(true, false);
+  }
   hud.gunSlot.classList.toggle('sel', combat.out);
   hud.vitals.classList.toggle('hidden', farm.active && player.hp >= 100 && !player.downed && !player.dead);
   if (combat.weapon !== shownWeapon) {   // shotgun <-> cannon (giant stage)
@@ -687,7 +720,7 @@ function updateHUD(dt) {
       el.textContent = ms ? ` · ${ms} ms` : '';
     }
   }
-  updateObjective();
+  updateObjective(0.12);
   hud.droneHud.classList.toggle('hidden', !(drone.active && rig.droneView === 'cam'));
   hud.binoHud.classList.toggle('hidden', !gear.zooming);
   if (drone.active) {
@@ -698,7 +731,7 @@ function updateHUD(dt) {
     hud.dWarn.textContent = drone.warn;
   }
   const key = drone.active ? 'drone' : gear.zooming ? 'zoom' : player.mode === 'tween' ? lastHelp : (player.mode === 'foot' ? (farm.active ? 'farm' : 'foot') : player.mode);
-  if (key && key !== lastHelp && HELP[key]) { lastHelp = key; hud.helpBody.innerHTML = HELP[key].map(([k, v]) => `<div><b>${k}</b>${v}</div>`).join(''); }
+  if (key && key !== lastHelp && HELP[key]) { lastHelp = key; hud.helpBody.innerHTML = HELP[key].map(([k, v]) => `<span class="hk">${k.split(' / ').map(x => `<kbd>${x}</kbd>`).join('<i>/</i>')}</span><span class="hv">${v}</span>`).join(''); }
   const driving = player.mode === 'drive', rv = player.rv;
   hud.speedo.classList.toggle('hidden', !driving);
   if (driving) {
@@ -746,6 +779,7 @@ async function enterFarm(L, status, isNew) {
   if (r.role === 'host') { parkAtStore(); standAtStore(); }  // (guests stand beside the host's RV, already parked here)
   gear.netId = String(L.memberId || 'f').slice(0, 8) + Date.now().toString(36);   // ids of gear you set down
   document.body.classList.add('farm');  // (CSS: no gun button, the floating bag + order slip)
+  $('title').querySelector('.t2').textContent = 'Farm World';
   $('musicBtn').classList.remove('hidden');
   $('play').innerHTML = `${icon('play')} Back to the farm`;
   farmland.enable();                   // clear the ground, put up the market, the store and the plots
@@ -904,7 +938,7 @@ function globalKeys() {
     else if (player.mode === 'drive' || r.isLocal(net)) { r.reset(); toast(`RV ${rvs.length > 1 ? r.index + 1 + ' ' : ''}moved to the last checkpoint`); }
     else toast('Only the driver can reset this RV');
   }
-  if (input.wasPressed('Tab')) hud.help.classList.toggle('hidden');
+  if (input.wasPressed('Tab')) setHelp(!hud.help.classList.contains('mini'));
   if (input.wasPressed('KeyI') && farm.active) farmInvite();
   else if (input.wasPressed('KeyI') && net.online) copyText(inviteLink()).then(() => toast('📋 Invite link copied — send it to a friend'), () => toast('Press Esc to see the invite link'));
   if (!drone.active && !fishing.active && (player.mode === 'foot' || player.mode === 'inside')) for (let i = 1; i <= 6; i++) if (input.wasPressed('Digit' + i)) inv.equip(i - 1);
@@ -999,8 +1033,12 @@ function frame(now) {
     lastT = now; input.endFrame();
     return;
   }
-  const idle = now - input.lastInput > 25000 && player.mode !== 'drive' && !net.online;
-  const cap = idle ? 15 : quality.fps;
+  // fewer frames when nobody is looking closely (less heat): no keys or mouse for 25 s, or the window behind another
+  // app. Friends in the world (or a football match) keep it smooth. Farm World (always "online", even alone) idles at 30.
+  const others = net.online && session.players.size > 1;
+  const idle = now - input.lastInput > 25000 && player.mode !== 'drive' && !others && !football.active;
+  const away = !document.hasFocus() && !others;
+  const cap = idle ? (survival.farm ? 30 : 15) : away ? Math.min(30, quality.fps) : quality.fps;
   if (now - lastRender < 1000 / cap - 2) return;
   lastRender = now;
   let dt = (now - lastT) / 1000;

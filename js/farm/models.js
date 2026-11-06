@@ -502,67 +502,163 @@ export function windmillModel() {
 const HORSE_COATS = {
   horse_bay: { body: 0x7a4a2a, mane: 0x1e140e, socks: 0x2a1a12 },
   horse_chestnut: { body: 0xa0522d, mane: 0x8a3e1e, socks: 0x8f4825, blaze: 0xf2eee6 },
-  horse_black: { body: 0x24211f, mane: 0x121110, socks: 0x1a1817, blaze: 0xf2eee6 },
+  horse_black: { body: 0x24211f, mane: 0x121110, socks: 0x1a1817, blaze: 0xf2eee6, dark: true },
   horse_white: { body: 0xe6e2da, mane: 0xcfc9be, socks: 0xd8d2c8 },
   horse_palomino: { body: 0xd9a646, mane: 0xf5eedc, socks: 0xc99436, blaze: 0xf5eedc },
   horse_pinto: { body: 0xf0ece4, mane: 0x3a2414, socks: 0xe8e2d8, patches: 0x6e4024 },
 };
-function horse(b, o) {
-  b.box(0.5, 0.56, 1.35, 0, 1.25, 0, o.body);
-  rig(b, [2, 0, 1.42, 0.5], () => {                                    // neck and head (lower to graze)
-    b.box(0.26, 0.6, 0.3, 0, 1.68, 0.62, o.body, 'solid', 0.55, 0, 0);
-    b.box(0.24, 0.26, 0.56, 0, 1.98, 0.92, o.body, 'solid', 0.45, 0, 0);
-    b.box(0.07, 0.5, 0.36, 0, 1.82, 0.56, o.mane, 'solid', 0.55, 0, 0);
-    if (o.blaze) b.box(0.08, 0.04, 0.3, 0, 2.11, 0.98, o.blaze, 'solid', 0.45, 0, 0);
-    for (const x of [-0.07, 0.07]) b.box(0.05, 0.12, 0.04, x, 2.16, 0.78, o.body);
-    for (const x of [-0.125, 0.125]) b.box(0.012, 0.04, 0.04, x, 2.02, 0.98, 0x111111);     // eyes
-    if (o.patches) b.box(0.27, 0.3, 0.2, 0, 1.75, 0.66, o.patches, 'solid', 0.55, 0, 0);
-  });
-  if (o.patches) { b.box(0.52, 0.34, 0.42, 0, 1.3, 0.28, o.patches); b.box(0.52, 0.28, 0.3, 0, 1.36, -0.42, o.patches); }
-  for (const x of [-0.17, 0.17]) for (const z of [-0.5, 0.5]) rig(b, [1, (x < 0) === (z > 0) ? 0 : Math.PI, 0.98, z], () => {
-    b.cyl(0.06, 0.055, 0.5, 5, x, 0.73, z, o.body);                    // upper leg
-    b.cyl(0.055, 0.05, 0.42, 5, x, 0.27, z, o.socks);                  // lower leg
-    b.cyl(0.06, 0.065, 0.07, 5, x, 0.035, z, 0x2a2420);                // hoof
-  });
-  rig(b, [3, 1e-4, 1.26, 0], () => b.box(0.1, 0.55, 0.1, 0, 1.0, -0.72, o.mane, 'solid', -0.3, 0, 0));   // tail (swishes)
+// a horse (about 1.55 m at the withers): a faceted barrel, deep chest and round quarters, a long arched neck with
+// the mane falling to one side, a long head (cheeks, tapering face, soft muzzle, nostrils, eyes, pricked ears,
+// forelock, a white blaze on some coats), legs with knees / hocks, fetlocks and dark hooves, socks in the coat's
+// leg colour, and a full tail. The lower legs bend while walking; the head reaches the grass (rig kinds 4 and 5).
+const HORSE_NECK = [1.28, 0.55], HORSE_POLL = [1.9, 0.97];
+// the horse's body: a capsule along z, reshaped along its length (height of the middle, depth, width)
+function horseBody() {
+  const g = new THREE.CapsuleGeometry(0.29, 1.08, 4, 10).rotateX(Math.PI / 2), p = g.attributes.position;
+  // (top and bottom shaped apart: the belly tucks up toward the flank, the chest hangs deep, the croup is round)
+  const Z = [-0.84, -0.55, -0.2, 0.2, 0.55, 0.84], CY = [1.25, 1.24, 1.22, 1.2, 1.22, 1.28], KT = [1.0, 1.06, 0.94, 0.98, 1.06, 1.05], KB = [1.08, 1.12, 0.9, 1.06, 1.14, 0.92], KX = [0.95, 1.02, 0.94, 0.98, 0.95, 0.84];
+  const at = (A, z) => { let i = 0; while (i < Z.length - 2 && z > Z[i + 1]) i++; const k = Math.max(0, Math.min(1, (z - Z[i]) / (Z[i + 1] - Z[i]))); return A[i] + (A[i + 1] - A[i]) * k; };
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i), y = p.getY(i), z = p.getZ(i) - 0.02;
+    p.setXYZ(i, x * at(KX, z), at(CY, z) + y * at(y > 0 ? KT : KB, z), z);
+  }
+  g.computeVertexNormals();
+  return g;
 }
-// a cow (white with black patches): a faceted barrel body, an udder, jointed legs with dark hooves, a neck and
-// a head with a pink muzzle, ears and short horns, a tail with a dark tuft. Faces +z, feet at y = 0.
-const COW = { coat: 0xf4f1ea, patch: 0x2a2622, udder: 0xe8a8a0, nose: 0xe8a8a0, hoof: 0x2a2420, horn: 0xe8e0c8, eye: 0x1a1612, ear: 0xe8d8d0 };
-function cow(b, o) {
-  const ico = (r, d = 1) => new THREE.IcosahedronGeometry(r, d);
-  b.add(ico(1), o.coat, 0, 1.02, 0.02, 0, 0, 0, 'solid', 0.33, 0.31, 0.7);
-  b.add(ico(1, 0), o.coat, 0, 1.07, 0.42, 0, 0, 0, 'solid', 0.3, 0.29, 0.3);                                   // chest
-  b.add(ico(1, 0), o.patch, 0.2, 1.08, 0.22, 0, 0, 0, 'solid', 0.15, 0.17, 0.24);
-  b.add(ico(1, 0), o.patch, -0.21, 1.0, -0.2, 0, 0, 0, 'solid', 0.14, 0.2, 0.27);
-  b.add(ico(1, 0), o.patch, 0.05, 1.3, -0.32, 0, 0, 0, 'solid', 0.18, 0.06, 0.2);
-  b.add(new THREE.DodecahedronGeometry(0.1, 0), o.udder, 0, 0.7, -0.27, 0, 0, 0, 'solid', 1, 0.7, 1.15);
-  for (const x of [-0.035, 0.035]) for (const z of [-0.31, -0.23]) b.cyl(0.01, 0.014, 0.06, 4, x, 0.62, z, o.udder);
-  for (const x of [-0.19, 0.19]) for (const z of [0.42, -0.44]) rig(b, [1, (x < 0) === (z > 0) ? 0 : Math.PI, 0.86, z], () => {
-    const fz = z > 0 ? 0.02 : -0.015;
-    limb(b, [x, 0.86, z], [x, 0.42, z + fz], 0.085, 0.06, o.coat, 6);
-    b.add(new THREE.DodecahedronGeometry(0.058, 0), o.coat, x, 0.41, z + fz);
-    limb(b, [x, 0.41, z + fz], [x, 0.07, z], 0.052, 0.046, o.coat, 6);
-    b.cyl(0.05, 0.056, 0.07, 6, x, 0.035, z + 0.005, o.hoof);
-  });
-  rig(b, [3, 1e-4, 1.24, 0], () => {                                                                           // tail (swishes)
-    limb(b, [0, 1.24, -0.68], [0, 0.64, -0.75], 0.025, 0.02, o.coat, 4);
-    b.add(new THREE.ConeGeometry(0.05, 0.17, 5), o.patch, 0, 0.58, -0.75, Math.PI, 0, 0);
-  });
-  rig(b, [2, 0, 1.1, 0.55], () => {                                                                            // neck and head (graze)
-    limb(b, [0, 1.08, 0.52], [0, 1.2, 0.84], 0.17, 0.13, o.coat, 7);
-    b.group(0, 1.17, 0.95, 0.55, 0, 0, () => {
-      b.box(0.26, 0.24, 0.34, 0, 0, 0, o.coat);
-      b.box(0.27, 0.12, 0.2, 0, 0.07, -0.02, o.patch);                                                         // a dark patch over the eyes
-      b.box(0.25, 0.16, 0.14, 0, -0.05, 0.21, o.nose);                                                         // muzzle
-      for (const x of [-0.06, 0.06]) b.box(0.03, 0.03, 0.01, x, -0.04, 0.285, 0x5a3a36);                       // nostrils
-      for (const sx of [-1, 1]) {
-        b.box(0.012, 0.035, 0.035, sx * 0.133, 0.05, 0.06, o.eye);
-        b.box(0.14, 0.05, 0.08, sx * 0.19, 0.06, -0.08, o.ear, 'solid', 0, 0, sx * 0.25);
-        limb(b, [sx * 0.09, 0.12, -0.1], [sx * 0.18, 0.22, -0.12], 0.025, 0.012, o.horn, 4);
-      }
+function horse(b, o) {
+  const ico = (r, d = 1) => new THREE.IcosahedronGeometry(r, d), B = o.body, M = o.mane, hoof = 0x2a2420, muzzle = shadeOf(B, o.dark ? 1.35 : 0.72);
+  // body: one shaped piece — deep at the chest, the back dipping a little behind the withers, a round croup
+  b.add(horseBody(), B);
+  b.add(ico(1, 0), B, 0, 1.46, 0.36, 0, 0, 0, 'solid', 0.09, 0.08, 0.2);                    // withers
+  for (const sx of [-1, 1]) {
+    b.add(ico(1, 0), B, sx * 0.17, 1.13, 0.47, 0, 0, sx * 0.1, 'solid', 0.12, 0.24, 0.16);   // shoulders
+    b.add(ico(1, 0), B, sx * 0.185, 1.17, -0.5, 0, 0, 0, 'solid', 0.12, 0.26, 0.21);         // hindquarters
+  }
+  if (o.patches) for (const [x, y, z, a, h, d] of [[0.2, 1.24, 0.22, 0.11, 0.22, 0.24], [-0.22, 1.18, -0.28, 0.1, 0.21, 0.3], [0.08, 1.45, -0.46, 0.2, 0.1, 0.2], [-0.18, 1.32, 0.42, 0.11, 0.16, 0.14], [0.22, 1.12, -0.55, 0.09, 0.16, 0.14]])
+    b.add(ico(1, 0), o.patches, x, y, z, 0, 0, 0, 'solid', a, h, d);
+  // legs: front (forearm, knee, cannon) and hind (gaskin, hock, cannon); fetlock, pastern and hoof in the leg colour
+  const leg = (x, z, front) => {
+    const ph = (x < 0) === (z > 0) ? 0 : Math.PI, kneeY = front ? 0.53 : 0.58, back = front ? 0 : 0.03;
+    rig(b, [1, ph, 1.02, z], () => {
+      if (front) limb(b, [x, 1.06, z + 0.03], [x, kneeY + 0.02, z], 0.1, 0.055, B, 6);
+      else limb(b, [x * 1.04, 1.08, z + 0.08], [x, kneeY + 0.02, z], 0.11, 0.058, B, 6);
     });
+    rig(b, [4 + kneeY / 2, ph, 1.02, z], () => {
+      b.add(new THREE.DodecahedronGeometry(front ? 0.055 : 0.062, 0), B, x, kneeY, z);
+      limb(b, [x, kneeY, z], [x, 0.17, z + back], 0.042, 0.037, o.socks, 6);                    // cannon
+      b.add(ico(0.048, 0), o.socks, x, 0.155, z + back + 0.005);                                  // fetlock
+      limb(b, [x, 0.15, z + back + 0.008], [x, 0.075, z + back + 0.035], 0.038, 0.044, o.socks, 6);   // pastern
+      b.cyl(0.052, 0.064, 0.075, 7, x, 0.0375, z + back + 0.045, hoof);                          // hoof
+    });
+  };
+  for (const x of [-0.15, 0.15]) { leg(x, 0.46, true); leg(x, -0.52, false); }
+  // tail: the dock, then the hair spreading and falling (swishes)
+  rig(b, [3, 1e-4, 1.45, 0], () => {
+    limb(b, [0, 1.42, -0.76], [0, 1.34, -0.9], 0.055, 0.05, B, 6);
+    limb(b, [0, 1.4, -0.86], [0, 1.02, -0.99], 0.06, 0.09, M, 6);
+    limb(b, [0, 1.03, -0.99], [0, 0.6, -0.95], 0.09, 0.028, M, 6);
   });
+  // neck (lowers to graze): round, with a deep crest, the mane along its top falling to one side
+  const [ny, nz] = HORSE_NECK;
+  rig(b, [2, 0, ny, nz], () => {
+    limb(b, [0, 1.3, 0.56], [0, 1.85, 0.93], 0.18, 0.11, B, 7);
+    b.add(ico(1, 0), B, 0, 1.6, 0.69, 0.6, 0, 0, 'solid', 0.1, 0.33, 0.14);
+    if (o.patches) b.add(ico(1, 0), o.patches, 0.07, 1.5, 0.66, 0.6, 0, 0, 'solid', 0.1, 0.18, 0.1);
+    for (let k = 0; k < 7; k++) {
+      const t = 0.08 + k * 0.135, y = 1.3 + 0.55 * t, z = 0.56 + 0.37 * t, r = 0.2 - 0.075 * t;
+      b.group(0, y + r * 0.565, z - r * 0.825, -0.97, 0, 0, () => b.box(0.05, 0.075 + (k % 2) * 0.025, 0.15, 0.035, 0.0, 0, M, 'solid', 0, 0, 0.32));
+    }
+  });
+  // head (on the poll): cheeks, skull, the long face, muzzle, nostrils, mouth, eyes, ears, forelock, blaze
+  const [py, pz] = HORSE_POLL;
+  rig(b, [5 + ny / 4, nz, py, pz], () => b.group(0, py, pz, 1.0, 0, 0, () => {
+    b.add(ico(1, 0), B, 0, -0.05, 0.03, 0, 0, 0, 'solid', 0.12, 0.15, 0.15);              // cheeks (jowl)
+    b.add(ico(1, 0), B, 0, 0.03, 0.04, 0, 0, 0, 'solid', 0.11, 0.1, 0.13);                // skull
+    limb(b, [0, 0, 0.05], [0, -0.03, 0.42], 0.105, 0.072, B, 6);                         // the face
+    b.add(ico(1, 0), muzzle, 0, -0.045, 0.43, 0, 0, 0, 'solid', 0.08, 0.078, 0.08);       // muzzle
+    for (const sx of [-1, 1]) {
+      b.box(0.022, 0.035, 0.02, sx * 0.042, -0.025, 0.505, 0x1a1412, 'solid', 0, sx * 0.3, 0);   // nostrils
+      b.box(0.02, 0.042, 0.056, sx * 0.108, 0.035, 0.1, 0x161210);                        // eyes
+      b.box(0.006, 0.012, 0.012, sx * 0.119, 0.046, 0.118, 0xf4f0e8);                     // a glint
+      b.add(new THREE.ConeGeometry(0.038, 0.14, 5), B, sx * 0.055, 0.12, -0.05, -0.75, 0, -sx * 0.18);   // ears
+      b.add(new THREE.ConeGeometry(0.022, 0.09, 4), shadeOf(B, 0.6), sx * 0.055, 0.12, -0.035, -0.75, 0, -sx * 0.18);
+    }
+    b.box(0.09, 0.008, 0.06, 0, -0.105, 0.44, 0x1a1412);                                  // mouth
+    b.add(new THREE.ConeGeometry(0.045, 0.16, 5), M, 0, 0.11, 0.07, Math.PI / 2 + 0.35, 0, 0);   // forelock
+    if (o.blaze) b.box(0.045, 0.012, 0.36, 0, 0.082, 0.24, o.blaze, 'solid', 0.17, 0, 0);  // white blaze
+  }));
+}
+// a cow (Holstein: white with black patches): a broad barrel body with hip and pin bones, a straight back, a full
+// udder, a short thick neck with a dewlap, a boxy black head with a white blaze, a pink muzzle, ears out to the
+// sides and short curved horns; jointed legs with cloven hooves and a long tail with a black tuft. Faces +z.
+const COW_NECK = [0.98, 0.55], COW_POLL = [1.2, 0.92];
+const COW = { coat: 0xf4f1ea, patch: 0x24201d, udder: 0xe8a8a0, nose: 0xe9aaa4, noseD: 0xd2847e, hoof: 0x2a2420, horn: 0xe8e0c8, hornTip: 0xa89a80, eye: 0x161210, ear: 0xe8d8d0 };
+function cow(b, o) {
+  const ico = (r, d = 1) => new THREE.IcosahedronGeometry(r, d), C = o.coat, P = o.patch;
+  // body: barrel, chest and rump, the spine; hip bones and pin bones
+  b.add(ico(1), C, 0, 1.0, -0.02, 0, 0, 0, 'solid', 0.34, 0.32, 0.64);
+  b.add(ico(1), C, 0, 1.03, 0.46, 0, 0, 0, 'solid', 0.29, 0.31, 0.29);
+  b.add(ico(1), C, 0, 1.08, -0.52, 0, 0, 0, 'solid', 0.31, 0.27, 0.27);
+  b.add(ico(1, 0), C, 0, 1.3, -0.02, 0, 0, 0, 'solid', 0.12, 0.05, 0.6);
+  for (const sx of [-1, 1]) {
+    b.add(ico(1, 0), C, sx * 0.24, 1.25, -0.45, 0, 0, 0, 'solid', 0.08, 0.07, 0.09);
+    b.add(ico(1, 0), C, sx * 0.11, 1.28, -0.74, 0, 0, 0, 'solid', 0.06, 0.05, 0.06);
+  }
+  // black patches
+  for (const [x, y, z, a, h, d] of [[0.27, 1.02, 0.12, 0.1, 0.2, 0.26], [-0.28, 0.96, -0.2, 0.1, 0.22, 0.3], [0.2, 1.22, -0.45, 0.14, 0.1, 0.18], [-0.19, 1.2, 0.38, 0.12, 0.16, 0.16], [0.27, 0.92, -0.42, 0.08, 0.14, 0.14], [0, 1.29, 0.16, 0.16, 0.06, 0.16], [-0.2, 1.12, -0.62, 0.12, 0.14, 0.12]])
+    b.add(ico(1, 0), P, x, y, z, 0, 0, 0, 'solid', a, h, d);
+  // udder and teats
+  b.add(new THREE.DodecahedronGeometry(0.12, 0), o.udder, 0, 0.66, -0.3, 0, 0, 0, 'solid', 1, 0.72, 1.1);
+  for (const x of [-0.04, 0.04]) for (const z of [-0.35, -0.25]) b.cyl(0.012, 0.016, 0.07, 4, x, 0.58, z, o.udder);
+  // legs: front (forearm, knee, cannon), hind (thigh, hock, cannon); fetlock and a cloven hoof
+  const leg = (x, z, front) => {
+    const ph = (x < 0) === (z > 0) ? 0 : Math.PI, kneeY = front ? 0.4 : 0.45;
+    rig(b, [1, ph, 0.86, z], () => {
+      if (front) limb(b, [x, 0.9, z + 0.02], [x, kneeY + 0.02, z], 0.095, 0.062, C, 6);
+      else limb(b, [x * 1.05, 0.94, z + 0.08], [x, kneeY + 0.02, z], 0.125, 0.062, C, 6);
+    });
+    rig(b, [4 + kneeY / 2, ph, 0.86, z], () => {
+      b.add(new THREE.DodecahedronGeometry(0.06, 0), C, x, kneeY, z);
+      limb(b, [x, kneeY, z], [x, 0.12, z + 0.01], 0.05, 0.045, C, 6);
+      b.add(ico(0.05, 0), C, x, 0.11, z + 0.015);
+      for (const tx of [-0.024, 0.024]) b.cyl(0.025, 0.03, 0.075, 5, x + tx, 0.0375, z + 0.035, o.hoof);
+    });
+  };
+  for (const x of [-0.19, 0.19]) { leg(x, 0.45, true); leg(x, -0.52, false); }
+  // tail with a black tuft (swishes)
+  rig(b, [3, 1e-4, 1.3, 0], () => {
+    limb(b, [0, 1.3, -0.8], [0, 0.95, -0.86], 0.032, 0.022, C, 5);
+    limb(b, [0, 0.95, -0.86], [0, 0.6, -0.85], 0.022, 0.018, C, 5);
+    b.add(new THREE.ConeGeometry(0.055, 0.18, 6), P, 0, 0.52, -0.85, Math.PI, 0, 0);
+  });
+  // neck (lowers to graze) with a dewlap and a black patch
+  const [ny, nz] = COW_NECK;
+  rig(b, [2, 0, ny, nz], () => {
+    limb(b, [0, 0.98, 0.56], [0, 1.16, 0.87], 0.2, 0.15, C, 7);
+    b.add(ico(1, 0), C, 0, 0.86, 0.72, 0, 0, 0, 'solid', 0.06, 0.15, 0.16);
+    b.add(ico(1, 0), P, 0.1, 1.1, 0.7, 0.5, 0, 0, 'solid', 0.11, 0.13, 0.12);
+  });
+  // head (on the poll): black forehead and cheeks with a white blaze, pink muzzle and nose, eyes, ears, horns
+  const [py, pz] = COW_POLL;
+  rig(b, [5 + ny / 4, nz, py, pz], () => b.group(0, py, pz, 0.95, 0, 0, () => {
+    b.box(0.25, 0.18, 0.2, 0, 0.02, 0.04, P);                                             // forehead and cheeks
+    limb(b, [0, 0, 0.08], [0, -0.03, 0.3], 0.118, 0.102, P, 6);                         // the face
+    b.box(0.07, 0.012, 0.3, 0, 0.112, 0.12, C, 'solid', 0.1, 0, 0);                      // white blaze
+    b.box(0.24, 0.15, 0.12, 0, -0.04, 0.33, o.nose);                                      // muzzle
+    b.add(ico(1, 0), o.nose, 0, -0.045, 0.36, 0, 0, 0, 'solid', 0.12, 0.08, 0.07);
+    b.box(0.18, 0.08, 0.012, 0, -0.02, 0.4, o.noseD);                                     // nose
+    for (const sx of [-1, 1]) {
+      b.box(0.028, 0.03, 0.01, sx * 0.05, -0.02, 0.408, 0x5a3a36);                       // nostrils
+      b.add(new THREE.OctahedronGeometry(1, 0), 0xe8e0d0, sx * 0.124, 0.04, 0.1, 0, 0, 0, 'solid', 0.012, 0.026, 0.03);   // eyes
+      b.add(new THREE.OctahedronGeometry(1, 0), o.eye, sx * 0.13, 0.04, 0.104, 0, 0, 0, 'solid', 0.009, 0.019, 0.02);
+      b.add(new THREE.OctahedronGeometry(1, 0), P, sx * 0.19, 0.03, -0.04, 0, 0, sx * 0.25, 'solid', 0.12, 0.022, 0.055);   // ears
+      b.add(new THREE.OctahedronGeometry(1, 0), o.ear, sx * 0.19, 0.03, -0.03, 0, 0, sx * 0.25, 'solid', 0.09, 0.012, 0.035);
+      limb(b, [sx * 0.08, 0.08, -0.06], [sx * 0.15, 0.11, -0.12], 0.026, 0.018, o.horn, 5);   // horns
+      limb(b, [sx * 0.15, 0.11, -0.12], [sx * 0.17, 0.17, -0.2], 0.018, 0.007, o.hornTip, 5);
+    }
+    b.box(0.16, 0.008, 0.06, 0, -0.115, 0.34, 0x8a5a56);                                  // mouth
+    b.add(ico(1, 0), P, 0, 0.11, -0.03, 0, 0, 0, 'solid', 0.06, 0.03, 0.05);             // poll tuft
+  }));
 }
 function geomOf(fn) { const b = new GeoBuilder(); fn(b); return b.build().children[0].geometry; }
 // a model whose parts can move (js/farm/animals.js): every vertex gets aRig = [kind, a, b, c]

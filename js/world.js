@@ -5,7 +5,7 @@ import * as F from './flora.js';
 import { buildTerrain, X0, Z0, SX, SZ, START, CAMP, BRIDGE, RIVER_HALF, NORTH, VALLEY, TOWER_ZONE, GIANT } from './terrain.js';
 
 const GC = 10, GNX = Math.ceil(SX / GC), GNZ = Math.ceil(SZ / GC);   // collision grid (10 m cells)
-const CHX = 3, CHZ = 6;                                             // vegetation chunks (frustum culling)
+const CHX = 6, CHZ = 12;                                            // vegetation chunks, about 78 m square (frustum and fog culling)
 
 export class World {
   constructor(scene, opts = {}) {
@@ -13,6 +13,7 @@ export class World {
     this.bounds = { minX: -232, maxX: 232, minZ: -232, maxZ: 712 };
     this.grid = Array.from({ length: GNX * GNZ }, () => []);
     this.deco = Array.from({ length: GNX * GNZ }, () => []);   // small things on the ground {x, z, r} (no collision: grass keeps off them)
+    this.fogList = [];           // still meshes skipped when wholly in the fog: { m, c, r }
     this.surfaces = [];          // extra walkable tops (towers, castle walls): { surfaceAt(x, z, y) -> height | null }
     this.night = 0; this.nightTarget = 0; this.time = 0; this.fireBoost = 0;
     this.bridge = null;          // set by main (BridgeWorld)
@@ -249,9 +250,47 @@ export class World {
       }
       if (hit) { im.instanceMatrix.needsUpdate = true; im.computeBoundingSphere(); }
     }
+    this._compactVeg();
     for (const cell of this.grid) for (let i = cell.length - 1; i >= 0; i--) { const c = cell[i]; if ((c.tree || c.rock) && inside(c.x, c.z)) cell.splice(i, 1); }
     for (const cell of this.deco) for (let i = cell.length - 1; i >= 0; i--) if (inside(cell[i].x, cell[i].z)) cell.splice(i, 1);
     this.grassRev++;
+  }
+
+  // drop the cleared (zero-size) plants from the instance lists, so the graphics card doesn't draw them at all
+  _compactVeg() {
+    const m = new THREE.Matrix4(), c = new THREE.Color();
+    for (const im of this.vegMeshes || []) {
+      let n = 0;
+      for (let i = 0; i < im.count; i++) {
+        im.getMatrixAt(i, m);
+        if (m.elements[0] === 0 && m.elements[5] === 0 && m.elements[10] === 0) continue;
+        if (n !== i) { im.setMatrixAt(n, m); if (im.instanceColor) { im.getColorAt(i, c); im.setColorAt(n, c); } }
+        n++;
+      }
+      if (n === im.count) continue;
+      im.count = n; im.instanceMatrix.needsUpdate = true; if (im.instanceColor) im.instanceColor.needsUpdate = true;
+      if (n) im.computeBoundingSphere(); else { im.visible = false; im.userData.empty = true; }
+    }
+  }
+  // every frame: a chunk of plants that lies wholly beyond the fog (where it would be drawn in the fog colour, unseen)
+  // is not drawn at all
+  _fogCull(camera) {
+    const far = this.scene.fog ? this.scene.fog.far + 6 : Infinity, p = camera.position;
+    for (const im of this.vegMeshes || []) {
+      if (im.userData.empty) continue;
+      const S = im.boundingSphere;
+      im.visible = !S || p.distanceTo(S.center) - S.radius < far;
+    }
+    for (const o of this.fogList) o.m.visible = p.distanceTo(o.c) - o.r < far;
+  }
+  // other things that never move (Sonpur village's meshes): skipped the same way when they're wholly in the fog
+  addFogCull(m) {
+    const g = m.geometry;
+    if (m.isInstancedMesh) { if (!m.boundingSphere) m.computeBoundingSphere(); }
+    else if (!g.boundingSphere) g.computeBoundingSphere();
+    m.updateMatrixWorld(true);
+    const S = (m.isInstancedMesh ? m.boundingSphere : g.boundingSphere).clone().applyMatrix4(m.matrixWorld);
+    this.fogList.push({ m, c: S.center, r: S.radius });
   }
 
   /* ---------------- trailhead (start) ---------------- */
@@ -452,6 +491,7 @@ export class World {
     if (this.dayNight.mode !== 'real' && Math.abs(this.night - this.nightTarget) > 0.001)
       this.night = clamp(this.night + Math.sign(this.nightTarget - this.night) * dt * 0.8, 0, 1);
     this.dayNight.update(dt, focus, camera);     // sun + shadows, sky, fog, clouds, lamps
+    this._fogCull(camera);
     this.fireBoost = Math.max(0, this.fireBoost - dt);
     const big = 1 + 0.9 * Math.min(1, this.fireBoost / 5);
     const f = (1 + Math.sin(this.time * 17) * 0.08 + Math.sin(this.time * 31) * 0.05) * big;

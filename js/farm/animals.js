@@ -24,10 +24,21 @@ const lerpAngle = (a, b, k) => a + Math.atan2(Math.sin(b - a), Math.cos(b - a)) 
 const RIG_GLSL = `
 attribute vec4 aRig; attribute vec4 iAnim; attribute vec2 iAnim2;
 vec2 rigRot(vec2 p, vec2 o, float a) { vec2 d = p - o; float c = cos(a), s = sin(a); return o + vec2(d.x * c - d.y * s, d.x * s + d.y * c); }`;
+// kinds (aRig.x): 1 leg (swings from the hip) · 2 neck (turns down from its base) · 3 wing / tail (flaps, swishes)
+//   4.x lower leg: swings with the leg and also bends at the knee (height (x - 4) * 2) while the hoof comes forward
+//   5.x head on a long neck: turns down with the neck (base y (x - 5) * 4, z aRig.y) and nods back at the poll
+//       (aRig.zw), so a grazing horse or cow gets its nose down to the grass
 const RIG_VERTEX = `#include <begin_vertex>
-  if (aRig.x > 0.5 && aRig.x < 1.5) transformed.yz = rigRot(transformed.yz, aRig.zw, sin(iAnim.x + aRig.y) * iAnim.y);
-  else if (aRig.x > 1.5 && aRig.x < 2.5) { transformed.z += iAnim.w; transformed.yz = rigRot(transformed.yz, aRig.zw, iAnim.z); }
-  else if (aRig.x > 2.5) transformed.xy = rigRot(transformed.xy, aRig.yz, iAnim2.x * sign(aRig.y));`;
+  float rk = aRig.x;
+  if (rk > 0.5 && rk < 1.5) transformed.yz = rigRot(transformed.yz, aRig.zw, sin(iAnim.x + aRig.y) * iAnim.y);
+  else if (rk > 1.5 && rk < 2.5) { transformed.z += iAnim.w; transformed.yz = rigRot(transformed.yz, aRig.zw, iAnim.z); }
+  else if (rk > 2.5 && rk < 3.5) transformed.xy = rigRot(transformed.xy, aRig.yz, iAnim2.x * sign(aRig.y));
+  else if (rk > 3.5 && rk < 4.99) { float ph = iAnim.x + aRig.y;
+    transformed.yz = rigRot(transformed.yz, vec2((rk - 4.0) * 2.0, aRig.w), max(0.0, -cos(ph)) * iAnim.y * 1.6);
+    transformed.yz = rigRot(transformed.yz, aRig.zw, sin(ph) * iAnim.y); }
+  else if (rk >= 4.99) { transformed.z += iAnim.w;
+    transformed.yz = rigRot(transformed.yz, aRig.zw, -iAnim.z * 0.62);
+    transformed.yz = rigRot(transformed.yz, vec2((rk - 5.0) * 4.0, aRig.y), iAnim.z); }`;
 function rigged(mat, key) {
   mat.onBeforeCompile = sh => {
     sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\n' + RIG_GLSL).replace('#include <begin_vertex>', RIG_VERTEX);
@@ -35,8 +46,8 @@ function rigged(mat, key) {
   mat.customProgramCacheKey = () => key;
   return mat;
 }
-export const rigMaterial = () => rigged(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }), 'animal-rig-v1');
-export const rigDepthMaterial = () => rigged(new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking }), 'animal-rig-depth-v1');
+export const rigMaterial = () => rigged(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }), 'animal-rig-v2');
+export const rigDepthMaterial = () => rigged(new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking }), 'animal-rig-depth-v2');
 // add the per-animal animation values to an instanced mesh's geometry
 export function addAnimAttributes(mesh, n) {
   const a = new THREE.InstancedBufferAttribute(new Float32Array(n * 4), 4), b = new THREE.InstancedBufferAttribute(new Float32Array(n * 2), 2);
@@ -50,10 +61,11 @@ export const GAIT = { goat: { amp: 0.5, cycle: 0.95, ref: 0.55 }, chicken: { amp
 // standing, they graze: the head goes down to the grass for a while (nodding a little as they crop it), comes
 // up to look about, goes down again; walking, the head is carried low and bobs. The tail swishes now and then,
 // with a quick flick from time to time (flies). head: how far down (radians) · tail: the swish angle
+const HORSE_GRAZE = 1.85, COW_GRAZE = 1.55;          // how far the neck turns down to graze (the head nods back as it goes)
 export function grazePose(a, ms, walking, out) {
   const t = ms / 1000, k = a.k, u = (t + k * 97) % 16, horse = a.type.startsWith('horse');
   const down = walking ? 0.25 : u < 10 ? Math.min(1, u / 1.2, (10 - u) / 1.2) : 0;
-  out.head = walking ? 0.22 + Math.sin(t * 3.2 + k * 9) * 0.05 : ease(Math.max(0, down)) * (horse ? 1.25 : 1.2) + (down > 0.9 ? Math.sin(t * 2.4 + k * 3) * 0.07 : -0.08);
+  out.head = walking ? 0.22 + Math.sin(t * 3.2 + k * 9) * 0.05 : ease(Math.max(0, down)) * (horse ? HORSE_GRAZE : COW_GRAZE) + (down > 0.9 ? Math.sin(t * 2.4 + k * 3) * 0.07 : -0.08);
   const flick = (t + k * 31) % 7 < 0.9 ? Math.sin(t * 11) * 0.45 : 0;
   out.tail = Math.sin(t * 1.7 + k * 5) * 0.22 + flick;
   return out;
