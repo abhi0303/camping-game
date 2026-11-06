@@ -152,7 +152,7 @@ function backToMenu(msg, mode) {
 /* ---------- Farm World: a permanent world saved online, for up to 4 members (js/farm) ---------- */
 const farm = new Farm({ net, session, toast: m => toast(m),
   collectWorld: () => collectWorld(), applyWorld: w => applyWorld(w), freshWorld: () => survival.setFarm(),
-  onGone: msg => backToMenu(msg, 'farm'), onRoster: () => renderRoster(), onHosting: () => renderRoster() });
+  onGone: msg => backToMenu(msg, 'farm'), onRoster: () => renderRoster(), onHosting: () => renderRoster(), onRoles: () => { renderRoster(); farmPanel.render(); } });
 session.farm = farm;
 survival.g.farmHud = () => farmHud();
 // the farm itself: plots, shelters, animals and the market. The numbers come from the server (farmEco).
@@ -557,7 +557,7 @@ function renderFarmRoster() {
   if (session.rejoining || !net.online) hud.room.innerHTML = `📡 ${session.rejoining ? 'Reconnecting to' : 'Not connected to'} <b>${escapeHTML(L.roomName)}</b>…`;
   else {
     const names = session.roster().map(p => `<span style="color:${session.colorOf(p.id)}">${p.id === net.id ? 'You' : escapeHTML(p.n)}</span>`).join(', ');
-    hud.room.innerHTML = `🌾 <b>${escapeHTML(L.roomName)}</b> <span class="dim">${L.code} · ${Math.max(1, session.players.size)}/4 online</span> · ${names} <span id="ping" class="dim"></span>${L.isOwner ? ` <button class="copyBtn mini" data-copy="farminvite" title="Invite a friend (one-time link)">${COPY_ICON}<span>Invite</span></button>` : ''}`;
+    hud.room.innerHTML = `🌾 <b>${escapeHTML(L.roomName)}</b> <span class="dim">${L.code} · ${Math.max(1, session.players.size)}/4 online</span> · ${names} <span id="ping" class="dim"></span>${farm.canInvite ? ` <button class="copyBtn mini" data-copy="farminvite" title="Invite a friend (one-time link)">${COPY_ICON}<span>Invite</span></button>` : ''}`;
   }
   farmPanel.render();                  // (also fills the mic button inside the panel)
   clearTimeout(farmInfoT);             // players came or went: refresh the member list in a moment
@@ -573,7 +573,7 @@ function farmHud() {
     + `<span class="cy-o" title="${on} playing now${mem ? ` · ${mem} of 4 members` : ''}">${icon('users')}${on}<small>/4</small></span>`;
 }
 async function farmInvite() {
-  if (!farm.isOwner) { toast('Only the owner of this world can invite new members'); return; }
+  if (!farm.canInvite) { toast('Only the owner of this world can invite new members — or a member they allow'); return; }
   try { const r = await farm.createInvite(); await copyText(r.message); toast(`📋 Invite copied — world code ${r.code}, invite code ${r.pretty} (works once, 72 h)`); }
   catch (e) { toast('⚠ ' + (e.message || e)); }
 }

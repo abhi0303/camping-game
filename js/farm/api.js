@@ -41,6 +41,8 @@ export const api = {
   verify: (L, ticket) => req('POST', `/v1/rooms/${enc(L.code)}/verify`, { token: L.token, body: { ticket } }),
   invite: L => req('POST', `/v1/rooms/${enc(L.code)}/invites`, { token: L.token, body: {} }),
   removeMember: (L, id) => req('DELETE', `/v1/rooms/${enc(L.code)}/members/${enc(id)}`, { token: L.token }),
+  setPermissions: (L, id, canInvite) => req('POST', `/v1/rooms/${enc(L.code)}/members/${enc(id)}/permissions`, { token: L.token, body: { canInvite } }),
+  makeOwner: (L, id) => req('POST', `/v1/rooms/${enc(L.code)}/members/${enc(id)}/owner`, { token: L.token, body: { confirm: true } }),
   logout: L => req('POST', `/v1/rooms/${enc(L.code)}/logout`, { token: L.token, body: {} }),
   deleteWorld: (L, confirm) => req('DELETE', `/v1/rooms/${enc(L.code)}`, { token: L.token, body: { confirm } }),
   // farm economy: state (counts production up to now), one action, recent history

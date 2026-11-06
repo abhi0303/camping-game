@@ -15,7 +15,7 @@ export class Farm {
   // g: { net, session, toast, collectWorld, applyWorld, freshWorld, onGone(msg, forget), onRoster, onHosting }
   constructor(g) {
     this.g = g;
-    this.L = null;            // login: { code, token, memberId, name, seat, isOwner, roomName }
+    this.L = null;            // login: { code, token, memberId, name, seat, isOwner, canInvite, roomName }
     this.active = false; this.role = null; this.epoch = 0; this.live = false;
     this.savedJs = ''; this.savedAt = -1e9; this.lastSaveAt = 0; this.fails = 0;
     this.reopening = false; this.info = null; this.infoAt = -1e9;
@@ -24,8 +24,12 @@ export class Farm {
     // the owner (maybe not the host) removed a member or deleted the world: everyone checks with the server
     net.on('farmRemoved', d => { if (this.active && net.isHost && d && isUuid(d.id)) this._checkRemoved(d.id); });
     net.on('farmDeleted', () => { if (this.active) this.refreshInfo(true).catch(() => {}); });
+    // the owner changed who can invite, or handed the world over: everyone asks the server who's who now
+    net.on('farmRoles', () => { if (this.active) this._rolesChanged(); });
   }
   get isOwner() { return !!(this.L && this.L.isOwner); }
+  // the owner, or a member the owner lets invite friends
+  get canInvite() { return !!(this.L && (this.L.isOwner || this.L.canInvite)); }
   get code() { return this.L ? this.L.code : ''; }
 
   /* ---------- open the world (from the menu) ---------- */
@@ -62,7 +66,10 @@ export class Farm {
   }
 
   _remember(s) {
-    if (s && s.me) { Object.assign(this.L, { name: s.me.name, seat: s.me.seat, isOwner: s.me.isOwner }); Logins.touch(this.L.code, { name: s.me.name, seat: s.me.seat, isOwner: s.me.isOwner }); }
+    if (s && s.me) {
+      const me = { name: s.me.name, seat: s.me.seat, isOwner: s.me.isOwner, canInvite: !!(s.me.canInvite || s.me.isOwner) };
+      Object.assign(this.L, me); Logins.touch(this.L.code, me);
+    }
     if (s && s.room && s.room.name) { this.L.roomName = s.room.name; Logins.touch(this.L.code, { roomName: s.room.name }); }
   }
 
@@ -252,6 +259,27 @@ export class Farm {
     else this.g.net.send('farmRemoved', { id });
     await this.refreshInfo(true).catch(() => {});
     return r.removed;
+  }
+  // the owner lets a member invite friends (or stops them), or hands the world over to them
+  async setCanInvite(id, on) {
+    const r = await api.setPermissions(this.L, id, on);
+    this.g.net.send('farmRoles', {});
+    await this.refreshInfo(true).catch(() => {});
+    return r.member;
+  }
+  async makeOwner(id) {
+    const r = await api.makeOwner(this.L, id);
+    this.g.net.send('farmRoles', {});
+    await this.refreshInfo(true).catch(() => {});
+    return r.owner;
+  }
+  async _rolesChanged() {
+    const was = { owner: this.isOwner, invite: this.canInvite };
+    try { await this.refreshInfo(true); } catch (e) { return; }
+    if (this.isOwner && !was.owner) this.g.toast('👑 You are now the owner of this world — you can invite, remove members and choose who can invite');
+    else if (!this.isOwner && this.canInvite && !was.invite) this.g.toast('💌 The owner lets you invite friends now — Esc → Invite a friend');
+    else if (!this.canInvite && was.invite) this.g.toast('The owner turned off your invites');
+    if (this.g.onRoles) this.g.onRoles();
   }
   async _checkRemoved(id) {
     try { const info = await this.refreshInfo(true); if (!info.members.some(m => m.id === id)) this.g.session.kickMember(id, 'removed'); }

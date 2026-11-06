@@ -74,7 +74,7 @@ export async function member(db, req, code, body) {
   const m = /^Bearer\s+([A-Za-z0-9_-]{20,100})$/.exec(req.headers.get('Authorization') || '');
   const token = m ? m[1] : (body && typeof body.token === 'string' && body.token.length <= 100 ? body.token : '');
   if (!token) throw new ApiError(401, 'login_needed', 'Please log in to this world.');
-  const me = await one(db, `SELECT m.id, m.room_id, m.seat, m.name, m.is_owner, r.code, r.name AS room_name
+  const me = await one(db, `SELECT m.id, m.room_id, m.seat, m.name, m.is_owner, m.can_invite, r.code, r.name AS room_name
       FROM member_tokens t JOIN room_members m ON m.id = t.member_id JOIN rooms r ON r.id = m.room_id
       WHERE t.token_hash = $1`, [await sha256Hex(token)]);
   if (!me) {
@@ -86,7 +86,8 @@ export async function member(db, req, code, body) {
 }
 const ownerOnly = me => { if (!me.is_owner) throw new ApiError(403, 'owner_only', 'Only the owner of this world can do that.'); };
 
-const memberOut = m => ({ id: m.id, name: m.name, seat: m.seat, isOwner: !!m.is_owner });
+// canInvite: the owner, or a member the owner has allowed to invite friends
+const memberOut = m => ({ id: m.id, name: m.name, seat: m.seat, isOwner: !!m.is_owner, canInvite: !!(m.is_owner || m.can_invite) });
 const roomOut = r => ({ code: r.code, name: r.name });
 
 /* ---------- create a world ---------- */
@@ -102,7 +103,7 @@ export async function createRoom(req, env, db) {
         const r = await c.one('INSERT INTO rooms (code, name) VALUES ($1, $2) RETURNING id, code, name', [code, worldName]);
         const salt = b64url(randomBytes(16));
         const m = await c.one(`INSERT INTO room_members (room_id, seat, name, pin_salt, pin_hash, is_owner, last_seen_at)
-            VALUES ($1, 0, $2, $3, $4, true, now()) RETURNING id, seat, name, is_owner`, [r.id, name, salt, await pinHash(env, salt, pin)]);
+            VALUES ($1, 0, $2, $3, $4, true, now()) RETURNING id, seat, name, is_owner, can_invite`, [r.id, name, salt, await pinHash(env, salt, pin)]);
         const token = await newToken(c, m.id);
         return json({ token, room: roomOut(r), member: memberOut(m) }, 201);
       });
@@ -120,7 +121,7 @@ export async function login(req, env, db, code) {
   if (!room) throw roomNotFound();
   // the failed-try counter must be saved even when the login fails, so the result is returned (not thrown) from the transaction
   const out = await tx(db, async c => {
-    const m = await c.one(`SELECT id, seat, name, is_owner, pin_salt, pin_hash, failed_pins,
+    const m = await c.one(`SELECT id, seat, name, is_owner, can_invite, pin_salt, pin_hash, failed_pins,
         (locked_until IS NOT NULL AND locked_until > now()) AS locked, ceil(extract(epoch FROM locked_until - now()) / 60)::int AS lock_min
         FROM room_members WHERE room_id = $1 AND lower(name) = lower($2) FOR UPDATE`, [room.id, name]);
     if (!m) return { err: new ApiError(401, 'wrong_login', 'Wrong name or PIN for this world.') };
@@ -148,11 +149,11 @@ export async function logout(req, env, db, code) {
   return json({ ok: true });
 }
 
-/* ---------- invites (owner) ---------- */
+/* ---------- invites (the owner, and members the owner allows) ---------- */
 export async function createInvite(req, env, db, code) {
   rateLimit(req, 'invite', 30, 3600e3, env);
   const me = await member(db, req, code);
-  ownerOnly(me);
+  if (!me.is_owner && !me.can_invite) throw new ApiError(403, 'owner_only', 'Only the owner of this world can invite new members — or a member they have allowed to. Ask the owner.');
   return tx(db, async c => {
     await c.one('SELECT id FROM rooms WHERE id = $1 FOR UPDATE', [me.room_id]);
     const n = (await c.one('SELECT count(*)::int AS n FROM room_members WHERE room_id = $1', [me.room_id])).n;
@@ -201,7 +202,7 @@ export async function joinWithInvite(req, env, db, code) {
       while (taken.some(t => t.seat === seat)) seat++;
       const salt = b64url(randomBytes(16));
       const m = await c.one(`INSERT INTO room_members (room_id, seat, name, pin_salt, pin_hash, last_seen_at)
-          VALUES ($1, $2, $3, $4, $5, now()) RETURNING id, seat, name, is_owner`, [room.id, seat, name, salt, await pinHash(env, salt, pin)]);
+          VALUES ($1, $2, $3, $4, $5, now()) RETURNING id, seat, name, is_owner, can_invite`, [room.id, seat, name, salt, await pinHash(env, salt, pin)]);
       await c.rows('UPDATE room_invites SET used_by = $2, used_at = now() WHERE code_hash = $1', [ih, m.id]);
       const token = await newToken(c, m.id);
       return json({ token, room: roomOut(room), member: memberOut(m) }, 201);
@@ -217,7 +218,7 @@ export async function roomInfo(req, env, db, code) {
   const me = await member(db, req, code);
   const r = await one(db, `SELECT code, name, created_at, last_played_at, host_member_id, online, world_saved_at,
       (host_seen_at IS NOT NULL AND host_seen_at > now() - make_interval(secs => $2)) AS live FROM rooms WHERE id = $1`, [me.room_id, HOST_STALE_S]);
-  const ms = await rows(db, 'SELECT id, name, seat, is_owner, last_seen_at FROM room_members WHERE room_id = $1 ORDER BY seat', [me.room_id]);
+  const ms = await rows(db, 'SELECT id, name, seat, is_owner, can_invite, last_seen_at FROM room_members WHERE room_id = $1 ORDER BY seat', [me.room_id]);
   const online = new Set(r.live ? r.online : []);
   return json({
     room: { code: r.code, name: r.name, createdAt: r.created_at, lastPlayedAt: r.last_played_at, savedAt: r.world_saved_at },
@@ -236,6 +237,39 @@ export async function removeMember(req, env, db, code, id) {
   const gone = await rows(db, 'DELETE FROM room_members WHERE id = $1 AND room_id = $2 RETURNING name', [id, me.room_id]);
   if (!gone.length) throw new ApiError(404, 'member_not_found', 'That member is not in this world.');
   return json({ ok: true, removed: { id, name: gone[0].name } });
+}
+
+// the owner lets a member invite friends, or stops them: { canInvite }
+export async function setPermissions(req, env, db, code, id) {
+  const b = await readJson(req);
+  const me = await member(db, req, code);
+  ownerOnly(me);
+  if (!UUID_RE.test(id)) throw new ApiError(404, 'member_not_found', 'That member is not in this world.');
+  if (id === me.id) throw badInput('The owner can always invite friends.');
+  if (typeof b.canInvite !== 'boolean') throw badInput('Say whether this member can invite friends.');
+  const r = await rows(db, 'UPDATE room_members SET can_invite = $3 WHERE id = $1 AND room_id = $2 RETURNING id, name, seat, is_owner, can_invite', [id, me.room_id, b.canInvite]);
+  if (!r.length) throw new ApiError(404, 'member_not_found', 'That member is not in this world.');
+  return json({ ok: true, member: memberOut(r[0]) });
+}
+
+// the owner hands the world over to another member: { confirm: true }. They become the owner (removing members,
+// deleting the world, choosing who can invite); the old owner stays a member and keeps the right to invite friends.
+export async function transferOwner(req, env, db, code, id) {
+  const b = await readJson(req);
+  const me = await member(db, req, code);
+  ownerOnly(me);
+  if (!UUID_RE.test(id)) throw new ApiError(404, 'member_not_found', 'That member is not in this world.');
+  if (id === me.id) throw badInput('You are already the owner.');
+  if (b.confirm !== true) throw badInput('Confirm handing the world over.');
+  return tx(db, async c => {
+    await c.one('SELECT id FROM rooms WHERE id = $1 FOR UPDATE', [me.room_id]);
+    const to = await c.one('SELECT id, name FROM room_members WHERE id = $1 AND room_id = $2', [id, me.room_id]);
+    if (!to) throw new ApiError(404, 'member_not_found', 'That member is not in this world.');
+    // one owner per world (a unique index): the old owner steps down first
+    await c.rows('UPDATE room_members SET is_owner = false, can_invite = true WHERE id = $1', [me.id]);
+    const n = await c.rows('UPDATE room_members SET is_owner = true WHERE id = $1 RETURNING id, name, seat, is_owner, can_invite', [id]);
+    return json({ ok: true, owner: memberOut(n[0]) });
+  });
 }
 
 export async function deleteRoom(req, env, db, code) {
@@ -320,7 +354,7 @@ export async function verifyTicket(req, env, db, code) {
   if (r.host_member_id !== me.id) throw new ApiError(409, 'not_host', 'Only the current host checks players.');
   const t = await readTicket(env, b.ticket);
   if (!t || t.c !== code || !UUID_RE.test(t.m)) throw new ApiError(403, 'bad_ticket', 'That player is not a member of this world.');
-  const m = await one(db, 'SELECT id, name, seat, is_owner FROM room_members WHERE id = $1 AND room_id = $2', [t.m, me.room_id]);
+  const m = await one(db, 'SELECT id, name, seat, is_owner, can_invite FROM room_members WHERE id = $1 AND room_id = $2', [t.m, me.room_id]);
   if (!m) throw new ApiError(403, 'bad_ticket', 'That player is not a member of this world.');
   return json({ member: memberOut(m) });
 }

@@ -19,7 +19,7 @@ What it stores:
 | `GET /v1/health` | anyone | server + database check |
 | `POST /v1/rooms` | anyone | create a world: `{ name, pin, world }` → `{ token, room, member }` |
 | `POST /v1/rooms/:code/login` | anyone | `{ name, pin }` → `{ token, room, member }`; 5 wrong PINs lock that member for 15 min |
-| `POST /v1/rooms/:code/invites` | owner | one-time invite code (while the world has fewer than 4 members) |
+| `POST /v1/rooms/:code/invites` | owner, or a member allowed to invite | one-time invite code (while the world has fewer than 4 members) |
 | `GET /v1/rooms/:code/invites/:invite` | anyone | preview an invite (world name, member count) |
 | `POST /v1/rooms/:code/join` | anyone | `{ invite, name, pin }` → become a member |
 | `GET /v1/rooms/:code` | member | world info, members (with online state), who hosts |
@@ -30,6 +30,8 @@ What it stores:
 | `POST /v1/rooms/:code/heartbeat` | host | every 15 s: online members + world snapshot when it changed; `release: true` when leaving |
 | `POST /v1/rooms/:code/verify` | host | check a joining player's ticket |
 | `GET /v1/rooms/:code/farm` | member | the farm: money, goods, shelters, animals, catalog (counts production up to now first) |
+| `POST /v1/rooms/:code/members/:id/permissions` | owner | `{ canInvite: true \| false }` — let a member invite friends too (`room_members.can_invite`, migration 10) |
+| `POST /v1/rooms/:code/members/:id/owner` | owner | `{ confirm: true }` — hand the world over: that member becomes the owner; the old owner stays a member who can invite |
 | `POST /v1/rooms/:code/farm` | member | one action with a `requestId`: `buy {item, qty, shelter?}`, `sell {item, qty}`, `build {type, plot}`, `deposit {items: {wood, stone}}`, `feed {shelter, count \| all}`, `upgrade {target: 'storage', level}`, `gate {shelter, open}`, `collect {shelter}`, `cast {spot}`, `reel {cast, log}`, `rod {level}`, `order {order}`, `rent {offer}`, `sellhorse {animal}`, `catch {theft}`, `dog {op: 'buy' \| 'feed' \| 'train', dog?, food?, level?}`, `seen {}`, `field {op: 'buy' \| 'sowstart' \| 'sow' \| 'water' \| 'harvest' \| 'scarecrow', slot, crop?, level?}`, `outfit {op: 'buy' \| 'wear' \| 'off', item?}` |
 | `GET /v1/rooms/:code/farm/history` | member | the last 30 purchases / sales / builds / feedings / upgrades, with who did them |
 | `POST /v1/admin/migrate` | admin secret | apply database migrations |

@@ -355,7 +355,7 @@ test('upgrade from older databases: migration 1 only, 2 with animals and buildin
       const env2 = { ...env, __pool: p2 };
       const r = await worker.fetch(new Request('http://api.test/v1/health'), env2, {});
       assert.equal(r.status, 200);
-      assert.deepEqual((await p2.query('SELECT id FROM schema_migrations ORDER BY id')).rows.map(x => x.id), [1, 2, 3, 4, 5, 6, 7, 8, 9]);
+      assert.deepEqual((await p2.query('SELECT id FROM schema_migrations ORDER BY id')).rows.map(x => x.id), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
       const rm = (await p2.query('SELECT money, storage_level, total_earned FROM rooms')).rows[0];
       assert.deepEqual([Number(rm.money), rm.storage_level, Number(rm.total_earned)], [upTo === 4 ? 500 + 50 + 56 : 500, 1, upTo === 2 ? 42 : 0]);
       if (upTo >= 2) {

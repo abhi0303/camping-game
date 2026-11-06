@@ -19,6 +19,8 @@ const routes = [
   ['GET', /^\/v1\/rooms\/([^/]+)\/invites\/([A-Za-z0-9]{1,16})$/, R.invitePreview, true],
   ['POST', /^\/v1\/rooms\/([^/]+)\/join$/, R.joinWithInvite, true],
   ['DELETE', /^\/v1\/rooms\/([^/]+)\/members\/([^/]+)$/, R.removeMember, true],
+  ['POST', /^\/v1\/rooms\/([^/]+)\/members\/([^/]+)\/permissions$/, R.setPermissions, true],
+  ['POST', /^\/v1\/rooms\/([^/]+)\/members\/([^/]+)\/owner$/, R.transferOwner, true],
   ['POST', /^\/v1\/rooms\/([^/]+)\/session$/, R.openSession, true],
   ['POST', /^\/v1\/rooms\/([^/]+)\/heartbeat$/, R.heartbeat, true],
   ['POST', /^\/v1\/rooms\/([^/]+)\/verify$/, R.verifyTicket, true],

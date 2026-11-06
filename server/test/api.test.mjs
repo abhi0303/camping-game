@@ -135,6 +135,45 @@ test('invites: owner only, single use, names, 4 members max', async () => {
   assert.deepEqual(info.body.members.map(m => [m.name, m.seat]), [['Abhi', 0], ['Rahul', 1], ['Amit', 2], ['Vijay', 3]]);
 });
 
+test('roles: the owner lets a member invite friends (and stops them); hands the world over to another member', async () => {
+  const w = await world();
+  const r = await addMember(w, 'Riya'), k = await addMember(w, 'Kabir');
+  const idOf = async name => (await call('GET', `/v1/rooms/${w.code}`, undefined, w.token)).body.members.find(m => m.name === name).id;
+  const riya = await idOf('Riya'), kabir = await idOf('Kabir');
+  // a member can't invite until allowed; only the owner allows
+  assert.equal((await call('POST', `/v1/rooms/${w.code}/invites`, {}, r.token)).body.error.code, 'owner_only');
+  assert.equal((await call('POST', `/v1/rooms/${w.code}/members/${kabir}/permissions`, { canInvite: true }, r.token)).body.error.code, 'owner_only');
+  let p = await call('POST', `/v1/rooms/${w.code}/members/${riya}/permissions`, { canInvite: true }, w.token);
+  assert.equal(p.status, 200); assert.equal(p.body.member.canInvite, true);
+  const inv = await call('POST', `/v1/rooms/${w.code}/invites`, {}, r.token);
+  assert.equal(inv.status, 201);
+  // allowed to invite, but not to remove members or delete the world
+  assert.equal((await call('DELETE', `/v1/rooms/${w.code}/members/${kabir}`, undefined, r.token)).body.error.code, 'owner_only');
+  let info = (await call('GET', `/v1/rooms/${w.code}`, undefined, r.token)).body;
+  assert.deepEqual(info.members.map(m => [m.name, m.isOwner, m.canInvite]), [['Abhi', true, true], ['Riya', false, true], ['Kabir', false, false]]);
+  assert.equal(info.me.canInvite, true);
+  p = await call('POST', `/v1/rooms/${w.code}/members/${riya}/permissions`, { canInvite: false }, w.token);
+  assert.equal(p.body.member.canInvite, false);
+  assert.equal((await call('POST', `/v1/rooms/${w.code}/invites`, {}, r.token)).body.error.code, 'owner_only');
+  // hand the world over: confirm needed, only the owner, not to yourself
+  assert.equal((await call('POST', `/v1/rooms/${w.code}/members/${kabir}/owner`, {}, w.token)).status, 400);
+  assert.equal((await call('POST', `/v1/rooms/${w.code}/members/${riya}/owner`, { confirm: true }, k.token)).body.error.code, 'owner_only');
+  const t = await call('POST', `/v1/rooms/${w.code}/members/${kabir}/owner`, { confirm: true }, w.token);
+  assert.equal(t.status, 200); assert.equal(t.body.owner.name, 'Kabir'); assert.equal(t.body.owner.isOwner, true);
+  info = (await call('GET', `/v1/rooms/${w.code}`, undefined, w.token)).body;
+  assert.deepEqual(info.members.map(m => [m.name, m.isOwner, m.canInvite]), [['Abhi', false, true], ['Riya', false, false], ['Kabir', true, true]]);
+  assert.equal((await q('SELECT count(*)::int AS n FROM room_members m JOIN rooms r ON r.id = m.room_id WHERE r.code = $1 AND m.is_owner', [w.code]))[0].n, 1);
+  // the old owner keeps inviting, but the owner tools are the new owner's now
+  assert.equal((await call('POST', `/v1/rooms/${w.code}/invites`, {}, w.token)).status, 201);
+  assert.equal((await call('DELETE', `/v1/rooms/${w.code}/members/${riya}`, undefined, w.token)).body.error.code, 'owner_only');
+  assert.equal((await call('DELETE', `/v1/rooms/${w.code}`, { confirm: 'Test Farm' }, w.token)).body.error.code, 'owner_only');
+  assert.equal((await call('POST', `/v1/rooms/${w.code}/members/${riya}/permissions`, { canInvite: true }, k.token)).status, 200);
+  // and the new owner can hand it back
+  const ab = await idOf('Abhi');
+  assert.equal((await call('POST', `/v1/rooms/${w.code}/members/${ab}/owner`, { confirm: true }, k.token)).status, 200);
+  assert.equal((await call('GET', `/v1/rooms/${w.code}`, undefined, w.token)).body.me.isOwner, true);
+});
+
 test('race: 3 people use 3 invites at once for 2 free seats -> exactly 2 get in', async () => {
   const w = await world();
   await addMember(w, 'Rahul');

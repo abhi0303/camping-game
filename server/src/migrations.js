@@ -396,6 +396,14 @@ CREATE TABLE farm_fields (
 ALTER TABLE room_members ADD COLUMN outfits TEXT[] NOT NULL DEFAULT '{}', ADD COLUMN outfit TEXT;
 `,
   },
+  {
+    id: 10,
+    name: 'member_invite_permission',
+    sql: `
+-- the owner can let other members invite friends (and hand the world over: is_owner moves, one owner per world)
+ALTER TABLE room_members ADD COLUMN can_invite BOOLEAN NOT NULL DEFAULT false;
+`,
+  },
 ];
 
 const LOCK_ID = 727001;   // advisory lock: two migrate runs never overlap
