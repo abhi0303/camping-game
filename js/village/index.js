@@ -7,6 +7,7 @@
 // trees are instanced. Windows light up at night and lamps glow (js/day-night.js, the shared IST clock).
 // The villagers (js/village/ai.js) live in it: they get the doors, gardens, pens, props and benches from here.
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { GeoBuilder, MAT } from '../utils.js';
 import { C, lampPost, bench, barrel, woodPile } from '../farm/props.js';
 import { signboard } from '../farm/models.js';
@@ -23,13 +24,77 @@ const hash = s => { let h = 2166136261; for (let i = 0; i < s.length; i++) h = M
 function prng(seed) { let s = (Math.abs(Math.floor(seed)) % 2147483646) + 1; return (a = 0, b = 1) => { s = (s * 16807) % 2147483647; return a + (s - 1) / 2147483646 * (b - a); }; }
 const geoOf = fn => { const b = new GeoBuilder(); fn(b); return b.build().children[0].geometry; };
 
+// one carved name board on the plates' picture: dark wood with grain, a gold-painted border, the house's name, and
+// its number in a cream badge
+function plateArt(g, x, y, w, h, title, code) {
+  const rr = (X, Y, W, H, r) => { g.beginPath(); g.moveTo(X + r, Y); g.arcTo(X + W, Y, X + W, Y + H, r); g.arcTo(X + W, Y + H, X, Y + H, r); g.arcTo(X, Y + H, X, Y, r); g.arcTo(X, Y, X + W, Y, r); g.closePath(); };
+  g.save(); g.translate(x, y);
+  const grd = g.createLinearGradient(0, 0, 0, h); grd.addColorStop(0, '#6e472a'); grd.addColorStop(1, '#4a2e1a'); g.fillStyle = grd; g.fillRect(0, 0, w, h);
+  g.strokeStyle = 'rgba(0,0,0,.13)'; g.lineWidth = 2;
+  for (let i = 0; i < 9; i++) { const yy = 18 + i * 27 + Math.sin(i * 7 + x) * 4; g.beginPath(); g.moveTo(0, yy); g.bezierCurveTo(w * 0.3, yy + 6, w * 0.65, yy - 6, w, yy + 3); g.stroke(); }
+  g.strokeStyle = '#d9b56a'; g.lineWidth = 6; rr(14, 14, w - 28, h - 28, 18); g.stroke();
+  g.strokeStyle = 'rgba(0,0,0,.35)'; g.lineWidth = 3; rr(24, 24, w - 48, h - 48, 12); g.stroke();
+  const name = title.toUpperCase();
+  g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = '#f7e8c2';
+  let fs = 64; const font = () => { g.font = `700 ${fs}px Georgia, 'Times New Roman', serif`; };
+  font(); while (g.measureText(name).width > w - 80 && fs > 28) { fs -= 2; font(); }
+  g.shadowColor = 'rgba(0,0,0,.65)'; g.shadowOffsetY = 3; g.shadowBlur = 4; g.fillText(name, w / 2, 90);
+  g.shadowColor = 'transparent';
+  const long = code.length > 6, bw = long ? 300 : 220;
+  g.fillStyle = '#f2e3bd'; rr((w - bw) / 2, 140, bw, 78, 14); g.fill();
+  g.strokeStyle = '#a07a3a'; g.lineWidth = 3; rr((w - bw) / 2 + 5, 145, bw - 10, 68, 10); g.stroke();
+  g.fillStyle = '#3a2412'; g.font = `800 ${long ? 36 : 54}px system-ui, -apple-system, 'Segoe UI', sans-serif`; g.fillText(long ? code : code.replace('/', ' / '), w / 2, 181);
+  g.restore();
+}
+
 export class Village {
   constructor(scene, world) {
     this.scene = scene; this.world = world; this.on = false;
-    this.houses = []; this.pens = []; this.objects = []; this.spots = { doors: [], benches: [], square: SQUARE };
+    this.houses = []; this.pens = []; this.objects = []; this.spots = { doors: [], benches: [], square: SQUARE }; this.addresses = [];
   }
   // everything the village puts in the scene goes through here (so it can be found, hidden or measured)
   _add(o) { this.scene.add(o); this.objects.push(o); }
+  // The name plates: a carved board on a post at every house's gate, facing the lane — the house's name and its
+  // number: 01, 02 … counted out from the square, then S (one floor) or D (two floors), e.g. SHANTI NIWAS · 04/D.
+  // All the boards are painted on one picture and drawn as one mesh. this.addresses lists the houses (for missions).
+  _plates(chunk) {
+    const T = this.world.T, dist = H => Math.hypot(H.x - SQUARE.x, H.z - SQUARE.z);
+    const hall = this.houses[0], homes = this.houses.filter(H => H !== hall).sort((a, b) => dist(a) - dist(b));
+    homes.forEach((H, i) => { H.no = i + 1; H.code = String(i + 1).padStart(2, '0') + '/' + ((H.spec.floors || 1) > 1 ? 'D' : 'S'); H.title = H.spec.title || H.spec.name; });
+    hall.no = 0; hall.code = ''; hall.title = hall.spec.title || 'Village hall';
+    const list = [hall, ...homes], cols = 4, cw = 512, ch = 256, rows = Math.ceil(list.length / cols), cv = document.createElement('canvas');
+    cv.width = cols * cw; cv.height = THREE.MathUtils.ceilPowerOfTwo(rows * ch);
+    const g = cv.getContext('2d');
+    list.forEach((H, k) => plateArt(g, (k % cols) * cw, Math.floor(k / cols) * ch, cw, ch, H.title, H.code || 'VILLAGE HALL'));
+    const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
+    const geos = [], up = new THREE.Vector3(0, 1, 0), m = new THREE.Matrix4(), q = new THREE.Quaternion(), one = new THREE.Vector3(1, 1, 1);
+    list.forEach((H, k) => {
+      const S = H.spec, half = S.shape === 'round' ? S.r : S.d / 2, zB = H.garden ? H.garden.zB : half + S.garden - 0.15;
+      const p = Village.at(H, 1.25, zB - 0.32), y = T.heightAt(p.x, p.z), b = chunk(p.x, p.z);
+      b.group(p.x, y, p.z, 0, H.yaw, 0, () => {                                    // the post and the board's frame
+        b.box(0.09, 1.55, 0.09, 0, 0.75, -0.06, 0x5b3a24);
+        b.box(1.0, 0.54, 0.06, 0, 1.25, 0, 0x3e2716);
+        b.box(1.04, 0.06, 0.12, 0, 1.55, -0.01, 0x5b3a24);
+      });
+      const u0 = (k % cols) * cw / cv.width, u1 = u0 + cw / cv.width, v1 = 1 - Math.floor(k / cols) * ch / cv.height, v0 = v1 - ch / cv.height;
+      const pg = new THREE.PlaneGeometry(0.92, 0.46), uv = pg.attributes.uv;
+      for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) > 0.5 ? u1 : u0, uv.getY(i) > 0.5 ? v1 : v0);
+      pg.translate(0, 0, 0.032);
+      pg.applyMatrix4(m.compose(new THREE.Vector3(p.x, y + 1.25, p.z), q.setFromAxisAngle(up, H.yaw), one));
+      geos.push(pg);
+      this.world.addCollider({ x: p.x, z: p.z, r: 0.14 });
+      const door = this.spots.doors[this.houses.indexOf(H)];
+      this.addresses.push({ no: H.no, code: H.code, title: H.title, name: S.name, floors: S.floors || 1, sign: { x: p.x, z: p.z }, door: door ? { x: door.x, z: door.z } : { x: H.x, z: H.z }, house: H });
+    });
+    const mesh = new THREE.Mesh(mergeGeometries(geos), new THREE.MeshLambertMaterial({ map: tex, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.16 }));
+    mesh.receiveShadow = true;
+    this._add(mesh); this.world.addFogCull(mesh);
+  }
+  // a house by its number (4), code ('04/D') or name ('Shanti Niwas'): its address, or null
+  findHouse(q) {
+    const s = String(q).trim().toLowerCase();
+    return this.addresses.find(a => a.no === Number(q) && a.no > 0 || a.code.toLowerCase() === s || a.code.toLowerCase().replace('/', '') === s.replace(/\s|\//g, '') || a.title.toLowerCase() === s) || null;
+  }
   // world point (x, z) at local (lx, lz) of frame F = { x, z, yaw }
   static at(F, lx, lz) { const c = Math.cos(F.yaw), s = Math.sin(F.yaw); return { x: F.x + lx * c + lz * s, z: F.z - lx * s + lz * c }; }
 
@@ -84,6 +149,7 @@ export class Village {
     this._lamps(chunk);
     this._sign();
     this._trees(R);
+    this._plates(chunk);                 // every house's name plate at its gate
     // the villagers: their paths and places, the football green, cots outside some houses
     W.addCollider = addCollider;
     this.people = new Villagers(this);
@@ -99,7 +165,12 @@ export class Village {
     const segs = laneSegments();
     T.setVillageGround && T.setVillageGround(segs, SQUARE, BOUNDS);
     W.addGrassBlock((x, z) => this.blocked(x, z));
-    if (minimap && minimap.addVillage) minimap.addVillage({ segs, square: SQUARE, houses: this.houses.map(H => ({ x: H.x, z: H.z, yaw: H.yaw, w: H.spec.shape === 'round' ? H.spec.r * 2 : H.spec.w, d: H.spec.shape === 'round' ? H.spec.r * 2 : H.spec.d, round: H.spec.shape === 'round', col: H.spec.roofCol })) });
+    const mapHouses = this.houses.flatMap(H => {
+      const S = H.spec, out = [{ x: H.x, z: H.z, yaw: H.yaw, w: S.shape === 'round' ? S.r * 2 : S.w, d: S.shape === 'round' ? S.r * 2 : S.d, round: S.shape === 'round', col: S.roofCol }];
+      if (S.annex) { const A = S.annex, p = Village.at(H, A.side * (S.w / 2 + A.w / 2), -S.d / 2 + A.d / 2 + 0.2); out.push({ x: p.x, z: p.z, yaw: H.yaw, w: A.w, d: A.d, round: false, col: S.roofCol }); }
+      return out;
+    });
+    if (minimap && minimap.addVillage) minimap.addVillage({ segs, square: SQUARE, houses: mapHouses });
   }
   // is (x, z) on a lane, the square, a house with its garden, or a pen? (no wild flowers there)
   blocked(x, z) {

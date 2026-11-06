@@ -98,7 +98,7 @@ export function buildGarden(b, H, gAt, seed, plant) {
   const zA = d / 2 + (S.porch ? S.porch.d + 0.3 : 0.6), zB = d / 2 + S.garden - 0.15, half = w / 2 + 0.6;
   if (zB - zA < 1.2) return null;
   const info = { half, zA, zB, beds: [], bench: null };                     // (for the villagers: js/village/ai.js)
-  const tidy = R() < 0.6, kinds = ['flowers', 'sunflowers', 'veg', 'bushes', 'fruit', 'flowers'];
+  const tidy = R() < 0.6, kinds = S.gardenKinds || ['flowers', 'sunflowers', 'veg', 'bushes', 'fruit', 'flowers'];
   const pick = () => kinds[Math.floor(R(0, kinds.length))];
   const left = pick(), right = seed % 3 === 0 ? 'veg' : pick();
   // the path from the door to the lane
@@ -111,10 +111,10 @@ export function buildGarden(b, H, gAt, seed, plant) {
     info.beds.push({ side, kind, x0, x1, z0, z1 });
   }
   // the fence along the lane, with a gap for the path
-  const ft = ['picket', 'wood', 'stone', 'hedge', 'none', 'picket', 'wood'][seed % 7];
+  const ft = S.fence || ['picket', 'wood', 'stone', 'hedge', 'none', 'picket', 'wood'][seed % 7];
   const zf = zB, runs = [[-half, zf, -0.75, zf], [0.75, zf, half, zf], [-half, zf, -half, zA - 0.4], [half, zf, half, zA - 0.4]];
   for (const [ax, az, bx, bz] of runs) {
-    if (ft === 'picket') picketRun(b, ax, az, bx, bz, gAt, seed % 2 ? 0xf2efe6 : 0xe9dcc0);
+    if (ft === 'picket') picketRun(b, ax, az, bx, bz, gAt, S.fenceCol || (seed % 2 ? 0xf2efe6 : 0xe9dcc0));
     else if (ft === 'wood') fenceRun(b, ax, az, bx, bz, gAt, { h: 0.85, spacing: 1.5, color: C.woodL });
     else if (ft === 'stone') stoneWall(b, ax, az, bx, bz, gAt, R);
     else if (ft === 'hedge' && az === bz) for (let x = ax + 0.3; x < bx; x += 0.7) plant('bush', x, az, R(0, 6), R(0.42, 0.55));

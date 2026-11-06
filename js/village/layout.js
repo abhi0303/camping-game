@@ -80,7 +80,8 @@ export const PEN_ROOM = 5.8;                         // the room a pen takes on 
 // the ground a house needs: the house with a margin, its garden in front, a yard behind, its pen on the right
 export function plot(H, S) {
   const w = S.shape === 'round' ? S.r * 2 : S.w, d = S.shape === 'round' ? S.r * 2 : S.d, pen = S.pen ? PEN_ROOM : 0;
-  const x0 = -w / 2 - 0.9, x1 = w / 2 + 0.9 + pen, z0 = -d / 2 - 1.4, z1 = d / 2 + S.garden;
+  const side = S.annex ? S.annex.w - 0.6 : 0;          // (a side room makes the plot wider on its side: 0.3 m spare past it)
+  const x0 = -w / 2 - 0.9 - (S.annex && S.annex.side < 0 ? side : 0), x1 = w / 2 + 0.9 + pen + (S.annex && S.annex.side > 0 ? side : 0), z0 = -d / 2 - 1.4, z1 = d / 2 + S.garden;
   const c = Math.cos(H.yaw), s = Math.sin(H.yaw), ox = (x0 + x1) / 2, oz = (z0 + z1) / 2;
   return { cx: H.x + ox * c + oz * s, cz: H.z - ox * s + oz * c, ax: [c, -s], az: [s, c], hw: (x1 - x0) / 2, hd: (z1 - z0) / 2,
     pts: [[x0, z0], [x1, z0], [x1, z1], [x0, z1], [ox, oz], [0, 0], [(x0 + x1) / 2, z0], [(x0 + x1) / 2, z1], [x0, oz], [x1, oz]].map(([a, b]) => [H.x + a * c + b * s, H.z - a * s + b * c]) };
@@ -109,7 +110,8 @@ export function placeHouses(T, specs, opts = {}) {
     for (let s = 2.5; s < len - 1; s += 1.5) for (const side of [1, -1]) { const P = along(L.pts, s); cands.push({ L, s, side, k: cands.length, P, dsq: Math.hypot(P.x - SQUARE.x, P.z - SQUARE.z) }); }
   }
   cands.sort((a, b) => a.dsq - b.dsq);
-  const order = specs.map((s, i) => [s, i]).sort((a, b) => (b[0].w * b[0].d + (b[0].pen ? 20 : 0)) - (a[0].w * a[0].d + (a[0].pen ? 20 : 0)));
+  const need = s => s.w * s.d + (s.pen ? 20 : 0) + (s.annex ? (s.annex.w - 0.6) * s.annex.d : 0);   // the biggest plots find a place first
+  const order = specs.map((s, i) => [s, i]).sort((a, b) => need(b[0]) - need(a[0]));
   for (const [spec] of order) {
     let done = false;
     const d = spec.shape === 'round' ? spec.r * 2 : spec.d;

@@ -8,6 +8,7 @@
 import * as THREE from 'three';
 import { ConvexGeometry } from 'three/addons/geometries/ConvexGeometry.js';
 import { C, boards, wallLantern } from '../farm/props.js';
+import { buildCottage, COTTAGE } from './cottage.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const hull = pts => new ConvexGeometry(pts.map(p => V(...p)));
@@ -54,11 +55,24 @@ export const HOUSES = [
     win: { style: 'barred' }, door: { style: 'plank', col: 0x7a4a26 }, garden: 3.2 },
   { name: 'Brick-red cottage', w: 6, d: 5, floors: 1, wall: 'plaster', wallCol: 0xc8775a, trim: 0xf0e2c2, quoins: 0xf0e2c2, roof: 'thatchGable', roofCol: 0xd8b45a, pitch: 0.72,
     porch: { w: 2.6, d: 1.4 }, win: { style: 'shutters', col: 0xf0e2c2 }, door: { style: 'arched', col: 0x5a3a20 }, garden: 3.8 },
+  // the ivy cottage (js/village/cottage.js): its own builder; the side wing is its annex (for paths, steps and collisions)
+  { name: 'Ivy cottage', shape: 'cottage', w: COTTAGE.w, d: COTTAGE.d, floors: 1, wall: 'stone', wallCol: 0xe9dfcd, trim: 0x6a4a32, roof: 'gable', roofCol: 0xa45a4e, pitch: 0.91,
+    annex: { side: -1, ...COTTAGE.wing, wall: 'plaster' }, win: { style: 'square' }, door: { style: 'arched', col: 0x6f7d6c }, garden: 3.4,
+    fence: 'picket', fenceCol: 0xdcc189, gardenKinds: ['flowers', 'veg'] },
 ];
+// each house's own name, on the name plate at its gate (js/village/index.js: with its number, e.g. "04/D")
+const TITLES = {
+  'Red tile cottage': 'Lakshmi Kutir', 'Timber two-storey': 'Sharma Niwas', 'Round mud hut': 'Gopal Kutiya', 'Blue roof house': 'Neel Kamal',
+  'Stone cottage': 'Shiv Sadan', 'Log cabin': 'Van Kutir', 'Thatched farmhouse': 'Kisan Ghar', 'Pink house': 'Gulab Niwas',
+  'Yellow gable house': 'Suraj Bhawan', 'Mud verandah house': 'Ganga Niwas', 'Stone tower house': 'Shikhar Bhawan', 'Plank house': 'Verma Ghar',
+  'White and blue house': 'Shanti Niwas', 'Thatch cottage': 'Tulsi Kutir', 'Timber house with annex': 'Yadav Sadan', 'Stone and wood house': 'Patel Bhawan',
+  'Small round hut': 'Chhoti Kutiya', 'Brick-red cottage': 'Mitti Ghar', 'Ivy cottage': 'Lata Kutir',
+};
+for (const H of HOUSES) H.title = TITLES[H.name] || H.name;
 // the village hall on the square (a little bigger, with a bell turret)
 export const HALL = { name: 'Village hall', w: 10, d: 7, floors: 1, fh: 3.4, wall: 'plaster', wallCol: 0xf1e6cc, trim: 0x5b3a24, quoins: 0xb9b3a6,
   roof: 'gable', roofCol: 0xb5452f, pitch: 0.55, turret: true, porch: { w: 5, d: 2, posts: 4 }, win: { style: 'arched' }, door: { style: 'double', col: 0x6e4626 },
-  lantern: true, garden: 3, big: true };
+  lantern: true, garden: 3, big: true, title: 'Panchayat Bhawan' };
 
 /* ---------- parts ---------- */
 const STONE = [0x9b9a94, 0x8a8880, 0xa8a59c, 0x7e7c75, 0x93918a];
@@ -257,6 +271,7 @@ export function buildHouse(b, H, gAt, seed) {
   const S = H.spec, R = prng(seed * 977 + 31);
   S.winBucket = 'win' + (seed % 3);
   if (S.shape === 'round') return roundHut(b, S, gAt, R);
+  if (S.shape === 'cottage') return buildCottage(b, H, gAt, R, S.winBucket);
   const w = S.w, d = S.d, fh = S.fh || 2.7, uh = 2.5, floors = S.floors || 1;
   const lo = Math.min(...[[-w / 2, -d / 2], [w / 2, -d / 2], [w / 2, d / 2], [-w / 2, d / 2], [0, 0]].map(([x, z]) => gAt(x, z)));
   // the stone foundation down to the ground
