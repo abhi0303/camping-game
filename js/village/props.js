@@ -8,18 +8,67 @@ import { lumpGeo, limb } from '../flora.js';
 const shade = (c, k) => new THREE.Color(c).multiplyScalar(k).getHex();
 const STONES = [0x9b9a94, 0x8a8880, 0xa8a59c, 0x7e7c75];
 
-// the village well: a stone ring, a little tiled roof on two posts, the winch and a bucket
+// the village well: a round wall of chunky bevelled stones in four staggered courses with a capstone ring, dark
+// water inside; two timber posts with feet braces, each carrying a gable truss; a roof of overlapping clay tiles
+// (a little uneven, like hand-laid) on a plank deck with a ridge cap; a winch axle with the rope wound round it and
+// hanging into the water, a crank on one side; a few loose stones about. Local x: along the ridge.
+const WELL_STONES = [0x8c96a6, 0x7d889a, 0x9aa3b1, 0x727d90, 0xa198ad, 0x868fa1, 0xaeb3bc, 0x95a0ad];
+const WELL_TILES = [0xb5543c, 0xc0623f, 0xa8492f, 0xc96f4b, 0x9e4430, 0xb85a44];
+const WOOD_W = 0xd29a58, WOOD_WD = 0xae7a40;
+// a stone block with bevelled edges (two boxes: one wider, one taller)
+function stone(b, w, h, d, x, y, z, ry, col) {
+  b.group(x, y, z, 0, ry, 0, () => { b.box(w, h * 0.78, d, 0, 0, 0, col); b.box(w * 0.9, h, d * 0.86, 0, 0, 0, shade(col, 1.06)); });
+}
 export function well(b) {
-  for (let i = 0; i < 14; i++) { const a = i / 14 * Math.PI * 2; for (const y of [0.2, 0.52]) b.add(lumpGeo(0, 0.12, 300 + i + y * 10), STONES[(i + (y > 0.3 ? 1 : 0)) % 4], Math.cos(a) * 1.0, y, Math.sin(a) * 1.0, 0, -a, 0, 'solid', 0.3, 0.2, 0.22); }
-  b.cyl(0.98, 0.98, 0.05, 14, 0, 0.62, 0, 0x8a877f);
-  b.cyl(0.78, 0.78, 0.04, 14, 0, 0.45, 0, 0x2f5a78, 0, 0, 0, 'glass');
-  for (const s of [-1, 1]) b.box(0.16, 2.1, 0.16, s * 0.95, 1.05, 0, C.woodD);
-  for (const s of [-1, 1]) b.group(0, 2.25, s * 0.42, s * 0.62, 0, 0, () => { b.box(2.5, 0.1, 1.15, 0, 0, 0, 0xb5452f); for (let z = -0.45; z < 0.5; z += 0.3) b.box(2.52, 0.04, 0.06, 0, 0.06, z, 0x8e3424); });
-  b.box(2.52, 0.12, 0.2, 0, 2.62, 0, 0x8e3424);
-  b.cyl(0.08, 0.08, 1.8, 8, 0, 1.55, 0, C.wood, 0, 0, Math.PI / 2);
-  b.box(0.05, 0.5, 0.05, 1.05, 1.4, 0, C.iron); b.box(0.05, 0.05, 0.25, 1.05, 1.15, 0.1, C.iron);
-  b.box(0.02, 0.6, 0.02, 0, 1.2, 0, C.rope);
-  b.cyl(0.16, 0.13, 0.26, 8, 0, 0.82, 0, C.woodL); b.cyl(0.17, 0.17, 0.03, 8, 0, 0.95, 0, C.iron);
+  let seed = 11;
+  const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  // the wall: four courses of blocks, every other one turned half a block, and a capstone ring on top
+  const R = 0.82, N = 12, H = 0.22;
+  for (let row = 0; row < 4; row++) for (let i = 0; i < N; i++) {
+    const a = (i + (row % 2) * 0.5) / N * Math.PI * 2, w = 2 * Math.PI * R / N * (0.9 + rnd() * 0.06);
+    stone(b, w, H * (0.9 + rnd() * 0.12), 0.3, Math.cos(a) * R, 0.11 + row * (H + 0.01), Math.sin(a) * R, Math.PI / 2 - a, WELL_STONES[Math.floor(rnd() * WELL_STONES.length)]);
+  }
+  for (let i = 0; i < N; i++) {
+    const a = (i + 0.25) / N * Math.PI * 2, w = 2 * Math.PI * (R + 0.01) / N * 0.94;
+    stone(b, w, 0.12, 0.38, Math.cos(a) * (R + 0.01), 0.99, Math.sin(a) * (R + 0.01), Math.PI / 2 - a, shade(WELL_STONES[Math.floor(rnd() * WELL_STONES.length)], 1.08));
+  }
+  b.cyl(0.66, 0.66, 0.95, 12, 0, 0.48, 0, 0x2a3038);                                   // the dark inside
+  b.cyl(0.66, 0.66, 0.03, 12, 0, 0.72, 0, 0x2f5a78, 0, 0, 0, 'glass');                 // water
+  // the frame: two posts (feet braced), a gable truss on each, a beam between the truss peaks
+  const PX = 1.1, TOP = 2.2, PEAK = 2.86, EAVE = 0.98;
+  for (const sx of [-1, 1]) {
+    b.box(0.18, TOP, 0.18, sx * PX, TOP / 2, 0, WOOD_W);
+    for (const sz of [-1, 1]) limb(b, [sx * PX, 0.55, sz * 0.05], [sx * PX, 0.02, sz * 0.42], 0.04, 0.045, WOOD_WD, 4);   // feet braces
+    limb(b, [sx * (PX + 0.02), TOP + 0.05, -EAVE * 0.9], [sx * (PX + 0.02), PEAK, 0], 0.05, 0.05, WOOD_W, 4);             // rafters
+    limb(b, [sx * (PX + 0.02), TOP + 0.05, EAVE * 0.9], [sx * (PX + 0.02), PEAK, 0], 0.05, 0.05, WOOD_W, 4);
+    b.box(0.13, 0.1, EAVE * 1.9, sx * (PX + 0.02), TOP + 0.02, 0, WOOD_WD);                                              // tie beam
+    for (const sz of [-1, 1]) limb(b, [sx * (PX + 0.03), TOP - 0.45, 0], [sx * (PX + 0.03), TOP + 0.03, sz * 0.5], 0.035, 0.035, WOOD_WD, 4);   // braces under it
+  }
+  b.box(PX * 2 + 0.6, 0.11, 0.11, 0, PEAK - 0.02, 0, WOOD_WD);                          // ridge beam
+  // the roof: two slopes of planks with overlapping clay tiles, laid row by row from the eaves up; a ridge cap
+  const slope = Math.hypot(EAVE, PEAK - TOP), ang = Math.atan2(PEAK - TOP, EAVE), LEN = PX * 2 + 0.75;
+  for (const sz of [-1, 1]) b.group(0, (TOP + PEAK) / 2 + 0.06, sz * EAVE / 2, sz * ang, 0, 0, () => {
+    b.box(LEN, 0.04, slope + 0.12, 0, 0, 0, WOOD_WD);
+    const rows = 5, cols = 9;
+    for (let r = 0; r < rows; r++) for (let c = 0; c < cols + (r % 2); c++) {
+      const tz = sz * ((slope + 0.12) / 2 - 0.12 - r * (slope / rows)), tx = -LEN / 2 + 0.12 + (c + (r % 2 ? 0 : 0.5)) * (LEN - 0.24) / cols;
+      if (Math.abs(tx) > LEN / 2 - 0.08) continue;
+      const tilt = -sz * (0.1 + rnd() * 0.06), turn = (rnd() - 0.5) * 0.18;
+      b.box((LEN - 0.24) / cols * 0.92, 0.035, slope / rows * 1.35, tx, 0.045 + r * 0.004, tz, WELL_TILES[Math.floor(rnd() * WELL_TILES.length)], 'solid', tilt, turn, (rnd() - 0.5) * 0.06);
+    }
+  });
+  for (let k = 0; k < 8; k++) b.box(0.3, 0.07, 0.24, -LEN / 2 + 0.2 + k * (LEN - 0.4) / 7, PEAK + 0.07, 0, WELL_TILES[k % WELL_TILES.length], 'solid', 0, (k % 2 - 0.5) * 0.1, 0);   // ridge tiles
+  // the winch: an axle between the posts, the rope wound round its middle and down into the well, a crank
+  b.cyl(0.055, 0.055, PX * 2 + 0.5, 8, 0.12, 1.55, 0, WOOD_W, 0, 0, Math.PI / 2);
+  b.cyl(0.085, 0.085, 0.26, 8, 0, 1.55, 0, C.rope, 0, 0, Math.PI / 2);
+  for (const x of [-0.09, -0.03, 0.03, 0.09]) b.cyl(0.09, 0.09, 0.012, 8, x, 1.55, 0, shade(C.rope, 0.8), 0, 0, Math.PI / 2);
+  b.box(0.022, 0.3, 0.022, 0, 1.38, 0.085, C.rope);
+  b.cyl(0.13, 0.11, 0.2, 8, 0, 1.13, 0.085, C.woodL); b.cyl(0.135, 0.135, 0.025, 8, 0, 1.2, 0.085, C.iron);    // the bucket, just drawn up
+  b.add(new THREE.TorusGeometry(0.12, 0.008, 3, 8, Math.PI), C.iron, 0, 1.22, 0.085);                                // its handle
+  b.group(PX + 0.27, 1.55, 0, 0, 0, 0, () => { b.box(0.06, 0.42, 0.12, 0, -0.14, 0, WOOD_WD); b.cyl(0.035, 0.035, 0.22, 6, 0.1, -0.31, 0, WOOD_W, 0, 0, Math.PI / 2); });   // crank
+  // loose stones on the ground
+  for (const [x, z, s] of [[1.25, 0.7, 0.13], [-1.2, -0.75, 0.1], [0.4, -1.15, 0.08], [-0.6, 1.1, 0.07], [1.3, -0.3, 0.06]])
+    b.add(lumpGeo(0, 0.2, 360 + Math.round(x * 10)), WELL_STONES[Math.round(Math.abs(x * 7)) % WELL_STONES.length], x, s * 0.5, z, 0, x, 0, 'solid', s, s * 0.7, s);
 }
 // a farm wagon (the long way is x, the shafts toward +x): four spoked wheels with iron tyres on two axles under a
 // plank bed, slatted sides that lean out a little (rails held by stakes), a tailboard, two long shafts with
