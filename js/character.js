@@ -326,6 +326,12 @@ export class Character {
       }
       rate = 30;
     }
+    if (this.cranking && onFoot) {                         // turning a millstone's handle: both hands on it, going round
+      const a = t * 5.5, k = Math.sin(a), c = Math.cos(a);
+      T.shRx = -0.95 + k * 0.38; T.shLx = -0.95 + k * 0.38; T.elR = -0.75 + c * 0.3; T.elL = -0.75 + c * 0.3; T.shRz = 0.12 + c * 0.1; T.shLz = -0.12 + c * 0.1;
+      T.spineX = 0.32 + k * 0.06; T.spineY = c * 0.08; T.hipsY -= 0.04; T.knL += 0.15; T.knR += 0.15;
+      rate = 18;
+    }
     if (this.landT > 0 && mode !== 'jump') {
       T.hipsY -= this.landT * 0.12; T.knL += this.landT * 0.4; T.knR += this.landT * 0.4; T.hipLx -= this.landT * 0.2; T.hipRx -= this.landT * 0.2;
     }

@@ -4,6 +4,7 @@
 // shows what the animals produced in the meantime.
 import { api, LOGIN_GONE } from './api.js';
 import { itemIcon, noEmoji } from '../icons.js';
+import { mineAt, flourAt } from './machines/machineProduction.js';
 
 const REFRESH_MS = 60000, HOUR = 3600e3;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -173,6 +174,12 @@ export class FarmEconomy {
     const t = this.thieves();
     return t ? t.list.find(r => r.status === 'live' && Date.parse(r.at) <= now + 500 && Date.parse(r.escapeAt) + 1500 > now) || null : null;
   }
+  // gold coins and the industrial machines (js/farm/machines): the mine and the flour machine worked out to now from the
+  // server's numbers and its clock (null on an older server)
+  machines() { return this.st && this.st.machines ? this.st.machines : null; }
+  get gold() { const M = this.machines(); return M ? M.gold : 0; }
+  mineNow(now = this.serverNow()) { const M = this.machines(); return M ? mineAt(M.mine, Date.parse(M.at), now, M.rules.mine) : null; }
+  flourNow(now = this.serverNow()) { const M = this.machines(); return M && M.flour ? flourAt(M.flour, Date.parse(M.at), now, M.rules.flour) : null; }
   // crop fields by the windmill and this member's outfits (null on an older server: no fields there)
   fields() { return this.st && this.st.fields ? this.st.fields : null; }
   field(slot) { const F = this.fields(); return F ? F.list.find(f => f.slot === slot) || null : null; }

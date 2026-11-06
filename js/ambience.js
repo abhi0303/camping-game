@@ -243,6 +243,31 @@ export class Ambience {
       this._env(g, t, vol, 0.01, good ? 0.28 : 0.4); this._wire(o, g, 0); o.start(t); o.stop(t + 0.5);
     });
   }
+  /* ---------- the machines (js/farm/machines) ---------- */
+  // a machine's running sound, on all the time while vol > 0: a low motor tone (freq Hz) with a mechanical rumble;
+  // rough = 2: a stone grinding under the hand (more rumble, a slow wobble). Fades smoothly.
+  machineLoop(key, vol, freq = 60, rough = 1) {
+    if (!this.ready || !this.ctx) return;
+    const L = this.loops || (this.loops = {});
+    let l = L[key];
+    if (!l) {
+      if (vol <= 0.0005) return;
+      const ctx = this.ctx, n = ctx.createBufferSource(), bp = ctx.createBiquadFilter(), o = ctx.createOscillator(), lp = ctx.createBiquadFilter(), g = ctx.createGain(), og = ctx.createGain(),
+        lfo = ctx.createOscillator(), lg = ctx.createGain();
+      n.buffer = this.brown; n.loop = true; bp.type = 'bandpass'; bp.Q.value = 0.9;
+      o.type = 'sawtooth'; lp.type = 'lowpass'; lp.frequency.value = 320;
+      lfo.frequency.value = rough > 1 ? 1.6 : 9; lg.gain.value = 0.35; lfo.connect(lg); lg.connect(og.gain);
+      og.gain.value = 0.5; g.gain.value = 0;
+      n.connect(bp); bp.connect(g); o.connect(lp); lp.connect(og); og.connect(g); g.connect(this.bus);
+      n.start(0, Math.random() * 3); o.start(); lfo.start();
+      l = L[key] = { g, bp, o, og };
+    }
+    const t = this.ctx.currentTime, v = audio.muted ? 0 : vol;
+    l.g.gain.setTargetAtTime(v, t, 0.35);
+    l.o.frequency.setTargetAtTime(freq, t, 0.3);
+    l.bp.frequency.setTargetAtTime(rough > 1 ? 260 : freq * 3, t, 0.3);
+    l.og.gain.setTargetAtTime(rough > 1 ? 0.12 : 0.5, t, 0.3);
+  }
   /* ---------- football (js/village/football.js) ---------- */
   // the referee's whistle: one sharp trilled blast
   refWhistle(vol = 0.07) {

@@ -5,6 +5,7 @@
 // Every button asks the server; the numbers on screen always come from the server's answer.
 import { fishMarketView, fishHead } from '../fishing/marketui.js';
 import { icon } from '../icons.js';
+import { mineView, flourView, machineClick } from './machines/machineUI.js';
 const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const ago = t => { const s = (Date.now() - Date.parse(t)) / 1000; return s < 60 ? 'just now' : s < 3600 ? `${Math.round(s / 60)} min ago` : s < 86400 ? `${Math.round(s / 3600)} h ago` : `${Math.round(s / 86400)} d ago`; };
@@ -30,7 +31,7 @@ function stats(compact) {
     tiles: () => (tiles.length ? `<div class="fi-tiles">${tiles.join('')}</div>` : ''),
   };
 }
-const BUY_STEP = { feed: 10, wood: 10, stone: 10 };
+const BUY_STEP = { feed: 10, wood: 10, stone: 10, wheatin: 10 };
 const FARM_TITLE = { coop: 'CHICKEN FARM', goat_shed: 'GOAT FARM', barn: 'COW FARM', stable: 'HORSE STABLE' };
 const NOUN = { egg: 'egg', egg_brown: 'egg', egg_dark: 'egg', goat_milk: 'milk', cow_milk: 'milk' };
 const plural = name => name.toLowerCase() + (/s$/.test(name) ? '' : 's');
@@ -117,6 +118,7 @@ export class FarmUI {
       if (due) this.render();
     }
     if (this.isOpen && this.view === 'field' && !this.busy && (this._ft = (this._ft || 0) + 1) % 5 === 0) this.render();   // (the growing bar moves on)
+    if (this.isOpen && (this.view === 'mine' || this.view === 'flour') && !this.busy && (this._mt = (this._mt || 0) + 1) % 2 === 0) this.render();
     if (this._barOn) { this.renderBar(true); this._orderAlert(); }
   }
   // a new order is ready: tell the players once
@@ -217,12 +219,14 @@ export class FarmUI {
   /* ---------- popups ---------- */
   render() {
     if (!this.isOpen) return;
-    const e = this.eco, head = `<div class="fu-head"><span class="fu-chip">💰 ₹${e.money}</span><span class="fu-chip">🌾 ${e.qty('feed')} feed</span><span class="fu-chip">🪵 ${e.qty('wood')}</span><span class="fu-chip">🪨 ${e.qty('stone')}</span></div>`;
+    const e = this.eco, head = `<div class="fu-head"><span class="fu-chip">💰 ₹${e.money}</span><span class="fu-chip">🌾 ${e.qty('feed')} feed</span><span class="fu-chip">🪵 ${e.qty('wood')}</span><span class="fu-chip">🪨 ${e.qty('stone')}</span>${e.machines() ? `<span class="fu-chip gold">${icon('gold')} ${e.gold} gold</span>` : ''}</div>`;
     let html = '';
     if (this.view === 'store') { this.title.textContent = '🏪 Farm Store'; html = head + this._store(); }
     else if (this.view === 'market') { this.title.textContent = '🛒 Market'; html = head + this._market(); }
     else if (this.view === 'fish') { this.title.textContent = '🐟 Fish Market'; html = fishHead(this) + fishMarketView(this); }
     else if (this.view === 'storage') { this.title.textContent = `📦 Farm storage · level ${e.storageLevel}`; html = head + this._storage(); }
+    else if (this.view === 'mine') { this.title.textContent = '⛏ Gold mine'; html = head + mineView(this); }
+    else if (this.view === 'flour') { this.title.textContent = '🌾 Flour machine · Aata Chakki'; html = head + flourView(this); }
     else if (this.view === 'field') { this.title.textContent = `🌾 Field ${this.arg + 1} · by the windmill`; html = head + this._field(this.arg); }
     else if (this.view === 'thefts') { this.title.textContent = '🚨 Thieves came to the farm'; html = this._thefts(); }
     else if (this.view === 'football') { this.title.textContent = '⚽ Football on the village green'; html = this._football(); }
@@ -576,7 +580,7 @@ export class FarmUI {
     if (x === 'tab') { this.tab = b.dataset.t || null; this.msg = ''; this.qty = {}; if (this.tab === 'log') this.hist = null; this.render(); return; }
     if (x === 'inc' || x === 'dec') {
       const k = b.dataset.k, step = k.startsWith('b:') ? (BUY_STEP[k.slice(2)] || 1) : 1, cur = Number(b.parentElement.querySelector('b').textContent);
-      this.qty[k] = Math.max(1, Math.min(Number(b.dataset.max || 1e9), cur + (x === 'inc' ? step : -step)));
+      this.qty[k] = Math.max(k === 'b:wheatin' ? 10 : 1, Math.min(Number(b.dataset.max || 1e9), cur + (x === 'inc' ? step : -step)));
       this.render(); return;
     }
     if (x === 'sellask') { this._confirm = b.dataset.a; this.render(); return; }
@@ -592,6 +596,7 @@ export class FarmUI {
     else if (x === 'dogfeed') await this._do({ action: 'dog', op: 'feed', dog: b.dataset.d, food: b.dataset.f });
     else if (x === 'dogtrain') await this._do({ action: 'dog', op: 'train', dog: b.dataset.d, level: Number(b.dataset.l) });
     else if (x === 'seenok') { this.close(); if (this.g.onSeen) this.g.onSeen(); }
+    else if (await machineClick(this, x, b)) { /* the machines' buttons (machines/machineUI.js) */ }
     else if (x === 'fieldbuy') await this._do({ action: 'field', op: 'buy', slot: Number(b.dataset.s) });
     else if (x === 'fieldsow') { const slot = Number(b.dataset.s); await this._do({ action: 'field', op: 'sowstart', slot, crop: 'wheat' }, () => { this.close(); if (this.g.onSow) this.g.onSow(slot); }); }
     else if (x === 'fieldwater') await this._do({ action: 'field', op: 'water', slot: Number(b.dataset.s) });

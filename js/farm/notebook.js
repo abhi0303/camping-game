@@ -18,7 +18,7 @@ const clock = ms => {
   return h ? `${h}:${String(m).padStart(2, '0')}:${sec}` : `${String(m).padStart(2, '0')}:${sec}`;
 };
 const money = n => '₹' + Number(n || 0).toLocaleString('en-IN');
-const PRODUCE = ['egg', 'egg_brown', 'egg_dark', 'goat_milk', 'cow_milk'];
+const PRODUCE = ['egg', 'egg_brown', 'egg_dark', 'goat_milk', 'cow_milk', 'wheat', 'flour'];
 const BUILD = ['wood', 'stone'];
 const FISH = ['fish_small', 'fish_medium', 'fish_large'];
 const MATS = [['logs', 'Logs'], ['planks', 'Planks'], ['rope', 'Rope'], ['stone', 'Stones']];
@@ -133,9 +133,11 @@ export class Notebook {
     const hungry = e.hungryCount(), nests = Object.values(e.eggsReady()).reduce((t, v) => t + v, 0);
     const name = id => (e.cat(id) || {}).name || id;
     const qtyCap = id => `${e.qty(id)}${cap(id) ? `<small> / ${cap(id)}</small>` : ''}`;
-    const produce = PRODUCE.filter(id => e.cat(id) && (e.qty(id) || e.makesPerHour(id) > 0 || id === 'egg'));
+    const produce = PRODUCE.filter(id => e.cat(id) && (e.qty(id) || e.makesPerHour(id) > 0 || id === 'egg' || id === 'wheat' || (id === 'flour' && e.flourNow && e.flourNow())));
     // left page: money, feed, produce, building materials
     let L = `<div class="nb-money">${icon('coin')}<div><b>${money(e.money)}</b><small>Farm money · shared by every member</small></div></div>`;
+    const MC = e.machines ? e.machines() : null;
+    if (MC) L += `<div class="nb-money gold">${icon('gold')}<div><b>${MC.gold} gold</b><small>Gold coins · from the mine, for the machines</small></div></div>`;
     L += this._line('feed', 'Animal feed', qtyCap('feed'), hungry ? 'bad' : '');
     if (hungry) L += `<div class="nb-note bad">${icon('warn')} ${hungry} animal${hungry > 1 ? 's are' : ' is'} hungry — feed them at the trough</div>`;
     const T = e.thieves ? e.thieves() : null, many = T && nests > T.rules.threshold;
@@ -148,6 +150,11 @@ export class Notebook {
     for (const a of st.animals) counts[a.type] = (counts[a.type] || 0) + 1;
     const animals = Object.entries(counts).map(([id, n]) => this._line(id, name(id), n)).join('');
     let R = `<h4>Animals</h4>` + (animals || `<div class="nb-empty">No animals yet — build a shelter on a plot, then buy them at the Farm Store.</div>`);
+    if (MC) {
+      const m = e.mineNow(), f = e.flourNow();
+      R += `<h4>Machines</h4>` + this._line('gold', `Gold mine · Level ${m.level}`, m.ready ? `${m.ready} to collect` : m.running ? 'running' : 'stopped', m.ready ? 'blue' : '')
+        + this._line('flour', f ? `Flour machine · Level ${f.level}` : 'Flour machine', f ? (f.ready ? `${f.ready} packets` : f.grinding ? 'grinding' : 'idle') : 'not bought');
+    }
     if (T && (T.dogs.length || e.qty('bone') || e.qty('dog_treat'))) {
       R += `<h4>Guard dogs</h4>` + T.dogs.map(d => this._line('guard_dog', `Dog ${d.slot + 1} · Level ${d.level}`, e.dogOnDuty(d) ? 'on duty' : 'asleep', e.dogOnDuty(d) ? '' : 'bad')).join('')
         + this._line('bone', 'Dog bones', qtyCap('bone')) + this._line('dog_treat', 'Dog treats', qtyCap('dog_treat'));

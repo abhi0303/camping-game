@@ -404,6 +404,32 @@ ALTER TABLE room_members ADD COLUMN outfits TEXT[] NOT NULL DEFAULT '{}', ADD CO
 ALTER TABLE room_members ADD COLUMN can_invite BOOLEAN NOT NULL DEFAULT false;
 `,
   },
+  {
+    id: 11,
+    name: 'gold_mine_flour_machine',
+    sql: `
+-- gold coins (a second shared currency), the gold mine (every farm has one) and the flour machine (server/src/machines.js)
+ALTER TABLE rooms ADD COLUMN gold INTEGER NOT NULL DEFAULT 0 CHECK (gold >= 0);
+CREATE TABLE farm_machines (
+  id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  room_id          UUID NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
+  kind             TEXT NOT NULL CHECK (kind IN ('mine', 'flour')),
+  level            SMALLINT NOT NULL DEFAULT 1 CHECK (level BETWEEN 1 AND 5),
+  calc_at          TIMESTAMPTZ NOT NULL DEFAULT now(),        -- worked out up to then
+  progress         DOUBLE PRECISION NOT NULL DEFAULT 0,       -- mine: share of the next coin · flour: wheat ground toward the next 10
+  ready            INTEGER NOT NULL DEFAULT 0 CHECK (ready >= 0),    -- mine: coins in the box · flour: packets in the tray
+  hopper           INTEGER NOT NULL DEFAULT 0 CHECK (hopper >= 0),   -- flour: wheat waiting to be ground
+  win_start        TIMESTAMPTZ,                               -- flour: the capacity window it was last filled in
+  win_used         INTEGER NOT NULL DEFAULT 0,                -- flour: wheat put in during that window
+  grind_started_at TIMESTAMPTZ,                               -- flour level 1: a player started turning the millstone
+  grind_by         UUID REFERENCES room_members(id) ON DELETE SET NULL,
+  bought_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (room_id, kind)
+);
+INSERT INTO catalog (item, kind, name, icon, buy_price, sell_price, data, sort) VALUES
+  ('flour', 'good', 'Wheat flour packets (10 kg)', '🥡', NULL, 2, '{"cap": 500, "capStep": 500, "kg": 10}', 57);
+`,
+  },
 ];
 
 const LOCK_ID = 727001;   // advisory lock: two migrate runs never overlap

@@ -1437,3 +1437,24 @@ body.touch #sowMeter { bottom: 10px; width: min(300px, 44vw); font-size: 11px; p
 .fm-tog b { font-size: 13.5px; }
 .fm-tog small { font-size: 12px; color: #8a6f4e; }
 .fm-tog:disabled { opacity: .6; }
+
+/* ---------- the machines (js/farm/machines) ---------- */
+#turnMeter { position: absolute; left: 50%; bottom: 112px; transform: translateX(-50%); width: min(360px, calc(100vw - 40px)); padding: 9px 13px 10px; border-radius: 12px;
+  background: rgba(38, 30, 18, .86); border: 2px solid #e9d06a; color: #f4ecd6; font-size: 12.5px; pointer-events: none; z-index: 3; }
+#turnMeter.hidden { display: none; }
+#turnMeter .sm-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; font-weight: 800; }
+#turnMeter .sm-top b { color: #ffe08a; font-variant-numeric: tabular-nums; }
+#turnMeter .sm-bar { height: 12px; border-radius: 6px; overflow: hidden; background: #4a3420; box-shadow: inset 0 2px 4px rgba(0,0,0,.45); }
+#turnMeter .sm-bar i { display: block; height: 100%; background: linear-gradient(90deg, #d8d2c4, #f4f0e6); transition: width .15s linear; }
+#turnMeter .sm-hint { margin-top: 5px; text-align: center; opacity: .9; }
+body.touch #turnMeter { bottom: 10px; width: min(300px, 44vw); font-size: 11px; padding: 6px 10px 7px; }
+.fu-chip.gold { background: #fff1c2; border-color: #e9c45a; color: #8a5a10; font-weight: 800; }
+.fu-chip .ic { width: 15px; height: 15px; vertical-align: -3px; }
+.fi-tile.gold b { color: #b8860b; }
+.mc-sched { margin: 2px 0 6px; }
+.mc-bar { position: relative; height: 12px; border-radius: 6px; background: #f1e6c8; border: 1px solid #e0cfa4; overflow: hidden; }
+.mc-bar i { position: absolute; top: 0; bottom: 0; background: linear-gradient(90deg, #2a3a6a, #3a4a86); }
+.mc-bar em { position: absolute; top: -2px; bottom: -2px; width: 3px; margin-left: -1.5px; background: #e0442a; border-radius: 2px; box-shadow: 0 0 4px rgba(224, 68, 42, .8); }
+.mc-hours { display: flex; justify-content: space-between; font-size: 10.5px; color: #9a7c58; margin-top: 2px; }
+.mc-hours span:nth-child(2) { margin-left: -6%; } .mc-hours span:nth-child(4) { margin-right: -8%; }
+.nb-money.gold b { color: #b8860b; }

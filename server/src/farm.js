@@ -15,6 +15,7 @@ import { ensureOrders, ordersState, deliver } from './orders.js';
 import { ensureRentals, rentalsState, rent, sellHorse, isHorse, HORSES } from './horses.js';
 import { thiefCtx, thiefStep, thiefSave, thievesState, catchThief, dogAction, seenThefts } from './thieves.js';
 import { fieldsState, fieldAction, outfitAction } from './fields.js';
+import { settleMachines, machinesState, machineAction } from './machines.js';
 
 const H = 3600e3;
 const MAX_OFFLINE_H = 24 * 7;          // production is counted for at most a week of absence
@@ -95,7 +96,7 @@ export function simulate(animals, inv, cat, fromMs, toMs, level = 1) {
 
 // Bring the farm up to now. Must run inside a transaction; locks the world's row.
 async function settle(c, roomId, cat) {
-  const r = await c.one(`SELECT money, econ_rev, produced_at, total_earned, storage_level, thief_due_at, now() AS now FROM rooms WHERE id = $1 FOR UPDATE`, [roomId]);
+  const r = await c.one(`SELECT money, gold, econ_rev, produced_at, total_earned, storage_level, thief_due_at, now() AS now FROM rooms WHERE id = $1 FOR UPDATE`, [roomId]);
   const inv = await invMap(c, roomId), dirty = [];
   let changed = false;
   if (r.econ_rev === 0) {                                  // first time this farm is opened: starting goods
@@ -129,9 +130,10 @@ async function settle(c, roomId, cat) {
       changed = true;
     }
   }
+  if (await settleMachines(c, roomId, r.now)) changed = true;          // the gold mine and the flour machine (machines.js)
   await writeInv(c, roomId, dirty, inv);
   await c.rows('UPDATE rooms SET produced_at = $2, econ_rev = econ_rev + $3 WHERE id = $1', [roomId, r.now, changed ? 1 : 0]);
-  return { money: Number(r.money), rev: r.econ_rev + (changed ? 1 : 0), now: r.now, inv, level: r.storage_level, earned: Number(r.total_earned) };
+  return { money: Number(r.money), gold: Number(r.gold), rev: r.econ_rev + (changed ? 1 : 0), now: r.now, inv, level: r.storage_level, earned: Number(r.total_earned) };
 }
 
 async function state(c, roomId, cat, s, me) {
@@ -153,6 +155,7 @@ async function state(c, roomId, cat, s, me) {
     rentals: await rentalsState(c, roomId, s),
     thieves: await thievesState(c, roomId, s, me, cat),
     fields: await fieldsState(c, roomId, s, cat, me),
+    machines: await machinesState(c, roomId, s),
   };
 }
 
@@ -171,7 +174,7 @@ export async function farmHistory(req, env, db, code) {
   const me = await member(db, req, code);
   const list = await rows(db, `SELECT t.kind, t.detail, t.money_delta, t.created_at, m.name FROM room_transactions t
       LEFT JOIN room_members m ON m.id = t.member_id WHERE t.room_id = $1 AND t.kind NOT IN ('gate', 'cast', 'seen')
-      AND NOT (t.kind = 'reel' AND (t.detail->>'caught')::boolean IS NOT TRUE) ORDER BY t.created_at DESC, t.id DESC LIMIT 30`, [me.room_id]);
+      AND NOT (t.kind = 'reel' AND (t.detail->>'caught')::boolean IS NOT TRUE) AND NOT (t.kind IN ('field', 'machine') AND t.detail->>'op' IN ('sowstart', 'turnstart')) ORDER BY t.created_at DESC, t.id DESC LIMIT 30`, [me.room_id]);
   return json({ history: list.map(x => ({ kind: x.kind, who: x.name || 'A former member', message: x.detail.message || '', money: Number(x.money_delta), at: x.created_at })) });
 }
 
@@ -194,7 +197,8 @@ export async function farmAct(req, env, db, code) {
     await writeInv(c, me.room_id, out.items || [], s.inv);
     // the CHECK (money >= 0) constraint backs up the checks in the actions
     if (out.money) await c.rows('UPDATE rooms SET money = money + $2, total_earned = total_earned + $3 WHERE id = $1', [me.room_id, out.money, out.earned || 0]);
-    s.money += out.money || 0; s.earned += out.earned || 0;
+    if (out.gold) await c.rows('UPDATE rooms SET gold = gold + $2 WHERE id = $1', [me.room_id, out.gold]);   // (CHECK (gold >= 0) backs up the checks)
+    s.money += out.money || 0; s.earned += out.earned || 0; s.gold += out.gold || 0;
     const detail = { ...out.detail, message: out.message };
     await c.rows(`INSERT INTO room_transactions (room_id, member_id, request_id, kind, detail, money_delta) VALUES ($1, $2, $3, $4, $5, $6)`,
       [me.room_id, me.id, rid, b.action, JSON.stringify(detail), out.money || 0]);
@@ -381,4 +385,4 @@ async function gate(c, { me, b }) {
 }
 
 const ACTIONS = { buy, sell, build, deposit, feed, upgrade, gate, collect, cast, reel, rod: buyRod, order: deliver, rent, sellhorse: sellHorse,
-  catch: catchThief, dog: dogAction, seen: seenThefts, field: fieldAction, outfit: outfitAction };
+  catch: catchThief, dog: dogAction, seen: seenThefts, field: fieldAction, outfit: outfitAction, machine: machineAction };
