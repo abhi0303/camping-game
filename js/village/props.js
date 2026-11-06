@@ -21,16 +21,66 @@ export function well(b) {
   b.box(0.02, 0.6, 0.02, 0, 1.2, 0, C.rope);
   b.cyl(0.16, 0.13, 0.26, 8, 0, 0.82, 0, C.woodL); b.cyl(0.17, 0.17, 0.03, 8, 0, 0.95, 0, C.iron);
 }
-// a wooden hand cart with two wheels (load: hay | crates | none)
+// a farm wagon (the long way is x, the shafts toward +x): four spoked wheels with iron tyres on two axles under a
+// plank bed, slatted sides that lean out a little (rails held by stakes), a tailboard, two long shafts with
+// bindings, and a load: hay | crates | goods (barrels under a canvas, sacks, a lantern on a stake) | none
+const WAGON = { len: 1.9, wid: 1.0, bed: 0.72, axle: [-0.6, 0.62], r: 0.42 };
+function cartWheel(b, x, z, r) {
+  b.group(x, r, z, 0, 0, 0, () => {
+    b.add(new THREE.TorusGeometry(r, 0.045, 4, 12), C.woodD, 0, 0, 0, 0, 0, Math.PI / 12);           // felloes (the wooden rim)
+    b.add(new THREE.TorusGeometry(r + 0.03, 0.018, 3, 12), C.iron, 0, 0, 0, 0, 0, Math.PI / 12);       // the iron tyre
+    for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2, m = r * 0.55; b.box(0.04, r - 0.06, 0.035, Math.sin(a) * m, Math.cos(a) * m, 0, C.wood, 'solid', 0, 0, -a); }   // spokes
+    b.cyl(0.085, 0.085, 0.16, 8, 0, 0, 0, C.woodD, Math.PI / 2, 0, 0);                                 // hub
+    b.cyl(0.05, 0.05, 0.2, 6, 0, 0, 0, C.iron, Math.PI / 2, 0, 0);                                     // axle cap
+  });
+}
 export function cart(b, load = 'hay') {
+  const { len, wid, bed, axle, r } = WAGON, L = len / 2, Wd = wid / 2;
   b.group(0, 0, 0, 0, 0, 0, () => {
-    boards(b, 1.6, 0.08, 0, 0.62, 0, C.woodL, 1, 0, 1.1);
-    for (const s of [-1, 1]) { b.box(1.6, 0.35, 0.06, 0, 0.82, s * 0.55, C.wood); b.box(0.06, 0.35, 1.1, s * 0.8, 0.82, 0, C.wood); }
-    for (const s of [-1, 1]) wheel(b, 0, 0.55, s * 0.68, 0.55, Math.PI / 2);
-    b.cyl(0.04, 0.04, 1.5, 5, 0, 0.55, 0, C.iron, Math.PI / 2, 0, 0);
-    for (const s of [-0.4, 0.4]) b.box(1.5, 0.07, 0.07, 1.45, 0.55, s, C.woodD, 'solid', 0, 0, 0.25);
-    if (load === 'hay') { b.add(lumpGeo(1, 0.14, 331), C.hay, 0, 1.1, 0, 0, 0, 0, 'solid', 0.85, 0.42, 0.62); b.add(lumpGeo(0, 0.2, 332), C.hayD, 0.2, 1.4, 0.1, 0, 0, 0, 'solid', 0.5, 0.25, 0.4); }
-    else if (load === 'crates') { crate(b, -0.35, 0.66, 0, 0.5, C.woodXL); crate(b, 0.3, 0.66, 0.1, 0.45, C.woodL, 0.3); b.add(lumpGeo(0, 0.2, 333), 0xe0442a, -0.35, 1.25, 0, 0, 0, 0, 'solid', 0.22, 0.12, 0.22); }
+    // running gear: axles and wheels, the frame beams
+    for (const ax of axle) {
+      b.cyl(0.035, 0.035, wid + 0.34, 6, ax, r, 0, C.iron, Math.PI / 2, 0, 0);
+      b.box(0.1, 0.1, wid + 0.08, ax, r + 0.1, 0, C.woodD);
+      for (const sz of [-1, 1]) cartWheel(b, ax, sz * (Wd + 0.13), r);
+    }
+    for (const sz of [-1, 1]) b.box(len - 0.1, 0.09, 0.09, 0, bed - 0.09, sz * 0.3, C.woodD);
+    // the bed: planks running lengthwise, a little uneven
+    for (let k = 0; k < 5; k++) b.box(len + (k % 2) * 0.04, 0.045, wid / 5 - 0.012, (k % 2) * 0.02, bed - 0.02, -Wd + wid / 10 + k * wid / 5, shade(C.woodL, [1, 0.9, 1.06, 0.95, 1.02][k]));
+    // the sides: three rails on four stakes, leaning out
+    for (const sz of [-1, 1]) b.group(0, bed, sz * Wd, -sz * 0.14, 0, 0, () => {
+      for (const [y, c] of [[0.13, C.wood], [0.27, C.woodL], [0.41, C.wood]]) b.box(len + 0.08, 0.085, 0.035, 0, y, 0, c);
+      for (const x of [-L + 0.06, -0.3, 0.3, L - 0.06]) b.box(0.055, 0.56, 0.055, x, 0.24, sz * 0.03, C.woodD, 'solid', 0, 0, x * 0.05);
+    });
+    // tailboard and a low front board
+    for (const y of [0.12, 0.26, 0.4]) b.box(0.035, 0.085, wid + 0.12, -L - 0.02, bed + y, 0, y === 0.26 ? C.woodL : C.wood);
+    b.box(0.035, 0.12, wid + 0.08, L + 0.02, bed + 0.1, 0, C.wood);
+    // the shafts: two long poles from under the front, down toward the ground, with bindings
+    for (const sz of [-1, 1]) {
+      const a = [L - 0.2, bed - 0.12, sz * 0.36], c = [L + 1.55, 0.36, sz * 0.3];
+      limb(b, a, c, 0.04, 0.03, C.woodL, 6);
+      for (const t of [0.35, 0.62]) b.cyl(0.042, 0.042, 0.05, 6, a[0] + (c[0] - a[0]) * t, a[1] + (c[1] - a[1]) * t, a[2] + (c[2] - a[2]) * t, C.iron, 0, 0, Math.PI / 2 + 0.2);
+    }
+    // the load
+    if (load === 'hay') {
+      b.add(lumpGeo(1, 0.14, 331), C.hay, -0.05, bed + 0.42, 0, 0, 0, 0, 'solid', 0.9, 0.42, 0.55);
+      b.add(lumpGeo(0, 0.2, 332), C.hayD, 0.2, bed + 0.72, 0.05, 0, 0, 0, 'solid', 0.55, 0.25, 0.38);
+      b.add(lumpGeo(0, 0.2, 334), C.hay, -0.45, bed + 0.66, -0.08, 0, 0, 0, 'solid', 0.4, 0.2, 0.3);
+    } else if (load === 'crates') {
+      crate(b, -0.45, bed + 0.02, 0.05, 0.5, C.woodXL); crate(b, 0.15, bed + 0.02, -0.1, 0.45, C.woodL, 0.3);
+      b.add(lumpGeo(0, 0.2, 333), 0xe0442a, -0.45, bed + 0.6, 0.05, 0, 0, 0, 'solid', 0.22, 0.12, 0.22);
+      b.add(lumpGeo(1, 0.12, 335), 0xcdb98a, 0.6, bed + 0.17, 0.15, 0, 0.4, 0, 'solid', 0.22, 0.17, 0.18);   // a sack
+    } else if (load === 'goods') {
+      // two barrels under a canvas thrown over them, sacks beside, a lantern hung on the front stake
+      for (const z of [-0.2, 0.2]) {                                                                // small barrels with iron hoops
+        b.cyl(0.19, 0.17, 0.52, 9, -0.42, bed + 0.26, z, C.wood);
+        for (const y of [0.1, 0.42]) b.cyl(0.195, 0.195, 0.035, 9, -0.42, bed + y, z, C.iron);
+      }
+      b.add(lumpGeo(1, 0.07, 336), 0xbcae88, -0.4, bed + 0.5, 0.0, 0, 0, 0, 'solid', 0.36, 0.17, 0.44);    // canvas over the barrels
+      b.add(new THREE.CylinderGeometry(0.2, 0.26, 0.3, 7, 1, true), 0xb1a37d, -0.4, bed + 0.38, 0.0, 0, 0, 0, 'solid', 1.05, 1, 1.75);   // its sides falling down
+      b.box(0.04, 0.012, 0.86, -0.4, bed + 0.66, 0, 0x8a6a3a);                                                // a rope over it
+      for (const [x, z, k] of [[0.25, -0.2, 0], [0.5, 0.15, 1], [0.3, 0.25, 2]]) b.add(lumpGeo(1, 0.12, 338 + k), [0xcdb98a, 0xbfa874, 0xd6c49a][k], x, bed + 0.16, z, 0, k, 0, 'solid', 0.2, 0.16, 0.17);
+      b.group(L - 0.06, bed + 0.5, Wd * 0.7, 0, 0, 0, () => { b.box(0.02, 0.1, 0.02, 0, 0.05, 0, C.iron); b.cyl(0.05, 0.06, 0.12, 6, 0, -0.06, 0, C.iron); b.cyl(0.04, 0.04, 0.08, 6, 0, -0.07, 0, 0xffd27a, 0, 0, 0, 'glass'); });
+    }
   });
 }
 // a round haystack with a pole, or a stack of bales

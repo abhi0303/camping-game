@@ -245,7 +245,7 @@ export class Village {
       const b = chunk(p.x, p.z), yaw = H.yaw + turn;
       b.group(p.x, T.heightAt(p.x, p.z) - 0.02, p.z, 0, yaw, 0, () => {
         if (what === 'wood') woodPile(b, 0, 0, 0, 3, 1.5, 0);
-        else if (what === 'cart') cart(b, R() < 0.5 ? 'hay' : 'crates');
+        else if (what === 'cart') { const k = R(); cart(b, k < 0.4 ? 'hay' : k < 0.7 ? 'goods' : 'crates'); }
         else if (what === 'hay') haystack(b, false);
         else if (what === 'bales') haystack(b, true);
         else if (what === 'line') clothesline(b, 3.2);
@@ -255,6 +255,7 @@ export class Village {
         else pots(b);
       });
       if (what !== 'line' && what !== 'pots') this.world.addCollider({ x: p.x, z: p.z, r: what === 'cart' || what === 'shed' ? 1.1 : what === 'hay' ? 1.2 : 0.7 });
+      if (what === 'cart') this.world.addCollider({ x: p.x + Math.cos(yaw) * 1.75, z: p.z - Math.sin(yaw) * 1.75, r: 0.45 });   // (the shafts)
       (this.spots.props || (this.spots.props = [])).push({ what, x: p.x, z: p.z, yaw, house: H });
       n++;
     }
