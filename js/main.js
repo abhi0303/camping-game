@@ -263,7 +263,7 @@ player.worldActs = () => {
   l.push(...obstacles.acts(eq && eq.type));
   for (const a of crateActs) if (!a.c.taken) l.push(a);
   l.push(benchAct, boardAct, towerBenchAct, castleBenchAct, ...flagActs, ...survival.acts(), ...structures.acts());
-  if (farm.active) l.push(...farmland.acts(), ...fishing.acts(), ...village.acts(player), ...football.acts(), ...fields.acts());
+  if (farm.active) l.push(...farmland.acts(), ...fishing.acts(), ...village.acts(player), ...football.acts(), ...fields.acts(), ...mill.acts(player));
   return l;
 };
 

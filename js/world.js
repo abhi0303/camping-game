@@ -62,9 +62,10 @@ export class World {
       for (let i = Math.max(0, ci - 1); i <= Math.min(GNX - 1, ci + 1); i++)
         for (const c of this.grid[j * GNX + i]) fn(c);
   }
-  // Push a world-space point out of nearby colliders
+  // Push a world-space point out of nearby colliders (a collider with top / bottom only counts between those heights)
   collide(p, radius) {
     this.forNear(p.x, p.z, c => {
+      if ((c.top !== undefined && p.y > c.top) || (c.bottom !== undefined && p.y < c.bottom)) return;   // (only between those heights, when given)
       const dx = p.x - c.x, dz = p.z - c.z, rr = c.r + radius, d2 = dx * dx + dz * dz;
       if (d2 < rr * rr && d2 > 1e-8) { const d = Math.sqrt(d2), k = (rr - d) / d; p.x += dx * k; p.z += dz * k; }
     });
