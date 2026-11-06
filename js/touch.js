@@ -23,6 +23,8 @@ export const ICON = {
   PULL: '<b style="font-size:17px;letter-spacing:.04em">PULL</b>',
   leave: I('M15 4h4v16h-4|M10 8l-4 4 4 4|M6 12h10'),
   net: '<b style="font-size:15px;letter-spacing:.04em">NET</b>',
+  KICK: '<b style="font-size:14px;letter-spacing:.04em">KICK</b>',
+  PASS: '<b style="font-size:14px;letter-spacing:.04em">PASS</b>',
 };
 const CANNON_SVG = '<svg class="gunIco" viewBox="0 0 64 22" aria-hidden="true"><path d="M16 4.5 L61 1.5 L61 12.5 L16 13.5 Z M10 6 h8 v8 h-8z" fill="currentColor"/><circle cx="20" cy="16" r="5.2" fill="none" stroke="currentColor" stroke-width="2.6"/></svg>';
 const BUTTONS = [
@@ -97,11 +99,13 @@ export class TouchUI {
   // (this.farm: Farm World — the gun button is left out)
   setMode(mode, holding) {
     if (!this.enabled) return;
-    const key = mode + '|' + holding + '|' + (this.weapon || '') + '|' + !!this.farm + '|' + !!this.net;
+    const key = mode + '|' + holding + '|' + (this.weapon || '') + '|' + !!this.farm + '|' + !!this.net + '|' + !!this.fb;
     if (key === this.mode) return;
     this.mode = key;
     this.btns.forEach((b, i) => {
-      const def = BUTTONS[i], show = def[2].split(' ').includes(mode) && !(this.farm && def[0] === 'KeyG');   // Farm World: no gun
+      const def = BUTTONS[i], fb = this.fb && mode === 'foot';
+      let show = def[2].split(' ').includes(mode) && !(this.farm && def[0] === 'KeyG');   // Farm World: no gun
+      if (fb) show = def[0] === 'KeyQ' ? def[2] === 'fish' : show && def[0] !== 'KeyC' && def[0] !== 'KeyG';   // football: KICK, PASS, jump, leave
       b.style.display = show ? '' : 'none';
       const lab = (holding === 'gun' && def[1].gun) || (holding === true && def[1].item) || def[1][mode] || def[1].foot || '';
       b.innerHTML = lab === 'GUN' ? (this.weapon === 'cannon' ? CANNON_SVG : GUN_SVG) : (ICON[lab] || '');
@@ -109,8 +113,13 @@ export class TouchUI {
       const net = this.net && def[0] === 'KeyF' && mode === 'foot';
       b.classList.toggle('net', !!net);
       if (net) b.innerHTML = ICON.net;
+      // playing football: F kicks, E passes, Q leaves the match
+      if (fb && !net) { const lab = { KeyF: 'KICK', KeyE: 'PASS', KeyQ: 'leave' }[def[0]]; if (lab) b.innerHTML = ICON[lab]; }
+      b.classList.toggle('kick', !!(fb && def[0] === 'KeyF'));
     });
   }
+  // in a football match (js/village/football.js): KICK / PASS / leave buttons
+  setFootball(on) { if (!this.enabled || !!on === !!this.fb) return; this.fb = !!on; this.mode = ''; }
   // a thief is in reach: the F button becomes the NET button
   setNet(on) { if (!this.enabled || !!on === !!this.net) return; this.net = !!on; this.mode = ''; }
 }

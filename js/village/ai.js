@@ -15,6 +15,7 @@
 //   - Far from the village nothing is updated; the further away, the less often poses are worked out.
 import * as THREE from 'three';
 import { MAT, GeoBuilder } from '../utils.js';
+import { limb } from '../flora.js';
 import { bubbleTexture } from '../farm/npc.js';
 import { bench } from '../farm/props.js';
 import { charpai, goal, football, lantern } from './props.js';
@@ -29,6 +30,11 @@ import { PEN_SIZE } from './animals.js';
 const TAU = Math.PI * 2, ACC = 0.45;
 const SEATED = new Set(['sit', 'drink', 'talkSit', 'watchSit', 'sitGround', 'clap']);
 const STEP_TURN = new Set(['stand', 'look', 'wait', 'talk', 'water', 'feed', 'shop', 'pull', 'watch', 'pour']);
+// a bench is solid: two small round colliders along its seat (players bump into it; villagers still sit on it)
+export function benchColliders(W, F) {
+  const c = Math.cos(F.yaw), s = Math.sin(F.yaw);
+  for (const lx of [-0.45, 0.45]) W.addCollider({ x: F.x + lx * c - 0.06 * s, z: F.z - lx * s - 0.06 * c, r: 0.3, bench: true, village: true });
+}
 const at = (F, lx, lz) => { const c = Math.cos(F.yaw), s = Math.sin(F.yaw); return [F.x + lx * c + lz * s, F.z - lx * s + lz * c]; };
 const toLocal = (F, x, z) => { const c = Math.cos(F.yaw), s = Math.sin(F.yaw), dx = x - F.x, dz = z - F.z; return [dx * c - dz * s, dx * s + dz * c]; };
 const wrap = a => Math.atan2(Math.sin(a), Math.cos(a));
@@ -98,7 +104,7 @@ export class Villagers {
     }
     let hit = false;
     this.W.forNear(x, z, c => {
-      if (hit || c.house || c.npc || ((c.tree || c.rock) && !c.village) || (noTrees && c.tree)) return;
+      if (hit || c.house || c.npc || c.bench || ((c.tree || c.rock) && !c.village) || (noTrees && c.tree)) return;
       const dx = x - c.x, dz = z - c.z, r = c.r + 0.27;
       if (dx * dx + dz * dz < r * r) hit = true;
     });
@@ -206,25 +212,84 @@ export class Villagers {
       b.group(gx, T.heightAt(gx, gz), gz, 0, F.yaw + (s > 0 ? Math.PI : 0), 0, () => goal(b));
       for (const zz of [-GOAL, GOAL]) { const [px, pz] = F.at(s * HL, zz); this.W.addCollider({ x: px, z: pz, r: 0.1, village: true }); }
     }
-    // white corner stones
-    for (const [sx, sz] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) { const [x, z] = F.at(sx * HL, sz * HW), b = chunk(x, z); b.box(0.22, 0.14, 0.22, x, T.heightAt(x, z) + 0.04, z, 0xf2efe6); }
+    // the gate: in the middle of the side nearest a lane
+    let gateSide = 1;
+    { let bestL = 1e9; for (const side of [-1, 1]) { const [x, z] = F.at(0, side * (HW + 2)), L = laneDist(x, z).d; if (L < bestL) { bestL = L; gateSide = side; } } }
+    F.gateSide = gateSide; F.fence = { x: HL + 1.3, z: HW + 0.8, gate: 1.4 };
+    // light white markings: the touchlines, the halfway line, the centre circle and spot, the goal areas
+    const lineCol = 0xe9ebdf, mark = (ax, az, bx, bz) => {
+      const L = Math.hypot(bx - ax, bz - az), n = Math.max(1, Math.ceil(L / 0.6));
+      for (let i = 0; i < n; i++) {
+        const k0 = i / n, k1 = (i + 1) / n, [x0, z0] = F.at(ax + (bx - ax) * k0, az + (bz - az) * k0), [x1, z1] = F.at(ax + (bx - ax) * k1, az + (bz - az) * k1);
+        const h0 = T.heightAt(x0, z0), h1 = T.heightAt(x1, z1), len = Math.hypot(x1 - x0, z1 - z0), b = chunk(x0, z0);
+        b.group((x0 + x1) / 2, (h0 + h1) / 2 + 0.014, (z0 + z1) / 2, 0, Math.atan2(x1 - x0, z1 - z0), 0, () => b.box(0.055, 0.012, len + 0.02, 0, 0, 0, lineCol, 'solid', -Math.atan2(h1 - h0, len), 0, 0));
+      }
+    };
+    mark(-HL, -HW, HL, -HW); mark(-HL, HW, HL, HW); mark(-HL, -HW, -HL, HW); mark(HL, -HW, HL, HW); mark(0, -HW, 0, HW);
+    for (let i = 0; i < 18; i++) { const a0 = i / 18 * TAU, a1 = (i + 1) / 18 * TAU; mark(Math.cos(a0) * 1.5, Math.sin(a0) * 1.5, Math.cos(a1) * 1.5, Math.sin(a1) * 1.5); }
+    for (const sx of [-1, 1]) { const gz = GOAL + 0.7, gx = sx * (HL - 1.6); mark(sx * HL, -gz, gx, -gz); mark(gx, -gz, gx, gz); mark(gx, gz, sx * HL, gz); }
+    { const [x, z] = F.at(0, 0); chunk(x, z).cyl(0.11, 0.11, 0.012, 8, x, T.heightAt(x, z) + 0.016, z, lineCol); }
+    // a low wooden fence all round, posts and two rails, open at the gate; it's solid (players, the ball)
+    {
+      const FX = F.fence.x, FZ = F.fence.z, G = F.fence.gate, post = 0x8a6440, rail = 0xb08a5a;
+      const inGate = (lx, lz) => Math.abs(lz - gateSide * FZ) < 0.01 && Math.abs(lx) < G;
+      const sides = [[-FX, -FZ, FX, -FZ], [FX, -FZ, FX, FZ], [FX, FZ, -FX, FZ], [-FX, FZ, -FX, -FZ]];
+      for (const [ax, az, bx, bz] of sides) {
+        const L = Math.hypot(bx - ax, bz - az), n = Math.ceil(L / 1.6), pts = [];
+        for (let i = 0; i <= n; i++) pts.push([ax + (bx - ax) * i / n, az + (bz - az) * i / n]);
+        // the gate's own posts
+        if (Math.abs(az - bz) < 0.01 && Math.abs(az - gateSide * FZ) < 0.01) { for (const gx of [-G, G]) pts.push([gx, az]); pts.sort((p, q) => (bx > ax ? p[0] - q[0] : q[0] - p[0])); }
+        const W = pts.map(([lx, lz]) => { const [x, z] = F.at(lx, lz); return { lx, lz, x, z, y: T.heightAt(x, z) }; });
+        W.forEach((p, i) => {
+          const b = chunk(p.x, p.z);
+          if (!inGate(p.lx, p.lz) || Math.abs(Math.abs(p.lx) - G) < 0.01) b.box(0.09, 0.78, 0.09, p.x, p.y + 0.37, p.z, post);
+          const q = W[i + 1];
+          if (!q || Math.hypot(q.x - p.x, q.z - p.z) < 0.05) return;
+          const mx = (p.lx + q.lx) / 2, mz = (p.lz + q.lz) / 2;
+          if (inGate(mx, mz)) return;
+          for (const hy of [0.34, 0.66]) limb(b, [p.x, p.y + hy, p.z], [q.x, q.y + hy, q.z], 0.03, 0.03, rail, 4);
+          const len = Math.hypot(q.x - p.x, q.z - p.z), m = Math.max(1, Math.ceil(len / 0.55));
+          for (let k = 0; k <= m; k++) { const lx = p.lx + (q.lx - p.lx) * k / m, lz = p.lz + (q.lz - p.lz) * k / m; if (inGate(lx, lz) && Math.abs(Math.abs(lx) - G) > 0.05) continue; const [x, z] = F.at(lx, lz); this.W.addCollider({ x, z, r: 0.17, village: true, fence: true }); }
+        });
+      }
+    }
     // benches along a touchline, facing the pitch
     for (const side of [-1, 1]) {
       let n = 0;
       for (const lx of [-3.2, 3.2]) {
-        const [x, z] = F.at(lx, side * (HW + 1.5)), BF = { x, z, yaw: F.yaw + (side < 0 ? 0 : Math.PI) };
+        if (side === gateSide && Math.abs(lx) < 2.4) continue;
+        const [x, z] = F.at(lx, side * (HW + 2.1)), BF = { x, z, yaw: F.yaw + (side < 0 ? 0 : Math.PI) };
         if (![[-0.9, -0.3], [0.9, -0.3], [-0.9, 0.9], [0.9, 0.9], [0, 0]].every(([a, c]) => { const [px, pz] = at(BF, a, c); return this._open(px, pz) || this._inField(px, pz, 2.6); })) continue;
         const b = chunk(x, z);
         b.group(x, T.heightAt(x, z), z, 0, BF.yaw, 0, () => bench(b, 0, 0, 0, 0));
+        benchColliders(this.W, BF);
         this.seatDefs.push({ F: BF, where: 'field', local: [[-0.4, -0.02], [0.4, -0.02]], app: [[-0.4, 0.62], [0.4, 0.62]], h: 0.48 });
         n++;
       }
       if (n) break;
     }
-    // the way onto the pitch: the middle of the touchline nearest a lane
-    let bestN = null;
-    for (const side of [-1, 1]) { const [x, z] = F.at(0, side * (HW + 0.6)), L = laneDist(x, z).d; if (!bestN || L < bestN.L) bestN = { x, z, L }; }
-    F.node = this.nav.attach(bestN.x, bestN.z, {}, {});
+    // the way onto the pitch: through the gate
+    { const [x, z] = F.at(0, gateSide * F.fence.z); F.node = this.nav.attach(x, z, {}, {}); F.gate = { x, z }; }
+    // a path round the outside of the fence, out from the gate both ways (to the benches and the watchers on the far side);
+    // a waypoint is only added where the way to it from the one before is clear, so all of them lead back to the gate
+    if (F.node >= 0) {
+      const nav = this.nav, R = gateSide * (F.fence.z + 0.7), X = F.fence.x + 0.7;
+      const ring = [[0, R], [X * 0.5, R], [X, R], [X, 0], [X, -R], [X * 0.5, -R], [0, -R], [-X * 0.5, -R], [-X, -R], [-X, 0], [-X, R], [-X * 0.5, R]];
+      const step = (from, i) => {
+        const [x, z] = F.at(ring[i][0], ring[i][1]), A = nav.nodes[from];
+        if (this._blocked(x, z) || !nav.clear(A.x, A.z, x, z)) return -1;
+        const id = nav.node(x, z, {}); nav.link(from, id); return id;
+      };
+      const start = step(F.node, 0);
+      let ends = [start, start], last = -1;
+      if (start >= 0) for (const dir of [1, -1]) {
+        let prev = start;
+        for (let k = 1; k < ring.length / 2 + (dir > 0 ? 1 : 0); k++) { const id = step(prev, dir > 0 ? k : ring.length - k); if (id < 0) break; prev = id; }
+        ends[dir > 0 ? 0 : 1] = prev; last = prev;
+      }
+      // the two ways meet on the far side: close the ring
+      if (last >= 0 && ends[0] !== ends[1]) { const A = nav.nodes[ends[0]], B = nav.nodes[ends[1]]; if (Math.hypot(A.x - B.x, A.z - B.z) < X + 0.5 && nav.clear(A.x, A.z, B.x, B.z)) nav.link(ends[0], ends[1]); }
+    }
   }
   _inField(x, z, pad = 0) { if (!this.field) return false; const [lx, lz] = toLocal(this.field, x, z); return Math.abs(lx) < PITCH.HL + pad && Math.abs(lz) < PITCH.HW + pad; }
   // places for children's games: the green, and up to two more open, flat patches
@@ -321,7 +386,7 @@ export class Villagers {
     }
     // benches on the square, in gardens, at tables, charpais, by the pitch: two seats each
     for (const B of V.spots.benches) this.seatDefs.push({ F: { x: B.x, z: B.z, yaw: B.yaw - Math.PI }, where: 'square', local: [[-0.4, -0.02], [0.4, -0.02]], app: [[-0.4, 0.62], [0.4, 0.62]], h: 0.48 });
-    for (const h of this.houses) if (h.g && h.g.bench) { const [x, z] = at(h, h.g.bench.x, h.g.bench.z); this.seatDefs.push({ F: { x, z, yaw: h.yaw + Math.PI }, where: 'home', house: h, local: [[-0.4, -0.02], [0.4, -0.02]], app: [[-0.4, 0.62], [0.4, 0.62]], h: 0.48, to: h.D }); }
+    for (const h of this.houses) if (h.g && h.g.bench) { const [x, z] = at(h, h.g.bench.x, h.g.bench.z); this.seatDefs.push({ F: { x, z, yaw: h.yaw }, where: 'home', house: h, local: [[-0.4, -0.02], [0.4, -0.02]], app: [[-0.4, 0.62], [0.4, 0.62]], h: 0.48, to: h.D }); }
     for (const D of this.seatDefs) {
       const two = [];
       D.local.forEach(([lx, lz], k) => {
@@ -335,9 +400,9 @@ export class Villagers {
     }
     this.fieldSeats = this.seats.filter(S => S.where === 'field');
     // where children stand to watch a match
-    if (this.field && this.field.node >= 0) for (const [lx, side] of [[-2.2, -1], [2.4, -1], [0, 1], [-4.6, 1], [4.4, 1]]) {
-      const [x, z] = this.field.at(lx, side * (PITCH.HW + 0.9));
-      const S = add('watch', x, z, this.field.yawTo(lx, 0, lx, side * (PITCH.HW + 0.9)), { to: this.field.node });
+    if (this.field && this.field.node >= 0) for (const [lx, side] of [[-2.4, -1], [2.4, -1], [-4.6, 1], [4.6, 1], [-2.8, 1]]) {
+      const zz = side * (PITCH.HW + 1.7), [x, z] = this.field.at(lx, zz);
+      const S = add('watch', x, z, this.field.yawTo(lx, 0, lx, zz)) || (side === this.field.gateSide ? add('watch', x, z, this.field.yawTo(lx, 0, lx, zz), { to: this.field.node }) : null);
       if (S) this.watchSpots.push(S);
     }
     // places to meet for a chat: lane waypoints (with the lane's direction), spots on the square, garden gates
@@ -773,7 +838,7 @@ export class Villagers {
     if (day !== this.day) this._buildDay(day);
     const near = viewers.some(p => dist2(p.x, p.z, SQUARE.x, SQUARE.z) < 230);
     if (!near) { if (this.visible) { this.crowd.setVisible(false); this.ball.visible = false; if (this.lanternObj) { this.lanternObj.visible = false; this.bubble.visible = false; } for (const n of this.npcs) this._collider(n, false); this.visible = false; } return; }
-    if (!this.visible) { this.crowd.setVisible(true); this.ball.visible = true; this.visible = true; }
+    if (!this.visible) { this.crowd.setVisible(true); this.ball.visible = !this.matchOn; this.visible = true; }
     this.frame++;
     this.shopNow = false;
     for (const n of this.npcs) { const seg = this._seg(n.i, sod); if (seg.k === 'act' && seg.act === 'shop') this.shopNow = true; }
@@ -782,11 +847,19 @@ export class Villagers {
     for (const n of this.npcs) {
       const seg = this._seg(n.i, sod);
       this._state(n, seg, sod, o);
+      const ov = this.override && this.override.get(n.i);
+      if (ov) this._override(o, ov);
+      else if (this.matchOn && seg.k === 'plan' && seg.P.kind === 'football') { const W = this.watchSpots[(seg.j + n.i) % this.watchSpots.length]; if (W) { o.x = W.x; o.z = W.z; o.act = 'watch'; o.face = W.yaw; o.ball = false; } }
       if (!o.vis) { if (n.shown) { this.crowd.hide(n.kind, n.idx); this._collider(n, false); n.shown = false; n.init = false; } }
       else this._show(n, o, dt, sod, viewers);
       if (n === this.watchman) this._lantern(n, o, viewers, dt);
     }
     this.crowd.commit();
+  }
+  // during a football match (js/village/football.js) some villagers play or watch: { x, z, y?, face?, act?, run?, kick?, seatH?, look?, item? }
+  _override(o, v) {
+    o.vis = true; o.x = v.x; o.z = v.z; o.y = v.y ?? null; o.face = v.face ?? null; o.act = v.act === undefined ? null : v.act; o.run = !!v.run; o.kick = v.kick || 0;
+    o.seatH = v.seatH || 0; o.look = v.look ?? null; o.walking = false; o.ball = !v.seatH; o.tau = v.tau || 0; o.carry = 0; o.item = v.item || 0;
   }
   _seg(i, sod) {
     const L = this.timeline[i];
@@ -883,7 +956,7 @@ export class Villagers {
   }
   // the ball: where the match has it (rolling, turning as it rolls), or resting by the goal between matches
   _ballUpdate(sod, dt) {
-    if (!this.field) { this.ball.visible = false; this.ballW = null; return; }
+    if (!this.field || this.matchOn) { this.ball.visible = false; this.ballW = this.matchBall || null; return; }
     const P = this.plans.find(q => q.kind === 'football' && sod >= q.t0 && sod < q.t1 + 5);
     let lx = PARK[0], lz = PARK[1];
     if (P) { const b = ballAt(P.sim, sod); lx = b.x; lz = b.z; }

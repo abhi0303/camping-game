@@ -145,7 +145,7 @@ export class Character {
   }
   land(strength) { this.landT = clamp(strength, 0, 1); }
   recoil() { this.recoilT = 1; }
-  // Tool swing: 'chop' (overhead strike) or 'saw' (push forward + vibrate)
+  // Tool swing: 'chop' (overhead strike) or 'saw' (push forward + vibrate); 'kick': a football kick
   swing(kind) {
     if (this.swingT < 1) return false;
     this.swingT = 0; this.swingKind = kind;
@@ -162,7 +162,7 @@ export class Character {
     this.fightTimer = Math.max(0, this.fightTimer - dt);
     this.landT = Math.max(0, this.landT - dt * 4);
     this.recoilT = Math.max(0, this.recoilT - dt * 5);
-    this.swingT = Math.min(1, this.swingT + dt / (this.swingKind === 'saw' ? 0.6 : 0.5));
+    this.swingT = Math.min(1, this.swingT + dt / (this.swingKind === 'saw' ? 0.6 : this.swingKind === 'kick' ? 0.42 : 0.5));
     const mode = s.mode;
 
     // idle base
@@ -267,7 +267,13 @@ export class Character {
     }
     if (this.swingT < 1 && onFoot) {
       const t = this.swingT, L = (a, b, k) => a + (b - a) * k;
-      if (this.swingKind === 'saw') {
+      if (this.swingKind === 'kick') {                       // a football kick: the right leg back, then through the ball
+        let hip, kn;
+        if (t < 0.32) { const k = t / 0.32; hip = L(0, 0.75, k); kn = L(0.1, 1.35, k); }
+        else if (t < 0.55) { const k = (t - 0.32) / 0.23; hip = L(0.75, -1.05, k); kn = L(1.35, 0.1, k); }
+        else { const k = (t - 0.55) / 0.45; hip = L(-1.05, T.hipRx, k); kn = L(0.1, T.knR, k); }
+        T.hipRx = hip; T.knR = kn; T.shLx = -hip * 0.45; T.shRx = hip * 0.35; T.shLz = -0.35; T.shRz = 0.3; T.spineX = 0.08 - Math.min(0, hip) * 0.12;
+      } else if (this.swingKind === 'saw') {
         const v = Math.sin(t * 90) * 0.05;
         T.shLx = T.shRx = -0.55 + v; T.elL = T.elR = -0.35; T.spineX = 0.3; T.shLz = -0.2; T.shRz = 0.2;
       } else {

@@ -400,6 +400,8 @@ export class Player {
       if (this.pos.y <= g) {
         if (!this.grounded && this.vy < -4) { this.char.land(clamp(-this.vy / 14, 0.3, 1)); audio.thud(90, 0.08); }
         this.pos.y = g; this.vy = 0; this.grounded = true;
+      } else if (this.grounded && this.vy <= 0 && !this.swimming && this.pos.y - g < 0.25 + Math.hypot(this.vel.x, this.vel.y) * dt * 1.7) {
+        this.pos.y = g; this.vy = 0;          // going downhill (or down a step): stay on the ground instead of falling a little every frame
       } else this.grounded = false;
       this.world.collide(this.pos, R);
       for (const r of this.rvs) r.pushOut(this.pos, R);

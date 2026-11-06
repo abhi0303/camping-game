@@ -222,6 +222,7 @@ export class FarmUI {
     else if (this.view === 'fish') { this.title.textContent = '🐟 Fish Market'; html = fishHead(this) + fishMarketView(this); }
     else if (this.view === 'storage') { this.title.textContent = `📦 Farm storage · level ${e.storageLevel}`; html = head + this._storage(); }
     else if (this.view === 'thefts') { this.title.textContent = '🚨 Thieves came to the farm'; html = this._thefts(); }
+    else if (this.view === 'football') { this.title.textContent = '⚽ Football on the village green'; html = this._football(); }
     else if (this.view === 'plot') { this.title.textContent = `🌱 Plot ${this.arg + 1}`; html = head + this._plot(this.arg); }
     else if (this.view === 'shelter' || this.view === 'feed') {
       const bd = e.st.buildings.find(b => b.id === this.arg.id);
@@ -304,6 +305,11 @@ export class FarmUI {
     else if (!dogs.some(d => e.dogOnDuty(d))) tips.push('Your guard dog is asleep — hungry. Give it a bone or a treat to put it back on duty.');
     return `<div class="fu-npc thief"><span class="fu-ico">${icon('thief')}</span><span class="fu-say"><b>While you were away</b>“${list.length === 1 ? 'A thief came' : `${list.length} thieves came`} to the farm${lost ? ` and got away with ${lost} eggs` : ''}.”</span></div>
       ${rows}<div class="fu-sub">${tips.join(' ')}</div><button class="fu-go wide" data-x="seenok">OK</button>`;
+  }
+  // a football match: who plays with whom (js/village/football.js) · arg: { opts: [{ label, sub }], pick(opt) }
+  _football() {
+    const rows = (this.arg.opts || []).map((o, k) => `<div class="fu-row fb-opt"><span class="fu-ico">${icon('ball')}</span><span class="fu-main"><span class="fu-name">${esc(o.label)}</span><span class="fu-sub">${esc(o.sub || '')}</span></span><button class="fu-go" data-x="fbpick" data-i="${k}">Play</button></div>`).join('');
+    return `<div class="fu-sub">Two a side. A village kid takes every place nobody plays — and keeps goal for a player on their own. Three minutes; kick-off from the centre.</div>${rows}`;
   }
   // one animal for sale (shelter: put it in this shelter first)
   _animalRow(k, shelter) {
@@ -511,6 +517,7 @@ export class FarmUI {
     else if (x === 'dogfeed') await this._do({ action: 'dog', op: 'feed', dog: b.dataset.d, food: b.dataset.f });
     else if (x === 'dogtrain') await this._do({ action: 'dog', op: 'train', dog: b.dataset.d, level: Number(b.dataset.l) });
     else if (x === 'seenok') { this.close(); if (this.g.onSeen) this.g.onSeen(); }
+    else if (x === 'fbpick') { const A = this.arg, o = A && A.opts[Number(b.dataset.i)]; this.close(); if (o) A.pick(o); }
     else if (x === 'feedall') await this._do({ action: 'feed', shelter: this.arg.id, all: true }, null, () => this._started());
     else if (x === 'feedn') await this._do({ action: 'feed', shelter: this.arg.id, count: Number(b.dataset.q) }, () => { delete this.qty.f; }, () => this._started());
     else if (x === 'collect') await this._do({ action: 'collect', shelter: b.dataset.b }, r => this.g.onCollect && this.g.onCollect(r));

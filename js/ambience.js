@@ -243,6 +243,39 @@ export class Ambience {
       this._env(g, t, vol, 0.01, good ? 0.28 : 0.4); this._wire(o, g, 0); o.start(t); o.stop(t + 0.5);
     });
   }
+  /* ---------- football (js/village/football.js) ---------- */
+  // the referee's whistle: one sharp trilled blast
+  refWhistle(vol = 0.07) {
+    if (!this.ready || audio.muted) return;
+    const ctx = this.ctx, t = ctx.currentTime + 0.02, d = 0.42, o = ctx.createOscillator(), lfo = ctx.createOscillator(), lg = ctx.createGain(), g = ctx.createGain(), f = ctx.createBiquadFilter();
+    o.type = 'sine'; o.frequency.setValueAtTime(3000, t); lfo.frequency.value = 31; lg.gain.value = 200; lfo.connect(lg); lg.connect(o.frequency);
+    f.type = 'bandpass'; f.frequency.value = 3000; f.Q.value = 2;
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.02); g.gain.setValueAtTime(vol, t + d - 0.05); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+    o.connect(f); this._wire(f, g, 0, this.fx); o.start(t); lfo.start(t); o.stop(t + d + 0.05); lfo.stop(t + d + 0.05);
+  }
+  // a foot on the ball: a dull thump (k < 1: softer, off a post)
+  kick(k = 1, vol = 0.2) {
+    if (!this.ready || audio.muted) return;
+    const ctx = this.ctx, t = ctx.currentTime + 0.005, o = ctx.createOscillator(), g = ctx.createGain(), n = ctx.createBufferSource(), nf = ctx.createBiquadFilter(), ng = ctx.createGain();
+    o.type = 'sine'; o.frequency.setValueAtTime(k < 1 ? 520 : 150, t); o.frequency.exponentialRampToValueAtTime(k < 1 ? 300 : 60, t + 0.08);
+    this._env(g, t, vol * k, 0.002, 0.1); this._wire(o, g, 0, this.fx); o.start(t); o.stop(t + 0.14);
+    n.buffer = this.white; nf.type = 'lowpass'; nf.frequency.value = 1200;
+    n.connect(nf); this._env(ng, t, vol * 0.4 * k, 0.001, 0.04); this._wire(nf, ng, 0, this.fx); n.start(t, Math.random() * 1.5); n.stop(t + 0.06);
+  }
+  // a goal: the watchers cheer (a swell of noisy voices)
+  cheer(vol = 0.1) {
+    if (!this.ready || audio.muted) return;
+    const ctx = this.ctx, t = ctx.currentTime + 0.02, n = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain(), lfo = ctx.createOscillator(), lg = ctx.createGain();
+    n.buffer = this.white; n.loop = true; f.type = 'bandpass'; f.frequency.value = 1100; f.Q.value = 0.7;
+    lfo.frequency.value = 5.5; lg.gain.value = 260; lfo.connect(lg); lg.connect(f.frequency);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.25); g.gain.setValueAtTime(vol, t + 1.1); g.gain.exponentialRampToValueAtTime(0.0001, t + 2.3);
+    n.connect(f); this._wire(f, g, 0, this.fx); n.start(t, Math.random()); lfo.start(t); n.stop(t + 2.4); lfo.stop(t + 2.4);
+    [0, 0.35, 0.7, 1.0].forEach(dt => {                                    // and some clapping
+      const c = ctx.createBufferSource(), cf = ctx.createBiquadFilter(), cg = ctx.createGain(), tt = t + 0.3 + dt;
+      c.buffer = this.white; cf.type = 'bandpass'; cf.frequency.value = 1800; cf.Q.value = 1.2; c.connect(cf);
+      this._env(cg, tt, vol * 0.8, 0.002, 0.05); this._wire(cf, cg, 0, this.fx); c.start(tt, Math.random() * 1.5); c.stop(tt + 0.08);
+    });
+  }
   onWhistle(x, z, listener) {
     if (!this.ready || audio.muted || !listener) return;
     const d = Math.hypot(x - listener.x, z - listener.z);

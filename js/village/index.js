@@ -15,7 +15,7 @@ import { HOUSES, HALL, buildHouse } from './houses.js';
 import { buildGarden, PLANTS, SHADOW_PLANTS } from './gardens.js';
 import { buildPen, PEN_SIZE, ANIMALS } from './animals.js';
 import { well, cart, haystack, clothesline, hearth, shed, stall, tableSet, pots } from './props.js';
-import { Villagers } from './ai.js';
+import { Villagers, benchColliders } from './ai.js';
 import { VILLAGE_NAME, SQUARE, LANES, VILLAGE_CLEAR, BOUNDS, laneDist, laneSegments, placeHouses, inside, plot } from './layout.js';
 
 const CHUNK = 32;
@@ -68,6 +68,7 @@ export class Village {
       b.group(H.x, H.base, H.z, 0, H.yaw, 0, () => {
         buildHouse(b, H, gIn(F), i + 1);
         H.garden = buildGarden(b, H, gIn(F), i + 3, plantIn(F));
+        if (H.garden && H.garden.bench) { const p = Village.at(H, H.garden.bench.x, H.garden.bench.z); benchColliders(W, { x: p.x, z: p.z, yaw: H.yaw }); }
       });
       this._houseColliders(H);
       const door = Village.at(F, 0, (H.spec.shape === 'round' ? H.spec.r : H.spec.d / 2) + (H.spec.porch ? H.spec.porch.d : 0) + 0.9);
@@ -92,6 +93,8 @@ export class Village {
     for (const b of this.chunks.values()) { const g = b.build(mats); g.traverse(o => { if (o.isMesh) { o.matrixAutoUpdate = false; o.updateMatrix(); } }); this._add(g); }
     this._instanced();
     this.people.start(o => this._add(o));
+    // the steps, porches and stone foundations are walked on (js/world.js surfaces)
+    W.surfaces.push({ surfaceAt: (x, z) => this._stepAt(x, z) });
     // the lanes and the square on the ground, the grass and flowers kept off them, the map
     const segs = laneSegments();
     T.setVillageGround && T.setVillageGround(segs, SQUARE, BOUNDS);
@@ -109,6 +112,52 @@ export class Village {
     return false;
   }
 
+  // how high the steps, porch or foundation of a house are at (x, z) — null if none is there
+  _stepAt(x, z) {
+    for (const H of this.houses) {
+      const dx = x - H.x, dz = z - H.z;
+      if (dx * dx + dz * dz > 144) continue;
+      const S = H.spec, c = Math.cos(H.yaw), s = Math.sin(H.yaw), lx = dx * c - dz * s, lz = dx * s + dz * c;
+      if (S.shape === 'round') { if (lx * lx + lz * lz < (S.r + 0.25) ** 2) return H.base + 0.12; continue; }
+      const d2 = S.d / 2, pd = S.porch ? S.porch.d : 0, pw = S.porch ? Math.min(S.porch.w, S.w) : 0;
+      // the steps down from the porch / the door: step i has its top 0.34 − 0.22 i above the floor line
+      const sw = S.porch ? 0.65 : 0.7, z0 = d2 + pd + (S.porch ? -0.1 : -0.12);
+      if (Math.abs(lx) < sw && lz > z0 + 0.05 && lz < z0 + 0.32 * 9) {
+        const i = Math.max(1, Math.round((lz - z0) / 0.32));
+        const top = 0.34 - 0.22 * i;
+        if (top > -1.6 && H.base + top > this.world.T.heightAt(x, z) - 0.05) return H.base + top;
+      }
+      if (S.porch && Math.abs(lx) < pw / 2 && lz > d2 - 0.05 && lz < d2 + pd) return H.base + 0.12;
+      if (Math.abs(lx) < S.w / 2 + 0.21 && Math.abs(lz) < d2 + 0.21) return H.base + 0.15;
+      if (S.annex) { const A = S.annex, ax = A.side * (S.w / 2 + A.w / 2), az = -d2 + A.d / 2 + 0.2; if (Math.abs(lx - ax) < A.w / 2 + 0.1 && Math.abs(lz - az) < A.d / 2 + 0.1) return H.base + 0.12; }
+    }
+    return null;
+  }
+  // sitting down on any bench, cot or stool in the village (E): the free seat nearest you
+  acts(player) {
+    if (!this.people || !this.people.seatDefs) return [];
+    if (!this._acts) {
+      const T = this.world.T;
+      this._acts = this.people.seatDefs.map(D => {
+        const pos = { x: D.F.x, y: T.heightAt(D.F.x, D.F.z), z: D.F.z };
+        const what = D.where === 'table' ? 'stool' : D.h < 0.46 ? 'cot' : 'bench';
+        return { pos, r: 1.45, label: () => `Sit on the ${what}`, act: () => this._sit(D, player) };
+      });
+    }
+    return this._acts;
+  }
+  _sit(D, player) {
+    const T = this.world.T, c = Math.cos(D.F.yaw), s = Math.sin(D.F.yaw), W = (lx, lz) => ({ x: D.F.x + lx * c + lz * s, z: D.F.z - lx * s + lz * c });
+    const npcs = this.people.npcs || [];
+    const seats = D.local.map(([lx, lz], k) => { const p = W(lx, lz); return { p, k, lx, lz, d: Math.hypot(p.x - player.pos.x, p.z - player.pos.z), busy: npcs.some(n => n.shown && Math.hypot(n.px - p.x, n.pz - p.z) < 0.4) }; })
+      .filter(q => !q.busy).sort((a, b) => a.d - b.d);
+    if (!seats.length) { if (this.onToast) this.onToast('Both seats are taken'); return; }
+    const q = seats[0], y = T.heightAt(D.F.x, D.F.z) + D.h - 0.83;
+    const yaw = D.faceIn ? Math.atan2(D.F.x - q.p.x, D.F.z - q.p.z) : D.F.yaw;
+    const fx = Math.sin(yaw), fz = Math.cos(yaw), seat = { x: q.p.x - fx * 0.04, z: q.p.z - fz * 0.04 };
+    const ex = { x: q.p.x + fx * 0.85, z: q.p.z + fz * 0.85 };
+    player.sitWorld(new THREE.Vector3(seat.x, y, seat.z), yaw, new THREE.Vector3(ex.x, T.heightAt(ex.x, ex.z), ex.z));
+  }
   // every frame (Farm World): ms = the shared clock, viewers = players' positions
   update(dt, ms, viewers) { if (this.people) this.people.update(dt, ms, viewers); }
 
@@ -165,6 +214,7 @@ export class Village {
     for (const a of [0.6, 2.2, 3.8, 5.3]) {
       const x = Q.x + Math.cos(a) * 4.2, z = Q.z + Math.sin(a) * 4.2, yaw = Math.atan2(Q.x - x, Q.z - z) + Math.PI;
       put(x, z, yaw, () => bench(b, 0, 0, 0, 0));
+      benchColliders(this.world, { x, z, yaw });
       this.spots.benches.push({ x, z, yaw: yaw + Math.PI });
     }
     // the fruit stall on the west side, lamps round the square, barrels and pots

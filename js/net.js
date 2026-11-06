@@ -43,7 +43,7 @@ const PART = 7000;               // PeerJS refuses JSON messages over ~16 KB: bi
 // Snapshots that the next one replaces a moment later. On a congested link they are skipped instead
 // of queued: PeerJS queues up to 8 MB per link, so on a slow link queued snapshots made everything
 // arrive later and later (one player stopped seeing the others while the other side looked fine).
-const VOLATILE = new Set(['p', 'pp', 'rv', 'zs', 'gs', 'bridgeSnap', 'surv', 'world']);
+const VOLATILE = new Set(['p', 'pp', 'rv', 'zs', 'gs', 'bridgeSnap', 'surv', 'world', 'fbS']);
 // bytes waiting to go out on a link (WebRTC's queue + PeerJS's own queue)
 const backlog = c => ((c.dataChannel && c.dataChannel.bufferedAmount) || 0) + (c.bufferSize || 0) * 4096;
 const iceState = c => (c.peerConnection && c.peerConnection.iceConnectionState) || '';

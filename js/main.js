@@ -42,6 +42,7 @@ import { Notebook } from './farm/notebook.js';
 import { Village } from './village/index.js';
 import { GuardDogs } from './farm/dogs.js';
 import { Thieves } from './farm/thieves.js';
+import { Football } from './village/football.js';
 import { Ambience } from './ambience.js';
 import { Birds } from './birds.js';
 import { Grass } from './grass.js';
@@ -207,6 +208,11 @@ function theftReport() {
   if (list) { thieves.markReported(list); farmUI.open('thefts', list); }
 }
 const listener = { x: 0, z: 0, fx: 0, fz: 1 }, _fwd = new THREE.Vector3();
+// football on the village green: against the village kids, or with friends (js/village/football.js)
+const football = new Football(scene, { village, world, player, net, session, remotes, touch, toast: m => toast(m), hud: $('hud'),
+  sound: { kick: k => ambience.kick(k), whistle: () => ambience.refWhistle(), cheer: () => ambience.cheer() },
+  openOptions: (opts, pick) => farmUI.open('football', { opts, pick }) });
+village.onToast = m => toast(m);
 fishArea.onJump = (x, z, landing) => ambience.onFishJump(x, z, landing, listener, fishing.active);
 { const base = player.netExtra; player.netExtra = () => ({ ...base(), ...fishing.netExtra() }); }
 
@@ -247,7 +253,7 @@ player.worldActs = () => {
   l.push(...obstacles.acts(eq && eq.type));
   for (const a of crateActs) if (!a.c.taken) l.push(a);
   l.push(benchAct, boardAct, towerBenchAct, castleBenchAct, ...flagActs, ...survival.acts(), ...structures.acts());
-  if (farm.active) l.push(...farmland.acts(), ...fishing.acts());
+  if (farm.active) l.push(...farmland.acts(), ...fishing.acts(), ...village.acts(player), ...football.acts());
   return l;
 };
 
@@ -747,6 +753,7 @@ async function enterFarm(L, status, isNew) {
   village.enable({ farmland, minimap });   // the village behind the Market
   if (village.people) village.people.onWhistle = (x, z) => ambience.onWhistle(x, z, listener);   // the night watchman
   dogs.enable(); thieves.enable();      // guard dogs and thieves
+  football.enable();                    // football on the village green
   farmEco.start(L);
   startGame(r.role === 'host'
     ? (isNew || r.fresh ? `🌾 Welcome to ${L.roomName}! World code ${L.code} — invite friends from the menu (Esc)` : `🌾 Welcome back to ${L.roomName}`)
@@ -909,7 +916,7 @@ const focus = new THREE.Vector3(), pw = new THREE.Vector3();
 let freezeCam = null, plotInfoT = 0;
 
 function step(dt) {
-  if (farm.active) thieves.input(input);   // a thief in play: F / click throws the net (before the player punches)
+  if (farm.active) { thieves.input(input); football.input(input); }   // a thief in play: F / click throws the net; football: F shoots, E passes (before the player punches)
   globalKeys();
   const ctrl = player.update(dt, input, rig);
   gear.update(dt, input);
@@ -940,6 +947,7 @@ function step(dt) {
       for (const r of remotes.map.values()) if (r.pos) villageViewers.push(r.pos);
       village.update(dt, world.dayNight.now(), villageViewers);
     }
+    football.update(dt);
     fishArea.update(dt, player.mode === 'foot' ? player.pos : null);
     if ((plotInfoT -= dt) <= 0) { plotInfoT = 0.25; farmUI.renderInfo(player.mode === 'foot' ? farmland.plotAt(player.pos) : null); }
   } else if (plotInfoT !== 1) { plotInfoT = 1; farmUI.renderInfo(null); }
@@ -1020,7 +1028,7 @@ function debugStage(st, build) {
   if (build) { designer.show(build); designer._action('build'); designer.close(); }
   if (st === 'siege' || st === 'giants') survival._toStage(st);
 }
-window.__game = { renderer, dogs, thieves, debugStage, net, session, voice, birds, ambience, notebook, grass, farmPanel, minimap, village, structures, designer, giants, player, rvs, remotes, obstacles, bridgeWorld, materials, world, inv, gear, editor, input, rig, camera, zombies, survival, combat, applySave, collectSave, saveNow, farm, farmEco, farmUI, farmland, fishArea, fishing, dayNight: world.dayNight, get objI() { return objI; },
+window.__game = { renderer, dogs, thieves, football, debugStage, net, session, voice, birds, ambience, notebook, grass, farmPanel, minimap, village, structures, designer, giants, player, rvs, remotes, obstacles, bridgeWorld, materials, world, inv, gear, editor, input, rig, camera, zombies, survival, combat, applySave, collectSave, saveNow, farm, farmEco, farmUI, farmland, fishArea, fishing, dayNight: world.dayNight, get objI() { return objI; },
   // test hooks: advance the game n frames / pin the camera
   run: n => { for (let i = 0; i < n; i++) step(1 / 60); renderer.render(scene, camera); }, setCam: a => { freezeCam = a; } };
 

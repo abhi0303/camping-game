@@ -122,7 +122,7 @@ export function buildGarden(b, H, gAt, seed, plant) {
   // pots by the door, and a bench or a barrel
   const dz = d / 2 + (S.porch ? S.porch.d : 0) + 0.35;
   if (R() < 0.8) { pot(b, -0.95, gAt(-0.95, dz), dz, R, R() < 0.6); pot(b, 0.95, gAt(0.95, dz), dz, R, R() < 0.6); }
-  if (R() < 0.45) { const x = side2(R) * (half - 1.0), z = zA + 0.5; bench(b, x, gAt(x, z), z, Math.PI); info.bench = { x, z }; }
+  if (R() < 0.45) { const x = side2(R) * (half - 1.0), z = zA + 0.5; bench(b, x, gAt(x, z), z, 0); info.bench = { x, z }; }   // its back to the house: you look out over the garden
   else if (R() < 0.6) { const x = side2(R) * (half - 0.4), z = d / 2 - 0.2; barrel(b, x, gAt(x, z), z, C.wood); }
   return info;
 }

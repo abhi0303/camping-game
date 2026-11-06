@@ -1341,3 +1341,25 @@ body.touch #thiefAlert { top: 54px; font-size: 12.5px; }
 .fu-row.theft.stolen .fu-name { color: #b0402a; }
 .fu-row.theft.caught .fu-name, .fu-row.theft.scared .fu-name { color: #3f8a3a; }
 .fu-npc.thief .fu-say b { color: #b0402a; }
+
+/* ---------- football on the village green (js/village/football.js) ---------- */
+#fbBoard { position: absolute; left: 50%; top: 60px; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; padding: 6px 14px; border-radius: 12px;
+  background: rgba(22, 30, 22, .86); border: 2px solid #e8e2cc; color: #fff; font-size: 14px; pointer-events: none; z-index: 3; box-shadow: 0 4px 16px rgba(0,0,0,.35); white-space: nowrap; }
+#fbBoard.hidden, #fbMsg.hidden, #fbHint.hidden { display: none; }
+#fbBoard b { font-size: 20px; font-variant-numeric: tabular-nums; min-width: 14px; text-align: center; }
+#fbBoard .fb-team { font-weight: 800; letter-spacing: .04em; padding: 2px 8px; border-radius: 7px; background: var(--c); }
+#fbBoard .fb-dash { opacity: .7; }
+#fbBoard .fb-clk { margin-left: 6px; padding-left: 10px; border-left: 1px solid rgba(255,255,255,.3); font-weight: 700; font-variant-numeric: tabular-nums; min-width: 38px; }
+#fbBoard .fb-you { font-size: 12px; opacity: .92; padding: 2px 7px; border-radius: 7px; border: 1.5px solid var(--c); }
+#fbMsg { position: absolute; left: 50%; top: 30%; transform: translate(-50%, -50%); padding: 12px 26px; border-radius: 14px; font-size: 22px; font-weight: 700; color: #fff; text-align: center;
+  background: rgba(16, 22, 16, .8); border: 2px solid #ffd23a; pointer-events: none; z-index: 3; max-width: calc(100vw - 32px); animation: fbPop .35s ease-out; }
+#fbMsg b { font-size: 30px; letter-spacing: .06em; margin-right: 6px; }
+@keyframes fbPop { from { transform: translate(-50%, -50%) scale(.6); opacity: 0; } to { transform: translate(-50%, -50%) scale(1); opacity: 1; } }
+#fbHint { position: absolute; left: 50%; bottom: 96px; transform: translateX(-50%); padding: 6px 14px; border-radius: 10px; background: rgba(0,0,0,.55); color: #f4f0e4; font-size: 13px; pointer-events: none; z-index: 2; white-space: nowrap; }
+#fbHint b { color: #ffd23a; }
+body.touch #fbBoard { top: 42px; font-size: 12px; padding: 4px 10px; gap: 6px; }
+body.touch #fbBoard b { font-size: 16px; }
+body.touch #fbMsg { font-size: 16px; padding: 8px 16px; }
+body.touch #fbMsg b { font-size: 21px; }
+#touchUI .tb.kick { background: rgba(40, 110, 50, .8); border-color: #e8e2cc; color: #fff; }
+.fu-row.fb-opt .fu-name { font-weight: 800; }
