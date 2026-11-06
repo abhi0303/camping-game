@@ -45,7 +45,8 @@ const STORE_MENU = [
   ['dogs', '🐕', 'Guard dogs', 'keep thieves away from your eggs'],
   ['materials', '🧱', 'Building materials', 'wood and stone'],
   ['orders', '📜', 'Customer orders', '10% extra · daily streak'],
-  ['supplies', '🧰', 'Supplies', 'seeds and tools — coming soon'],
+  ['fields', '🌾', 'Fields, seeds & scarecrows', 'grow wheat by the big windmill'],
+  ['clothes', '👒', 'Clothes', 'the farmer outfit'],
 ];
 const VEHICLES_UNLOCKED = false;      // (vehicles are not sold yet — the menu shows them once they are)
 
@@ -115,6 +116,7 @@ export class FarmUI {
       }
       if (due) this.render();
     }
+    if (this.isOpen && this.view === 'field' && !this.busy && (this._ft = (this._ft || 0) + 1) % 5 === 0) this.render();   // (the growing bar moves on)
     if (this._barOn) { this.renderBar(true); this._orderAlert(); }
   }
   // a new order is ready: tell the players once
@@ -221,6 +223,7 @@ export class FarmUI {
     else if (this.view === 'market') { this.title.textContent = '🛒 Market'; html = head + this._market(); }
     else if (this.view === 'fish') { this.title.textContent = '🐟 Fish Market'; html = fishHead(this) + fishMarketView(this); }
     else if (this.view === 'storage') { this.title.textContent = `📦 Farm storage · level ${e.storageLevel}`; html = head + this._storage(); }
+    else if (this.view === 'field') { this.title.textContent = `🌾 Field ${this.arg + 1} · by the windmill`; html = head + this._field(this.arg); }
     else if (this.view === 'thefts') { this.title.textContent = '🚨 Thieves came to the farm'; html = this._thefts(); }
     else if (this.view === 'football') { this.title.textContent = '⚽ Football on the village green'; html = this._football(); }
     else if (this.view === 'plot') { this.title.textContent = `🌱 Plot ${this.arg + 1}`; html = head + this._plot(this.arg); }
@@ -256,7 +259,8 @@ export class FarmUI {
     if (this.tab === 'dogs') return back + this._dogs();
     if (this.tab === 'materials') return back + this._goodRows(['wood', 'stone']) + '<div class="fu-sub">Or chop trees and break rocks, then store the logs and stones at the farm storage — it\'s free.</div>';
     if (this.tab === 'orders') return back + this._orders();
-    if (this.tab === 'supplies') return back + '<div class="fu-row"><span class="fu-ico">🌱</span><span class="fu-main"><span class="fu-name">Nothing in stock yet</span><span class="fu-sub">Seeds and tools come with the crop fields. Feed is under “Purchase animal feed”.</span></span></div>';
+    if (this.tab === 'fields') return back + this._fieldsShop();
+    if (this.tab === 'clothes') return back + this._clothes();
     return back;
   }
   // guard dogs: the ones the farm has (on duty or asleep, feed, train) and one to buy
@@ -285,6 +289,77 @@ export class FarmUI {
     if (!e.qty('bone') && !e.qty('dog_treat') && T.dogs.length) html += `<div class="fu-sub fu-need">No bones or treats — they're under “Buy feed” (bone ₹${(e.cat('bone') || {}).buy}, treat ₹${(e.cat('dog_treat') || {}).buy}).</div>`;
     html += `<div class="fu-sub">Training: Level 2 ₹${L(2).cost} (saves ${cut(2)}; thieves twice a day at most) · Level 3 ₹${L(3).cost} (saves ${cut(3)}; once a day). Without a dog on duty a thief can come 3 times a day.</div>`;
     return html;
+  }
+  /* ---------- crop fields (js/farm/fields.js, server/src/fields.js) ---------- */
+  // one field's panel: buy it, sow, water, watch it grow, harvest; its scarecrow
+  _field(slot) {
+    const e = this.eco, FS = e.fields(), F = e.cat('field'), crop = e.cat('crop_wheat'), seeds = e.cat('wheat_seeds'), wheat = e.cat('wheat');
+    if (!FS || !F || !crop) return '<div class="fu-sub">The fields open with the next farm server update.</div>';
+    const I = this.g.fieldInfo(slot), busy = this.busy ? 'disabled' : '', n = slot + 1;
+    const steps = `<div class="fd-steps">${['Buy the field', 'Sow seeds', 'Water', `Grow ${crop.growH} h`, 'Harvest'].map((t, i) => `<span class="${this._fieldStep(I) > i ? 'done' : this._fieldStep(I) === i ? 'now' : ''}">${t}</span>`).join('')}</div>`;
+    if (!I.owned) {
+      return steps + `<div class="fu-npc"><span class="fu-ico">🧑‍🌾</span><span class="fu-say"><b>Farmer</b>“A good field, plowed and fenced. Sow wheat in it: one bag of ${seeds.seeds || 100} seeds for the whole field, water it, and in ${crop.growH} hours you'll cut about ${crop.yield} wheat.”</span></div>
+        <div class="fu-row"><span class="fu-ico">${F.icon}</span><span class="fu-main"><span class="fu-name">Field ${n} · ₹${F.buy}</span><span class="fu-sub">Yours for good — sow it again after every harvest. Six fields round the windmill.</span></span>
+        <button class="fu-go" data-x="fieldbuy" data-s="${slot}" ${e.money < F.buy ? 'disabled' : busy}>Buy · ₹${F.buy}</button></div>`;
+    }
+    let h = steps;
+    if (I.stage === 'empty' || I.stage === 'sowing') {
+      const have = e.qty('wheat_seeds');
+      h += `<div class="fu-row"><span class="fu-ico">${seeds.icon}</span><span class="fu-main"><span class="fu-name">Sow wheat</span>
+          <span class="fu-sub">Uses 1 seed bag (${seeds.seeds || 100} seeds) · the farm has <b>${have}</b>. Then walk all over the field scattering them for ${crop.sowS} s — hold Space, F or the mouse (SOW on a phone).</span></span>
+          <span class="fu-col">${have ? '' : `<button class="fu-go alt" data-x="buy" data-i="wheat_seeds" data-q="1" ${e.money < seeds.buy ? 'disabled' : busy}>Buy a bag · ₹${seeds.buy}</button>`}
+          <button class="fu-go" data-x="fieldsow" data-s="${slot}" ${have ? busy : 'disabled'}>🌱 Start sowing</button></span></div>`;
+      if (I.stage === 'sowing') h += '<div class="fu-sub">Someone started sowing here — start again if nobody finished it.</div>';
+    } else if (I.stage === 'sown') {
+      h += `<div class="fu-row"><span class="fu-ico">💧</span><span class="fu-main"><span class="fu-name">Water the field · ₹${crop.water}</span><span class="fu-sub">The seeds are in. Water them and the wheat starts growing — ready in ${crop.growH} hours (it grows while nobody plays, too).</span></span>
+        <button class="fu-go" data-x="fieldwater" data-s="${slot}" ${e.money < crop.water ? 'disabled' : busy}>💧 Water · ₹${crop.water}</button></div>`;
+    } else if (I.stage === 'growing') {
+      const room = Math.max(0, (e.st.caps.wheat || 1e9) - e.qty('wheat')), left = I.f.yield !== null && I.f.yield !== undefined ? I.f.yield - I.f.harvested : null;
+      const est = I.scarecrow >= 2 ? `${crop.yield}` : I.scarecrow === 1 ? `${Math.round(crop.yield * 0.8)}–${Math.round(crop.yield * 0.9)}` : `${Math.round(crop.yield * 0.7)}–${Math.round(crop.yield * 0.9)}`;
+      h += `<div class="fd-grow"><div class="fd-stage">${esc(I.growLabel)}</div><div class="fd-bar"><i style="width:${Math.round(I.pct * 100)}%"></i></div>
+        <div class="fu-sub">${I.ready ? 'Ripe!' : `Ready in <b data-cd="${I.f.readyAt}" data-re="1">${clock(I.msLeft)}</b>`} · harvest: ${left !== null ? `${left} wheat waiting` : `about ${est} wheat`}${I.scarecrow >= 2 ? '' : ' (the birds take their share)'}</div></div>`;
+      if (I.ready) h += `<button class="fu-go wide collect" data-x="fieldharvest" data-s="${slot}" ${room ? busy : 'disabled'}>${room ? `🌾 Harvest the wheat` : 'The storage is full of wheat — upgrade it'}</button>
+        <div class="fu-sub">Wheat goes into the farm storage (it holds ${e.st.caps.wheat}; the farm has ${e.qty('wheat')}).</div>`;
+    }
+    return h + this._scarecrowRow(slot, I);
+  }
+  _fieldStep(I) { return !I.owned ? 0 : I.stage === 'empty' || I.stage === 'sowing' ? 1 : I.stage === 'sown' ? 2 : I.ready ? 4 : 3; }
+  // a field's scarecrow: buy (level 1), dress it up (level 2)
+  _scarecrowRow(slot, I) {
+    const e = this.eco, k = e.cat('scarecrow');
+    if (!k || !I.owned) return '';
+    const L2 = (k.levels || []).find(l => l.level === 2) || {}, busy = this.busy ? 'disabled' : '', crop = e.cat('crop_wheat') || { yield: 500 };
+    const y = (a, b) => (a === b ? `${Math.round(crop.yield * a)}` : `${Math.round(crop.yield * a)}–${Math.round(crop.yield * b)}`), none = k.none || [0.7, 0.9], l1 = ((k.levels || [])[0] || {}).share || [0.8, 0.9];
+    if (!I.scarecrow) return `<div class="fu-row scare"><span class="fu-ico">${k.icon}</span><span class="fu-main"><span class="fu-name">Scarecrow · ₹${k.buy}</span>
+        <span class="fu-sub">Crows eat from a field without one: a harvest is only ${y(...none)} wheat. A scarecrow keeps most of them off (${y(...l1)}); dressed up to level 2, every grain is yours (${crop.yield}).</span></span>
+        <button class="fu-go" data-x="scare" data-s="${slot}" data-l="1" ${e.money < k.buy ? 'disabled' : busy}>Put one up · ₹${k.buy}</button></div>`;
+    if (I.scarecrow === 1) return `<div class="fu-row scare"><span class="fu-ico">${k.icon}</span><span class="fu-main"><span class="fu-name">Scarecrow · level 1</span>
+        <span class="fu-sub">Keeps most crows off — harvests of ${y(...l1)} wheat. Level 2 (a red patched coat, a bigger hat) keeps them all off: the full ${crop.yield}.</span></span>
+        <button class="fu-go sell" data-x="scare" data-s="${slot}" data-l="2" ${e.money < L2.cost ? 'disabled' : busy}>Level 2 · ₹${L2.cost}</button></div>`;
+    return `<div class="fu-row scare"><span class="fu-ico">${k.icon}</span><span class="fu-main"><span class="fu-name">Scarecrow · level 2</span><span class="fu-sub">No crow comes near — every harvest is the full ${crop.yield} wheat.</span></span></div>`;
+  }
+  // the Farm Store: seed bags, and a scarecrow for each field the farm has
+  _fieldsShop() {
+    const e = this.eco, FS = e.fields(), k = e.cat('scarecrow'), F = e.cat('field');
+    if (!FS || !F) return '<div class="fu-sub">The fields open with the next farm server update.</div>';
+    let h = `<div class="fu-npc"><span class="fu-ico">🧑‍🌾</span><span class="fu-say"><b>Farmer</b>“The fields are round the big windmill, east of the road — ₹${F.buy} each. Bring seeds, sow, water, and keep the crows off.”</span></div>`;
+    h += this._goodRows(['wheat_seeds']) + `<div class="fu-sub">One bag sows a whole field. You have ${FS.list.length} of ${FS.slots} fields.</div>`;
+    if (k) {
+      h += '<div class="fu-h">Scarecrows</div>';
+      if (!FS.list.length) h += `<div class="fu-sub">Buy a field first (walk up to one by the windmill and press E) — then put a scarecrow in it for ₹${k.buy}.</div>`;
+      for (const f of FS.list) h += this._scarecrowRow(f.slot, this.g.fieldInfo(f.slot)).replace('Scarecrow ·', `Field ${f.slot + 1} · Scarecrow ·`);
+    }
+    return h;
+  }
+  // clothes: the farmer outfit (yours once bought; put it on or take it off)
+  _clothes() {
+    const e = this.eco, k = e.cat('farmer_outfit'), W = e.wardrobe();
+    if (!k || !e.fields()) return '<div class="fu-sub">Clothes come with the next farm server update.</div>';
+    const own = W.owned.includes('farmer_outfit'), on = W.wearing === 'farmer_outfit', busy = this.busy ? 'disabled' : '';
+    const btn = !own ? `<button class="fu-go" data-x="outfit" data-o="buy" ${e.money < k.buy ? 'disabled' : busy}>Buy · ₹${k.buy}</button>`
+      : on ? `<button class="fu-go alt" data-x="outfit" data-o="off" ${busy}>Take it off</button>` : `<button class="fu-go" data-x="outfit" data-o="wear" ${busy}>Put it on</button>`;
+    return `<div class="fu-row"><span class="fu-ico">${k.icon}</span><span class="fu-main"><span class="fu-name">${esc(k.name)}${own ? '' : ` · ₹${k.buy}`}</span>
+        <span class="fu-sub">A wide straw hat, a work shirt and long blue denim overalls with the legs turned up — everyone sees you in it. ${own ? (on ? '<b class="fu-ok">You\'re wearing it.</b>' : 'It\'s yours.') : 'Bought with the farm\'s money, it\'s yours to wear.'}</span></span>${btn}</div>`;
   }
   // the report when you come back: every thief since you last looked
   _thefts() {
@@ -441,7 +516,7 @@ export class FarmUI {
       if (e.money < (next.money || 0)) miss.push(`₹${next.money - e.money}`);
       if (e.qty('wood') < (next.wood || 0)) miss.push(`${next.wood - e.qty('wood')} wood`);
       if (e.qty('stone') < (next.stone || 0)) miss.push(`${next.stone - e.qty('stone')} stone`);
-      const exp = goods.map(k => `${k.icon} ${Math.round(e.st.caps[k.id] / (cur.mult || 1) * next.mult)}`).join(' · ');
+      const exp = goods.map(k => `${k.icon} ${k.capStep ? e.st.caps[k.id] + k.capStep : Math.round(e.st.caps[k.id] / (cur.mult || 1) * next.mult)}`).join(' · ');
       up = `<div class="fu-row"><span class="fu-ico">⬆️</span><span class="fu-main"><span class="fu-name">Next upgrade: level ${next.level}</span>
           <span class="fu-sub">Cost: ₹${next.money || 0}${next.wood ? ` · 🪵 ${next.wood} wood` : ''}${next.stone ? ` · 🪨 ${next.stone} stone` : ''}</span>
           <span class="fu-sub">Expected capacity: ${exp}</span>${miss.length ? `<span class="fu-sub"><b class="fu-need">Need ${miss.join(', ')} more</b></span>` : ''}</span>
@@ -517,6 +592,12 @@ export class FarmUI {
     else if (x === 'dogfeed') await this._do({ action: 'dog', op: 'feed', dog: b.dataset.d, food: b.dataset.f });
     else if (x === 'dogtrain') await this._do({ action: 'dog', op: 'train', dog: b.dataset.d, level: Number(b.dataset.l) });
     else if (x === 'seenok') { this.close(); if (this.g.onSeen) this.g.onSeen(); }
+    else if (x === 'fieldbuy') await this._do({ action: 'field', op: 'buy', slot: Number(b.dataset.s) });
+    else if (x === 'fieldsow') { const slot = Number(b.dataset.s); await this._do({ action: 'field', op: 'sowstart', slot, crop: 'wheat' }, () => { this.close(); if (this.g.onSow) this.g.onSow(slot); }); }
+    else if (x === 'fieldwater') await this._do({ action: 'field', op: 'water', slot: Number(b.dataset.s) });
+    else if (x === 'fieldharvest') await this._do({ action: 'field', op: 'harvest', slot: Number(b.dataset.s) }, () => this.g.onHarvest && this.g.onHarvest());
+    else if (x === 'scare') await this._do({ action: 'field', op: 'scarecrow', slot: Number(b.dataset.s), level: Number(b.dataset.l) });
+    else if (x === 'outfit') await this._do({ action: 'outfit', op: b.dataset.o, item: 'farmer_outfit' });
     else if (x === 'fbpick') { const A = this.arg, o = A && A.opts[Number(b.dataset.i)]; this.close(); if (o) A.pick(o); }
     else if (x === 'feedall') await this._do({ action: 'feed', shelter: this.arg.id, all: true }, null, () => this._started());
     else if (x === 'feedn') await this._do({ action: 'feed', shelter: this.arg.id, count: Number(b.dataset.q) }, () => { delete this.qty.f; }, () => this._started());

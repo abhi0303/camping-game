@@ -173,6 +173,10 @@ export class FarmEconomy {
     const t = this.thieves();
     return t ? t.list.find(r => r.status === 'live' && Date.parse(r.at) <= now + 500 && Date.parse(r.escapeAt) + 1500 > now) || null : null;
   }
+  // crop fields by the windmill and this member's outfits (null on an older server: no fields there)
+  fields() { return this.st && this.st.fields ? this.st.fields : null; }
+  field(slot) { const F = this.fields(); return F ? F.list.find(f => f.slot === slot) || null : null; }
+  wardrobe() { const F = this.fields(); return F && F.wardrobe ? F.wardrobe : { owned: [], wearing: null }; }
   // Market orders (server state, or null on an older server): the order to deliver now, the next one's arrival
   orders() { return this.st && this.st.orders ? this.st.orders : null; }
   orderNow() {

@@ -24,6 +24,7 @@ export const ICON = {
   leave: I('M15 4h4v16h-4|M10 8l-4 4 4 4|M6 12h10'),
   net: '<b style="font-size:15px;letter-spacing:.04em">NET</b>',
   KICK: '<b style="font-size:14px;letter-spacing:.04em">KICK</b>',
+  SOW: '<b style="font-size:15px;letter-spacing:.04em">SOW</b>',
   PASS: '<b style="font-size:14px;letter-spacing:.04em">PASS</b>',
 };
 const CANNON_SVG = '<svg class="gunIco" viewBox="0 0 64 22" aria-hidden="true"><path d="M16 4.5 L61 1.5 L61 12.5 L16 13.5 Z M10 6 h8 v8 h-8z" fill="currentColor"/><circle cx="20" cy="16" r="5.2" fill="none" stroke="currentColor" stroke-width="2.6"/></svg>';
@@ -99,7 +100,7 @@ export class TouchUI {
   // (this.farm: Farm World — the gun button is left out)
   setMode(mode, holding) {
     if (!this.enabled) return;
-    const key = mode + '|' + holding + '|' + (this.weapon || '') + '|' + !!this.farm + '|' + !!this.net + '|' + !!this.fb;
+    const key = mode + '|' + holding + '|' + (this.weapon || '') + '|' + !!this.farm + '|' + !!this.net + '|' + !!this.fb + '|' + !!this.sow;
     if (key === this.mode) return;
     this.mode = key;
     this.btns.forEach((b, i) => {
@@ -116,9 +117,15 @@ export class TouchUI {
       // playing football: F kicks, E passes, Q leaves the match
       if (fb && !net) { const lab = { KeyF: 'KICK', KeyE: 'PASS', KeyQ: 'leave' }[def[0]]; if (lab) b.innerHTML = ICON[lab]; }
       b.classList.toggle('kick', !!(fb && def[0] === 'KeyF'));
+      // sowing a field: the F button scatters seeds
+      const sw = this.sow && def[0] === 'KeyF' && mode === 'foot';
+      b.classList.toggle('sow', !!sw);
+      if (sw) b.innerHTML = ICON.SOW;
     });
   }
   // in a football match (js/village/football.js): KICK / PASS / leave buttons
+  // sowing a field (js/farm/fields.js): the F button becomes SOW
+  setSow(on) { if (!this.enabled || !!on === !!this.sow) return; this.sow = !!on; this.mode = ''; }
   setFootball(on) { if (!this.enabled || !!on === !!this.fb) return; this.fb = !!on; this.mode = ''; }
   // a thief is in reach: the F button becomes the NET button
   setNet(on) { if (!this.enabled || !!on === !!this.net) return; this.net = !!on; this.mode = ''; }

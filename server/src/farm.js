@@ -14,6 +14,7 @@ import { cast, reel, buyRod, fishingState } from './fishing.js';
 import { ensureOrders, ordersState, deliver } from './orders.js';
 import { ensureRentals, rentalsState, rent, sellHorse, isHorse, HORSES } from './horses.js';
 import { thiefCtx, thiefStep, thiefSave, thievesState, catchThief, dogAction, seenThefts } from './thieves.js';
+import { fieldsState, fieldAction, outfitAction } from './fields.js';
 
 const H = 3600e3;
 const MAX_OFFLINE_H = 24 * 7;          // production is counted for at most a week of absence
@@ -46,7 +47,8 @@ async function writeInv(c, roomId, items, inv) {
 }
 // storage limits grow with the farm storage level
 const storageMult = (cat, level) => ((cat.storage && cat.storage.levels) || []).reduce((m, l) => (l.level <= level ? l.mult || m : m), 1);
-const capOf = (cat, item, level) => (cat[item] && cat[item].cap ? cat[item].cap * storageMult(cat, level) : Infinity);
+// (a good with capStep grows by that much a level instead: wheat holds 1000, 1500, 2000…)
+const capOf = (cat, item, level) => (cat[item] && cat[item].cap ? (cat[item].capStep ? cat[item].cap + cat[item].capStep * (level - 1) : cat[item].cap * storageMult(cat, level)) : Infinity);
 
 /* ---------- production ---------- */
 // Work out the farm between two moments (ms), in steps of at most an hour. An animal produces only
@@ -150,6 +152,7 @@ async function state(c, roomId, cat, s, me) {
     orders: await ordersState(c, roomId, s),
     rentals: await rentalsState(c, roomId, s),
     thieves: await thievesState(c, roomId, s, me, cat),
+    fields: await fieldsState(c, roomId, s, cat, me),
   };
 }
 
@@ -211,7 +214,7 @@ const plural = (n, k) => `${n} ${lower(k.name)}${n === 1 || /s$/.test(k.name) ? 
 
 async function buy(c, { me, b, cat, s }) {
   const item = String(b.item || ''), k = cat[item];
-  if (!k || !k.buy || k.kind === 'building' || k.kind === 'upgrade' || k.kind === 'dog') throw new ApiError(400, 'bad_item', 'That can\'t be bought here.');
+  if (!k || !k.buy || (k.kind !== 'animal' && k.kind !== 'good')) throw new ApiError(400, 'bad_item', 'That can\'t be bought here.');
   const qty = whole(b.qty, 1, k.kind === 'animal' ? 12 : 500);
   if (k.unlock && s.earned < k.unlock) throw new ApiError(409, 'locked', `${k.name}s are sold once the farm has earned ₹${k.unlock} from sales (₹${s.earned} so far).`);
   const foal = isHorse(k) && b.age === 'foal';            // a baby horse: cheaper, Level 1
@@ -378,4 +381,4 @@ async function gate(c, { me, b }) {
 }
 
 const ACTIONS = { buy, sell, build, deposit, feed, upgrade, gate, collect, cast, reel, rod: buyRod, order: deliver, rent, sellhorse: sellHorse,
-  catch: catchThief, dog: dogAction, seen: seenThefts };
+  catch: catchThief, dog: dogAction, seen: seenThefts, field: fieldAction, outfit: outfitAction };

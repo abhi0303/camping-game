@@ -66,6 +66,7 @@ export class Remotes {
       this.map.set(id, r);
     }
     r.s = s; r.last = performance.now();
+    if ((s.oc || null) !== (r.oc || null)) { r.oc = s.oc || null; r.char.setOutfit(r.oc); }   // an outfit (Farm World)
     return r;
   }
   remove(id) {

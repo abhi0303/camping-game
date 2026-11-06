@@ -361,6 +361,41 @@ ALTER TABLE rooms ADD COLUMN thief_due_at TIMESTAMPTZ;           -- a thief has 
 ALTER TABLE room_members ADD COLUMN thefts_seen_at TIMESTAMPTZ;  -- this member has read the theft reports up to then
 `,
   },
+  {
+    id: 9,
+    name: 'wheat_fields_scarecrows_outfits',
+    sql: `
+-- six crop fields by the windmill (server/src/fields.js), wheat to start with; scarecrows keep the birds off;
+-- outfits for the players
+ALTER TABLE catalog DROP CONSTRAINT catalog_kind_check;
+ALTER TABLE catalog ADD CONSTRAINT catalog_kind_check CHECK (kind IN ('animal', 'good', 'building', 'upgrade', 'gear', 'dog', 'field', 'crop', 'outfit'));
+INSERT INTO catalog (item, kind, name, icon, buy_price, sell_price, data, sort) VALUES
+  ('field',         'field',  'Farm field',            '🏞', 500,  NULL, '{"crops": ["wheat"]}', 50),
+  ('wheat_seeds',   'good',   'Wheat seed bags',       '🫘', 10,   NULL, '{"cap": 30, "seeds": 100, "crop": "wheat"}', 51),
+  ('wheat',         'good',   'Wheat',                 '🌾', NULL, NULL, '{"cap": 1000, "capStep": 500}', 52),
+  ('crop_wheat',    'crop',   'Wheat',                 '🌾', NULL, NULL, '{"seed": "wheat_seeds", "product": "wheat", "sowS": 10, "water": 20, "growH": 2, "yield": 500}', 53),
+  ('scarecrow',     'gear',   'Scarecrow',             '🎃', 500,  NULL, '{"none": [0.7, 0.9], "levels": [{"level": 1, "share": [0.8, 0.9]}, {"level": 2, "cost": 800, "share": [1, 1]}]}', 54),
+  ('farmer_outfit', 'outfit', 'Farmer outfit',         '👒', 1000, NULL, '{"look": "straw hat and denim overalls"}', 55);
+CREATE TABLE farm_fields (
+  id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  room_id        UUID NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
+  slot           SMALLINT NOT NULL CHECK (slot BETWEEN 0 AND 5),
+  crop           TEXT,                                 -- what's in it (catalog crop_<crop>), NULL when empty
+  stage          TEXT NOT NULL DEFAULT 'empty' CHECK (stage IN ('empty', 'sowing', 'sown', 'growing')),
+  sow_started_at TIMESTAMPTZ,
+  sow_by         UUID REFERENCES room_members(id) ON DELETE SET NULL,
+  sown_at        TIMESTAMPTZ,
+  watered_at     TIMESTAMPTZ,
+  ready_at       TIMESTAMPTZ,                          -- growing: ripe from then
+  yield          INTEGER,                              -- decided at the first harvest (after the birds)
+  harvested      INTEGER NOT NULL DEFAULT 0,           -- taken so far (the rest waits for room in the storage)
+  scarecrow      SMALLINT NOT NULL DEFAULT 0 CHECK (scarecrow BETWEEN 0 AND 2),
+  bought_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (room_id, slot)
+);
+ALTER TABLE room_members ADD COLUMN outfits TEXT[] NOT NULL DEFAULT '{}', ADD COLUMN outfit TEXT;
+`,
+  },
 ];
 
 const LOCK_ID = 727001;   // advisory lock: two migrate runs never overlap

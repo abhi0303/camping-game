@@ -120,7 +120,8 @@ export class Character {
 
   // hidden in first-person / cockpit so the camera doesn't see the inside of the head or torso
   // Recolour the outfit in place (vertex colours), e.g. when you get your co-op slot
-  setColors(colors) {
+  setColors(colors, own = false) {
+    if (this.outfit && !own) { Object.assign(this.slotCol, colors); return; }   // (in an outfit: the slot colours wait until it comes off)
     const next = { ...this.col, ...colors }, pairs = [];
     for (const k of ['jacket', 'jacketLt', 'shirt', 'jeans', 'jeansDk']) if (next[k] !== undefined && next[k] !== this.col[k]) pairs.push([new THREE.Color(this.col[k]), new THREE.Color(next[k])]);
     this.col = next;
@@ -136,7 +137,46 @@ export class Character {
       if (changed) c.needsUpdate = true;
     });
   }
-  setHeadVisible(v) { this.j.head.visible = v; this.j.neck.children[0].visible = v; this.j.spine.children[0].visible = v; }
+  // an outfit over the clothes (Farm World): 'farmer_outfit' — a wide straw hat, a work shirt and long denim bib
+  // overalls with the legs turned up; null: your own clothes again
+  setOutfit(id) {
+    id = id || null;
+    if (id === this.outfit) return;
+    if (this.outfitParts) { for (const m of this.outfitParts) m.removeFromParent(); this.outfitParts = null; }
+    if (!id) { const back = this.slotCol; this.outfit = null; if (back) this.setColors(back, true); return; }
+    if (!this.outfit) { this.slotCol = {}; for (const k of ['jacket', 'jacketLt', 'shirt', 'jeans', 'jeansDk']) this.slotCol[k] = this.col[k]; }
+    this.outfit = id;
+    const D = 0x4a6fa8, DD = 0x3e5f92, ST = 0xe2c47a, STD = 0xc9a75a, BR = 0xc9a23a;
+    this.setColors({ jacket: 0xd9c49a, jacketLt: 0xcdb68a, shirt: 0xe6d3a8, jeans: D, jeansDk: DD }, true);
+    const parts = this.outfitParts = [];
+    const add = (parent, fn) => { const m = this._mesh(fn); m.traverse(o => { if (o.isMesh) o.castShadow = true; }); parent.add(m); parts.push(m); };
+    // the bib, the straps over the shoulders with brass buttons, a chest pocket
+    add(this.j.spine, b => {
+      b.add(tbox(0.26, 0.05, 0.3, 0.06, 0.3), D, 0, 0.16, 0.115);
+      b.box(0.12, 0.08, 0.012, 0, 0.2, 0.145, DD);
+      b.box(0.13, 0.008, 0.014, 0, 0.24, 0.146, 0xe8d8a0);
+      for (const s of [1, -1]) {
+        b.box(0.05, 0.36, 0.02, s * 0.1, 0.36, 0.125, D, 'solid', -0.12, 0, s * 0.05);
+        b.box(0.05, 0.4, 0.02, s * 0.1, 0.3, -0.135, D, 'solid', 0.1, 0, -s * 0.18);
+        b.box(0.045, 0.045, 0.02, s * 0.1, 0.29, 0.14, BR);
+      }
+    });
+    add(this.j.hips, b => { b.box(0.36, 0.06, 0.23, 0, 0.06, 0, D); for (const s of [1, -1]) b.box(0.06, 0.08, 0.012, s * 0.11, -0.02, 0.112, DD); });
+    // the turned-up cuffs at the ankles
+    for (const k of ['knL', 'knR']) add(this.j[k], b => b.box(0.165, 0.07, 0.18, 0, -0.35, 0, 0x6f8fc4));
+    // the straw hat: a wide brim, a round crown, a woven band
+    add(this.j.head, b => {
+      b.add(new THREE.CylinderGeometry(0.29, 0.31, 0.025, 14), ST, 0, 0.27, 0.0);
+      b.add(new THREE.CylinderGeometry(0.255, 0.27, 0.012, 14), STD, 0, 0.286, 0.0);
+      b.add(new THREE.CylinderGeometry(0.11, 0.13, 0.12, 10), ST, 0, 0.34, -0.005);
+      b.add(new THREE.CylinderGeometry(0.135, 0.135, 0.035, 10), 0x8a5a2a, 0, 0.3, -0.005);
+      for (let i = 0; i < 7; i++) { const a = i / 7 * Math.PI * 2; b.box(0.012, 0.11, 0.02, Math.sin(a) * 0.118, 0.34, Math.cos(a) * 0.118 - 0.005, STD, 'solid', 0, a, 0); }
+    });
+  }
+  setHeadVisible(v) {
+    this.j.head.visible = v; this.j.neck.children[0].visible = v; this.j.spine.children[0].visible = v;
+    if (this.outfitParts) for (const m of this.outfitParts) if (m.parent === this.j.spine) m.visible = v;
+  }
 
   punch() {
     if (this.punchT < 0.6) return false;

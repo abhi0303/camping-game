@@ -36,6 +36,8 @@ export class FarmGuide {
       { text: 'Go fishing: buy worms at the Fish Market, follow the path to the river docks and land a fish', done: s => eco().fished || !!(s.fishing && s.fishing.mine),
         at: () => (eco().qty('worms') && this.g.fishArea.spots[1] ? this.g.fishArea.spots[1].stand : FISH_MARKET) },
       { text: 'Build a cow barn and buy a cow — cow milk is worth the most', done: s => count(s, 'cow') > 0, at: () => (has(eco().st, 'barn') ? STORE : freePlot()) },
+      { text: s => (!s.fields || !s.fields.list.length ? 'Buy a field by the big windmill (east of the road) and grow wheat: seeds, sow, water, harvest' : 'Grow wheat: sow a field (seed bags at the Farm Store), water it, and harvest it after 2 hours'),
+        done: s => !s.fields || (s.inventory.wheat || 0) > 0, at: () => this.g.fieldsAt ? this.g.fieldsAt() : FARM_CENTER },
       { text: 'Build a horse stable and raise a horse — grown horses can be rented out', done: s => count(s, 'horse') > 0, at: () => (has(eco().st, 'stable') ? STORE : freePlot()) },
       { text: 'Train your guard dog to level 2 at the Farm Store — it stops more thieves', done: s => !s.thieves || s.thieves.dogs.some(d => d.level >= 2), at: () => STORE },
       { text: 'Get a second guard dog: two dogs guard the farm better than one', done: s => !s.thieves || s.thieves.dogs.length >= 2, at: () => STORE },
