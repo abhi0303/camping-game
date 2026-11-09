@@ -6,12 +6,16 @@
 //   - A scarecrow (two levels) stands in the middle of a field that has one. Without one, crows come down and peck
 //     at the crops (a level 1 scarecrow keeps most of them off now and then, level 2 all of them).
 //   - Everyone sees the same fields: the stage comes from the server's times, the crops sway in the wind.
+//   - You can tell the farm's own fields from far away: a field for sale is rough, grassy, unplowed land with weeds;
+//     once it's bought it's plowed, and gets an arch over its gate with the farm's name on a green board, a tall
+//     waving flag (it goes up when you buy the field), pennants on the four corners and two lanterns lit at night.
 import * as THREE from 'three';
 import { GeoBuilder, MAT } from '../utils.js';
 import { limb } from '../flora.js';
 import { MILL } from './dutchmill.js';
 import { CROPS, stageAt } from './crops.js';
 import { scarecrowGeometry, crowGeometry } from './scarecrow.js';
+import { lantern } from './props.js';
 
 export const FIELD = { w: 10, d: 7.5 };
 // the six fields in the windmill's frame (x across, z toward its front): two columns either side, three rows
@@ -19,6 +23,11 @@ const LAYOUT = [[-16.5, -10], [-16.5, 0], [-16.5, 10], [16.5, -10], [16.5, 0], [
 const prng = seed => { let s = (seed % 2147483646) + 1; return () => (s = (s * 16807) % 2147483647) / 2147483647; };
 const c01 = v => (v < 0 ? 0 : v > 1 ? 1 : v);
 const SOIL = 0x7a5534, SOIL_D = 0x5e3f24, SOIL_L = 0x8c6440;
+// a bought field's colours: the arch's wood, its painted board, gold trim; the flags
+const ARCH = { wood: 0x6e4626, woodL: 0x8a5a33, board: 0x24502a, gold: 0xd9b04a, pole: 0xe2dccd };
+const PENNANTS = [0xffc93a, 0xd7263d, 0xffc93a, 0xd7263d];
+const CONFETTI = [0xffd23a, 0xd7263d, 0xffffff, 0x7fd36a, 0xff8a1f];
+const FLAG_TOP = 5.3, FLAG_LOW = 3.8, PEN_Y = 2.2;   // (flag centre when up / lowered, pennant centre: above the ground)
 
 export class FarmFields {
   // g: { world, eco, player, touch, toast, hud, openField(slot), act(body) }
@@ -52,8 +61,11 @@ export class FarmFields {
     const fence = new GeoBuilder();
     LAYOUT.forEach(([mx, mz], slot) => {
       const p = FarmFields.at(MILL, mx, mz), F = { x: p.x, z: p.z, yaw: MILL.yaw }, gs = mx < 0 ? 1 : -1;   // gs: the gate's side (toward the windmill)
-      const f = { slot, F, gs, gateX: gs * w / 2, stage: null, crop: null, key: '' };
+      const f = { slot, F, gs, gateX: gs * w / 2, stage: null, crop: null, key: '', owned: null, known: false, raise: 0 };
       f.hAt = (lx, lz) => { const q = FarmFields.at(F, lx, lz); return T.heightAt(q.x, q.z); };
+      // what a bought field has (plowed earth, the arch, flag poles) and what a field for sale has (rough grassy land)
+      f.ownG = new THREE.Group(); f.saleG = new THREE.Group(); f.ownG.visible = false;
+      this.scene.add(f.ownG, f.saleG);
       // the plowed ground: ridges and furrows along the field, following the land
       const nx = 12, nz = 44, pos = [], col = [], idx = [], cc = new THREE.Color();
       for (let j = 0; j <= nz; j++) for (let i = 0; i <= nx; i++) {
@@ -67,7 +79,8 @@ export class FarmFields {
       g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); g.setIndex(idx);
       g.computeVertexNormals();
       f.soilMat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
-      f.ground = new THREE.Mesh(g, f.soilMat); f.ground.receiveShadow = true; this.scene.add(f.ground); W.addFogCull(f.ground);
+      f.ground = new THREE.Mesh(g, f.soilMat); f.ground.receiveShadow = true; f.ownG.add(f.ground); W.addFogCull(f.ground);
+      this._buildFallow(f, T);
       W.addGrassBlock((x, z) => { const l = FarmFields.local(F, x, z); return Math.abs(l.x) < w / 2 + 0.5 && Math.abs(l.z) < d / 2 + 0.5; });
       // the fence round it (posts and two rails), open at the gate; you bump into it
       const perim = [[-w / 2, -d / 2, w / 2, -d / 2], [w / 2, -d / 2, w / 2, d / 2], [w / 2, d / 2, -w / 2, d / 2], [-w / 2, d / 2, -w / 2, -d / 2]];
@@ -99,6 +112,7 @@ export class FarmFields {
       f.sign.position.set(sp.x + Math.sin(yaw) * 0.035, sy + 1.3, sp.z + Math.cos(yaw) * 0.035); f.sign.rotation.y = yaw;
       this.scene.add(f.sign); W.addFogCull(f.sign);
       f.gatePos = FarmFields.at(F, gs * (w / 2 + 1.0), 0);
+      this._buildOwned(f, T);
       // where the crops stand: clumps along the ridges (none in the middle, where the scarecrow goes)
       const R = prng(9001 + slot * 131), C = CROPS.wheat, spots = [];
       for (let lz = -d / 2 + 0.45; lz < d / 2 - 0.35; lz += C.rows) for (let lx = -w / 2 + 0.35; lx < w / 2 - 0.3; lx += C.step) {
@@ -128,6 +142,7 @@ export class FarmFields {
     this.bits = new THREE.InstancedMesh(new THREE.BoxGeometry(0.035, 0.035, 0.035), new THREE.MeshBasicMaterial({ color: 0xffffff }), 400);
     this.bits.count = 0; this.bits.frustumCulled = false; this.bits.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(400 * 3), 3);
     this.scene.add(this.bits);
+    this._buildFlags();
     this._m = new THREE.Matrix4(); this._q = new THREE.Quaternion(); this._v = new THREE.Vector3(); this._s = new THREE.Vector3(); this._e = new THREE.Euler(); this._c = new THREE.Color();
     // the sowing meter on the screen
     this.meter = document.createElement('div'); this.meter.id = 'sowMeter'; this.meter.className = 'hidden'; this.g.hud.appendChild(this.meter);
@@ -146,6 +161,154 @@ export class FarmFields {
   }
   _cell(lx, lz) { const i = Math.max(0, Math.min(9, Math.floor((lx + FIELD.w / 2) / FIELD.w * 10))), j = Math.max(0, Math.min(5, Math.floor((lz + FIELD.d / 2) / FIELD.d * 6))); return j * 10 + i; }
 
+  /* ---------- how a field looks: for sale (rough land) or the farm's (plowed, with an arch and flags) ---------- */
+  // a field for sale: unplowed ground, grass in patches of green, dry yellow and bare earth, weeds, wild flowers, stones
+  _buildFallow(f, T) {
+    const { w, d } = FIELD, nx = 10, nz = 8, pos = [], col = [], idx = [], cc = new THREE.Color(), R = prng(4242 + f.slot * 77);
+    for (let j = 0; j <= nz; j++) for (let i = 0; i <= nx; i++) {
+      const lx = -w / 2 + w * i / nx, lz = -d / 2 + d * j / nz, q = FarmFields.at(f.F, lx, lz);
+      const n = Math.sin(lx * 0.9 + f.slot) * Math.cos(lz * 1.3 - f.slot * 0.7) + (R() - 0.5) * 0.9;
+      pos.push(q.x, T.heightAt(q.x, q.z) + 0.05 + R() * 0.04, q.z);
+      cc.set(n > 0.55 ? 0x8f8a4a : n < -0.75 ? 0x7d6440 : n > 0 ? 0x6b9440 : 0x5e8a36); col.push(cc.r, cc.g, cc.b);
+    }
+    for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) { const a = j * (nx + 1) + i, b = a + 1, c = a + nx + 1, e = c + 1; idx.push(a, c, b, b, c, e); }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); g.setIndex(idx);
+    g.computeVertexNormals();
+    const ground = new THREE.Mesh(g, MAT.solid); ground.receiveShadow = true; f.saleG.add(ground); this.g.world.addFogCull(ground);
+    // weeds, wild flowers and a few stones
+    const b = new GeoBuilder(), spot = m => { const lx = (R() - 0.5) * (w - m), lz = (R() - 0.5) * (d - m), q = FarmFields.at(f.F, lx, lz); return { x: q.x, y: T.heightAt(q.x, q.z) + 0.06, z: q.z }; };
+    for (let k = 0; k < 46; k++) {
+      const p = spot(0.6), h = 0.3 + R() * 0.3, dry = R() < 0.3;
+      for (let i = 0; i < 3; i++) {
+        const a = R() * Math.PI * 2;
+        b.add(new THREE.ConeGeometry(0.06, h * (0.7 + R() * 0.4), 4), dry ? (i ? 0xb3a452 : 0xa39548) : (i ? 0x77a243 : 0x5f8c34), p.x + Math.cos(a) * 0.06, p.y + h * 0.4, p.z + Math.sin(a) * 0.06, Math.sin(a) * 0.35, R() * 3, Math.cos(a) * 0.35);
+      }
+    }
+    for (let k = 0; k < 16; k++) {
+      const p = spot(0.8), h = 0.25 + R() * 0.2;
+      b.box(0.02, h, 0.02, p.x, p.y + h / 2, p.z, 0x5f8c34);
+      b.box(0.08, 0.05, 0.08, p.x, p.y + h, p.z, k % 3 ? 0xf2d64b : 0xf4f0e6, 'solid', 0, R() * 3, 0);
+    }
+    for (let k = 0; k < 5; k++) { const p = spot(1); b.add(new THREE.DodecahedronGeometry(0.12 + R() * 0.1, 0), k % 2 ? 0x8a877f : 0x9e9b92, p.x, p.y + 0.02, p.z, R() * 3, R() * 3, 0, 'solid', 1, 0.6, 1); }
+    const m = b.build(MAT);
+    m.traverse(o => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = true; o.updateMatrixWorld(true); this.g.world.addFogCull(o); } });
+    f.saleG.add(m);
+  }
+  // a bought field: an arch over the gate (two tall posts, a beam, a green board with the farm's name between two
+  // beams, a lantern hanging from each end of the beam, a flag pole on top) and a pennant pole at each corner.
+  // The arch's frame: x along the gate, z out of the field, y up from the ground at the gate.
+  _buildOwned(f, T) {
+    const fw = FIELD.w / 2 + 0.25, fd = FIELD.d / 2 + 0.25, g0 = FarmFields.at(f.F, f.gs * fw, 0);
+    const A = f.A = { x: g0.x, z: g0.z, y: T.heightAt(g0.x, g0.z), yaw: f.F.yaw + (f.gs > 0 ? Math.PI / 2 : -Math.PI / 2) };
+    const b = new GeoBuilder(), hp = s => { const q = FarmFields.at(A, s * 1.1, 0); return T.heightAt(q.x, q.z) - A.y; };
+    b.group(A.x, A.y, A.z, 0, A.yaw, 0, () => {
+      for (const s of [-1, 1]) {
+        const y0 = hp(s) - 0.15, top = 3.2;
+        b.box(0.22, top - y0, 0.22, s * 1.1, (top + y0) / 2, 0, ARCH.wood);
+        b.box(0.28, 0.06, 0.28, s * 1.1, top + 0.03, 0, ARCH.gold);
+        b.cyl(0, 0.16, 0.2, 4, s * 1.1, top + 0.16, 0, ARCH.woodL, 0, Math.PI / 4, 0);
+        limb(b, [s * 1.1, 1.95, 0], [s * 0.72, 2.3, 0], 0.045, 0.045, ARCH.woodL, 4);             // knee braces
+        b.box(0.04, 0.12, 0.04, s * 1.4, 2.86, 0, 0x3a3a3e);
+        lantern(b, s * 1.4, 2.32, 0);
+      }
+      b.box(3.0, 0.2, 0.24, 0, 3.0, 0, ARCH.woodL);                                                // the top beam
+      b.box(2.0, 0.13, 0.17, 0, 2.3, 0, ARCH.wood);                                                // the lower beam
+      b.box(1.98, 0.54, 0.1, 0, 2.63, 0, ARCH.board);                                              // the board (painted both sides)
+      b.cyl(0.04, 0.05, 2.8, 6, 0, 3.1 + 1.4, 0, ARCH.pole);                                        // the flag pole
+      b.add(new THREE.SphereGeometry(0.09, 8, 6), ARCH.gold, 0, 5.93, 0);
+    });
+    f.pens = [];
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+      const q = FarmFields.at(f.F, sx * fw, sz * fd), y = T.heightAt(q.x, q.z), o = FarmFields.at(f.F, sx * (fw + 1), sz * (fd + 1));
+      b.cyl(0.03, 0.04, 2.45, 5, q.x, y + 1.2, q.z, ARCH.pole);
+      b.add(new THREE.SphereGeometry(0.06, 6, 4), ARCH.gold, q.x, y + 2.46, q.z);
+      f.pens.push({ x: q.x, y: y + PEN_Y, z: q.z, yaw: Math.atan2(-(o.z - q.z), o.x - q.x) });   // the pennant points away from the field
+    }
+    const m = b.build(MAT);
+    m.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; o.updateMatrixWorld(true); this.g.world.addFogCull(o); } });
+    f.ownG.add(m);
+    // the board's painted faces (the farm's name and the field's number), front and back
+    f.acv = document.createElement('canvas'); f.acv.width = 512; f.acv.height = 140;
+    f.atex = new THREE.CanvasTexture(f.acv); f.atex.colorSpace = THREE.SRGBColorSpace; f.atex.anisotropy = 4;
+    const mat = new THREE.MeshLambertMaterial({ map: f.atex, emissive: 0xffffff, emissiveMap: f.atex, emissiveIntensity: 0.22 });
+    for (const side of [1, -1]) {
+      const pl = new THREE.Mesh(new THREE.PlaneGeometry(1.9, 0.5), mat), q = FarmFields.at(A, 0, side * 0.056);
+      pl.position.set(q.x, A.y + 2.63, q.z); pl.rotation.y = A.yaw + (side > 0 ? 0 : Math.PI);
+      f.ownG.add(pl); this.g.world.addFogCull(pl);
+    }
+  }
+  _drawArch(f) {
+    const name = ((this.g.worldName && this.g.worldName()) || 'Our farm').toUpperCase(), key = name;
+    if (f.archKey === key) return;
+    f.archKey = key;
+    const g = f.acv.getContext('2d'), W = f.acv.width, H = f.acv.height;
+    const grd = g.createLinearGradient(0, 0, 0, H); grd.addColorStop(0, '#2f6a35'); grd.addColorStop(1, '#1d4422'); g.fillStyle = grd; g.fillRect(0, 0, W, H);
+    g.strokeStyle = '#e2bd5a'; g.lineWidth = 6; g.strokeRect(8, 8, W - 16, H - 16);
+    g.lineWidth = 2; g.strokeRect(18, 18, W - 36, H - 36);
+    g.textAlign = 'center'; g.textBaseline = 'middle'; g.shadowColor = 'rgba(0,0,0,.55)'; g.shadowOffsetY = 3; g.shadowBlur = 3;
+    let fs = 52; g.font = `700 ${fs}px Georgia, serif`; while (g.measureText(name).width > W - 70 && fs > 24) { fs -= 2; g.font = `700 ${fs}px Georgia, serif`; }
+    g.fillStyle = '#f3cf63'; g.fillText(name, W / 2, 58);
+    g.font = '800 27px system-ui, sans-serif'; g.fillStyle = '#f4ecd2'; g.fillText(`✦  FIELD ${f.slot + 1}  ✦`, W / 2, 104);
+    f.atex.needsUpdate = true;
+  }
+  // the flags (one waving flag on each bought field's arch) and pennants (four a field): two instanced meshes,
+  // waved by the vertex shader — the further from the pole, the more it flaps
+  _buildFlags() {
+    const n = this.list.length, wave = sh => {
+      sh.uniforms.uTime = this.uTime;
+      sh.vertexShader = 'uniform float uTime;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+        #ifdef USE_INSTANCING
+          float fp = uTime * 4.2 + instanceMatrix[3].x * 0.37 + instanceMatrix[3].z * 0.23, fx = max(transformed.x, 0.0);
+          transformed.z += (sin(fp - fx * 4.5) * 0.11 + sin(fp * 1.7 - fx * 8.0) * 0.03) * fx;
+          transformed.y -= fx * fx * 0.03 * (1.2 + sin(fp * 0.4));
+        #endif`);
+    };
+    // the flag's cloth: crimson, a cream band at the pole, a gold border and a gold wheat sheaf
+    const cv = document.createElement('canvas'); cv.width = 256; cv.height = 160;
+    const g = cv.getContext('2d');
+    g.fillStyle = '#c8233a'; g.fillRect(0, 0, 256, 160);
+    g.fillStyle = '#f2ead6'; g.fillRect(0, 0, 22, 160);
+    g.strokeStyle = '#f3c84f'; g.lineWidth = 7; g.strokeRect(30, 9, 217, 142);
+    g.strokeStyle = '#f3c84f'; g.fillStyle = '#f3c84f'; g.lineWidth = 4; g.lineCap = 'round';
+    for (const a of [-0.38, -0.19, 0, 0.19, 0.38]) {
+      const tx = 139 + Math.sin(a) * 62, ty = 80 - Math.cos(a) * 52;
+      g.beginPath(); g.moveTo(139, 128); g.lineTo(tx, ty); g.stroke();
+      for (let k = 0; k < 4; k++) {
+        const u = 0.62 + k * 0.11, px = 139 + (tx - 139) * u, py = 128 + (ty - 128) * u;
+        for (const s of [-1, 1]) { g.save(); g.translate(px, py); g.rotate(a + s * 0.5); g.beginPath(); g.ellipse(s * 5, 0, 4, 8, 0, 0, Math.PI * 2); g.fill(); g.restore(); }
+      }
+    }
+    g.fillRect(124, 104, 30, 7);
+    const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
+    const flagGeo = new THREE.PlaneGeometry(1.7, 1.06, 12, 3); flagGeo.translate(0.89, 0, 0);
+    this.flagMat = new THREE.MeshLambertMaterial({ map: tex, side: THREE.DoubleSide, flatShading: true });
+    this.flagMat.onBeforeCompile = wave; this.flagMat.customProgramCacheKey = () => 'flag-wave-v1';
+    this.flags = new THREE.InstancedMesh(flagGeo, this.flagMat, n);
+    // a pennant: a long thin triangle
+    const penGeo = new THREE.PlaneGeometry(0.75, 0.42, 6, 1); penGeo.translate(0.4, 0, 0);
+    const pp = penGeo.attributes.position;
+    for (let i = 0; i < pp.count; i++) pp.setY(i, pp.getY(i) * (1 - (pp.getX(i) - 0.03) / 0.75));
+    this.penMat = new THREE.MeshLambertMaterial({ side: THREE.DoubleSide, flatShading: true });
+    this.penMat.onBeforeCompile = wave; this.penMat.customProgramCacheKey = () => 'flag-wave-v1';
+    this.pens = new THREE.InstancedMesh(penGeo, this.penMat, n * 4);
+    for (let i = 0; i < n * 4; i++) this.pens.setColorAt(i, new THREE.Color(PENNANTS[i % 4]));
+    for (const m of [this.flags, this.pens]) { m.frustumCulled = false; m.castShadow = true; this.scene.add(m); }
+    this._flagsDirty = true;
+  }
+  _placeFlags() {
+    const m = this._m, v = this._v, q = this._q, s = this._s, up = new THREE.Vector3(0, 1, 0);
+    for (const f of this.list) {
+      const on = f.owned ? 1 : 0, A = f.A, e = 1 - Math.pow(1 - f.raise, 3);
+      m.compose(v.set(A.x, A.y + FLAG_LOW + (FLAG_TOP - FLAG_LOW) * e, A.z), q.setFromAxisAngle(up, A.yaw), s.setScalar(on));
+      this.flags.setMatrixAt(f.slot, m);
+      f.pens.forEach((p, k) => { m.compose(v.set(p.x, p.y, p.z), q.setFromAxisAngle(up, p.yaw), s.setScalar(on * Math.min(1, e * 1.5))); this.pens.setMatrixAt(f.slot * 4 + k, m); });
+    }
+    this.flags.instanceMatrix.needsUpdate = true; this.pens.instanceMatrix.needsUpdate = true;
+  }
+  // the farm's own fields (for the map)
+  ownedSpots() { return this.on ? this.list.filter(f => f.owned).map(f => ({ x: f.F.x, z: f.F.z, label: `Field ${f.slot + 1}` })) : []; }
+
   /* ---------- what's in a field (from the server) ---------- */
   info(slot, now = this.g.eco.serverNow()) {
     const e = this.g.eco, FS = e.fields(), f = FS && FS.list.find(x => x.slot === slot);
@@ -161,7 +324,7 @@ export class FarmFields {
   _signText(f, I) {
     const e = this.g.eco, price = (e.cat('field') || {}).buy;
     if (!e.fields() || !price) return [`FIELD ${f.slot + 1}`, 'Opening soon', '#f2c14e'];   // (an older farm server: no fields yet)
-    if (!I.owned) return [`FIELD ${f.slot + 1}`, `FOR SALE · ₹${price}`, '#f2c14e'];
+    if (!I.owned) return [`FIELD ${f.slot + 1}`, `FOR SALE · ₹${price}`, '#ffffff', 'sale'];
     if (I.stage === 'empty') return [`FIELD ${f.slot + 1}`, 'Ready to sow', '#cfe8a0'];
     if (I.stage === 'sowing') return [`FIELD ${f.slot + 1}`, 'Sowing…', '#cfe8a0'];
     if (I.stage === 'sown') return [`FIELD ${f.slot + 1} · WHEAT`, 'Needs water', '#8fd0ff'];
@@ -169,15 +332,21 @@ export class FarmFields {
     const m = Math.ceil(I.msLeft / 60000);
     return [`FIELD ${f.slot + 1} · WHEAT`, `Ripe in ${m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m} min`}`, '#e8f0d8'];
   }
-  _drawSign(f, [title, sub, col]) {
-    const key = title + sub;
+  // the signboard: bare weathered wood with a red FOR SALE band for a field for sale, painted green with gold trim
+  // once it's the farm's
+  _drawSign(f, [title, sub, col, style]) {
+    const own = !!f.owned && style !== 'sale', key = title + sub + own;
     if (f.signKey === key) return;
     f.signKey = key;
     const g = f.cv.getContext('2d'), W = f.cv.width, H = f.cv.height;
-    const grd = g.createLinearGradient(0, 0, 0, H); grd.addColorStop(0, '#6e472a'); grd.addColorStop(1, '#4a2e1a'); g.fillStyle = grd; g.fillRect(0, 0, W, H);
+    const grd = g.createLinearGradient(0, 0, 0, H);
+    if (own) { grd.addColorStop(0, '#2f6a35'); grd.addColorStop(1, '#1d4422'); } else { grd.addColorStop(0, '#6e472a'); grd.addColorStop(1, '#4a2e1a'); }
+    g.fillStyle = grd; g.fillRect(0, 0, W, H);
     g.strokeStyle = 'rgba(0,0,0,.14)'; g.lineWidth = 2;
     for (let i = 0; i < 7; i++) { const y = 16 + i * 30; g.beginPath(); g.moveTo(0, y); g.bezierCurveTo(W * 0.3, y + 5, W * 0.7, y - 5, W, y + 2); g.stroke(); }
-    g.strokeStyle = '#d9b56a'; g.lineWidth = 6; g.strokeRect(12, 12, W - 24, H - 24);
+    g.strokeStyle = own ? '#e2bd5a' : '#d9b56a'; g.lineWidth = 6; g.strokeRect(12, 12, W - 24, H - 24);
+    if (own) { g.lineWidth = 2; g.strokeRect(22, 22, W - 44, H - 44); }
+    if (style === 'sale') { g.fillStyle = '#b8262f'; g.fillRect(12, 120, W - 24, 60); g.fillStyle = 'rgba(255,255,255,.25)'; g.fillRect(12, 120, W - 24, 3); }
     g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = '#f7e8c2'; g.shadowColor = 'rgba(0,0,0,.6)'; g.shadowOffsetY = 3; g.shadowBlur = 4;
     let fs = 50; g.font = `700 ${fs}px Georgia, serif`; while (g.measureText(title).width > W - 60 && fs > 26) { fs -= 2; g.font = `700 ${fs}px Georgia, serif`; }
     g.fillText(title, W / 2, 78);
@@ -193,6 +362,17 @@ export class FarmFields {
     let crowN = 0;
     for (const f of this.list) {
       const I = e.ready ? this.info(f.slot, now) : { owned: false };
+      // bought or for sale: plowed with its arch and flags, or rough land. Bought while you're here: the flag goes up
+      const owned = !!I.owned;
+      if (owned !== f.owned) {
+        const seen = f.owned === false && f.known;
+        f.owned = owned; f.ownG.visible = owned; f.saleG.visible = !owned;
+        f.raise = owned && !seen ? 1 : 0; this._flagsDirty = true;
+        if (owned && seen) this._splash(f, 'confetti');
+      }
+      if (e.ready && e.fields()) f.known = true;
+      if (owned && f.raise < 1) { f.raise = Math.min(1, f.raise + dt / 2.5); this._flagsDirty = true; }
+      if (owned) this._drawArch(f);
       // what the field shows: nothing (empty / for sale), seeds (sown, or where you've sown), or the growing crop
       const mine = this.sow && this.sow.slot === f.slot;
       const grow = mine ? 'seeds' : I.stage === 'sown' ? 'seeds' : I.stage === 'growing' ? I.grow : null;
@@ -216,6 +396,7 @@ export class FarmFields {
       if (show && lv < 2) crowN = this._crows(f, lv, crowN);
     }
     this.crows.count = crowN; if (crowN) { this.crows.instanceMatrix.needsUpdate = true; }
+    if (this._flagsDirty) { this._flagsDirty = false; this._placeFlags(); }
     this._sowing(dt);
     this._bits(dt);
   }
@@ -303,6 +484,13 @@ export class FarmFields {
   }
   // drops over the whole field when it's watered; chaff when it's harvested; seeds settling when it's sown
   _splash(f, kind) {
+    if (kind === 'confetti') {
+      for (let i = 0; i < 160 && this.fx.length < 390; i++) {
+        const a = Math.random() * Math.PI * 2, sp = 1 + Math.random() * 2.5, q = FarmFields.at(f.A, (Math.random() - 0.5) * 2.6, 0);
+        this.fx.push({ x: q.x, y: f.A.y + 3.2, z: q.z, vx: Math.cos(a) * sp, vy: 2.5 + Math.random() * 3, vz: Math.sin(a) * sp, t: 3, kind, floor: f.A.y - 0.5, c: CONFETTI[i % CONFETTI.length] });
+      }
+      return;
+    }
     const n = kind === 'water' ? 180 : 120;
     for (let i = 0; i < n && this.fx.length < 390; i++) {
       const lx = (Math.random() - 0.5) * FIELD.w, lz = (Math.random() - 0.5) * FIELD.d, p = FarmFields.at(f.F, lx, lz), y = f.hAt(lx, lz);
@@ -315,15 +503,17 @@ export class FarmFields {
     let n = 0;
     for (let i = list.length - 1; i >= 0; i--) {
       const b = list[i];
-      b.t -= dt; b.vy -= (b.kind === 'water' ? 6 : 9.8) * dt; b.x += b.vx * dt; b.y += b.vy * dt; b.z += b.vz * dt;
+      b.t -= dt; b.vy -= (b.kind === 'water' ? 6 : b.kind === 'confetti' ? 4 : 9.8) * dt; b.x += b.vx * dt; b.y += b.vy * dt; b.z += b.vz * dt;
+      if (b.kind === 'confetti') { b.vx *= 1 - dt * 1.5; b.vz *= 1 - dt * 1.5; if (b.vy < -1.2) b.vy = -1.2; }       // (confetti flutters down)
       if (b.floor !== undefined && b.y < b.floor) b.t = 0;
       if (b.t <= 0) { list.splice(i, 1); continue; }
     }
     for (const b of list) {
       if (n >= 400) break;
-      m.compose(this._v.set(b.x, b.y, b.z), this._q.identity(), this._s.set(1, b.kind === 'water' ? 2.5 : 1, 1));
+      if (b.kind === 'confetti') m.compose(this._v.set(b.x, b.y, b.z), this._q.setFromEuler(this._e.set(b.t * 7 + b.c, b.t * 4, 0)), this._s.set(2.6, 0.4, 2.6));
+      else m.compose(this._v.set(b.x, b.y, b.z), this._q.identity(), this._s.set(1, b.kind === 'water' ? 2.5 : 1, 1));
       this.bits.setMatrixAt(n, m);
-      this.bits.setColorAt(n, col.set(b.kind === 'water' ? 0x7cc4ff : b.kind === 'chaff' ? 0xe9c66a : 0xf0dca8));
+      this.bits.setColorAt(n, col.set(b.c || (b.kind === 'water' ? 0x7cc4ff : b.kind === 'chaff' ? 0xe9c66a : 0xf0dca8)));
       n++;
     }
     this.bits.count = n;

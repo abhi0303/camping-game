@@ -142,7 +142,7 @@ Its twin stands beside the goat field across the road from the Farm Store, with 
 
 Round the big windmill are **six fenced fields** of plowed earth, each with a signboard at its gate (*FIELD 3 · FOR SALE · ₹500*, *Needs water*, *Ripe in 1h 12m*, *READY TO HARVEST*). Press **E** at a field for its panel.
 
-- **Buy a field** (₹500) — it's the farm's for good.
+- **Buy a field** (₹500) — it's the farm's for good. **You can tell your fields from far away:** a field for sale is rough, unplowed grassy land with weeds, wild flowers and stones, its sign bare wood with a red *FOR SALE* band. Once bought it's plowed, its sign is painted green with gold trim, and it gets an **arch over the gate** with your farm's name on a green board (*FARMING CULTURE ✦ FIELD 4 ✦*), a **tall waving crimson flag** with a gold wheat sheaf (it goes up, with confetti, when you buy the field), **pennants** on its four corners and two **lanterns** hanging from the arch that light up at night. Your fields are also on the big map (**M**).
 - **Seeds:** one **bag of 100 wheat seeds (₹10)** sows a whole field — at the Farm Store (*Fields, seeds & scarecrows*) or from the field's panel.
 - **Sow:** press *Start sowing*, then **walk all over the field scattering the seeds** — hold **Space** (or **F** / the mouse; the **SOW** button on a phone) while you walk. Seeds fly from your hand and show in the soil where you've been; after **10 seconds** of sowing the field is sown (the server checks it took that long).
 - **Water** it (₹20) — the earth turns dark and wet — and the wheat grows on the shared clock for **2 hours** (also while nobody plays): seeds → little shoots → half grown → tall and golden, swaying in the wind.

@@ -126,6 +126,7 @@ export class MiniMap {
     c.drawImage(this.base, 0, 0);
     c.setTransform(1, 0, 0, 1, 0, 0);
     for (const m of markers) {
+      if (m.bigOnly) continue;
       const [px, py] = this.toPx(m.x, m.z), sx = R + (px - bx) * k, sy = R + (py - by) * k;
       const d = Math.hypot(sx - R, sy - R);
       if (d > R - 10) { if (!m.edge) continue; const f = (R - 12) / d; this._icon(c, R + (sx - R) * f, R + (sy - R) * f, m, 12); continue; }

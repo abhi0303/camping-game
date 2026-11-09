@@ -191,7 +191,7 @@ const village = new Village(scene, world);
 const mill = new DutchMill(scene, world);   // the big Dutch windmill on the meadow east of the road
 const mill2 = new DutchMill(scene, world, MILL2, { clear: 13 });   // and its twin by the goat field, across from the Farm Store
 // the six crop fields round the windmill (wheat): buy, sow, water, harvest; scarecrows; crows
-const fields = new FarmFields(scene, { world, eco: farmEco, player, touch, toast: m => toast(m), hud: $('hud'),
+const fields = new FarmFields(scene, { world, eco: farmEco, player, touch, toast: m => toast(m), hud: $('hud'), worldName: () => (farm.L ? farm.L.roomName : ''),
   openField: slot => farmUI.open('field', slot), act: b => farmEco.act(b) });
 farmUI.g.fieldInfo = slot => fields.info(slot);
 farmUI.g.onSow = slot => fields.startSowing(slot);
@@ -365,6 +365,7 @@ function mapMarkers() {
   if (farm.active) {
     if (village.on) markers.push({ x: village.spots.square.x, z: village.spots.square.z, icon: 'home', label: 'Sonpur village' });
     if (mill.on) markers.push({ x: mill.x, z: mill.z, icon: 'windmill', label: 'Windmill' }, { x: mill2.x, z: mill2.z, icon: 'windmill', label: 'Windmill' });
+    for (const f of fields.ownedSpots()) markers.push({ x: f.x, z: f.z, icon: 'field', label: f.label, bigOnly: true });   // the farm's own fields (the big map)
     if (machines.on) markers.push({ x: machines.minePos.x, z: machines.minePos.z, icon: 'mine', label: 'Gold mine' }, { x: machines.flourPos.x, z: machines.flourPos.z, icon: 'flour', label: 'Flour mill' });
     if (thieves.thiefPos) markers.push({ x: thieves.thiefPos.x, z: thieves.thiefPos.z, icon: 'thief', label: 'Thief!' });
     markers.push({ x: STORE.x, z: STORE.z, icon: 'store', label: 'Farm Store' }, { x: MARKET.x, z: MARKET.z, icon: 'market', label: 'Market' },
