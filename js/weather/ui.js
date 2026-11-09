@@ -13,9 +13,9 @@ const GROUP = { clear: 'fair', partly: 'fair', cloudy: 'cloudy', fog: 'fog', dri
 const TURN = { rain: '🌧 It has started raining on the farm', storm: '⛈ A thunderstorm has reached the farm', fog: '🌫 Fog is rolling over the farm', cloudy: '☁ The sky over the farm has clouded over', snow: '☁ It is snowing where the weather comes from', fair: '🌤 The sky over the farm is clearing' };
 
 export class WeatherUI {
-  // g: { sync (WeatherSync), toast, touch() (true on phones) }
+  // g: { sync (WeatherSync), toast, onOpen() / onClose() (free the mouse for the cursor / take it back) }
   constructor(g) {
-    this.g = g; this.open = false;
+    this.g = g; this.open = false; this.freed = false;
     const top = document.getElementById('topc'), sync = document.getElementById('syncBtn');
     this.btn = document.createElement('button'); this.btn.id = 'wxBtn'; this.btn.className = 'panel hidden'; this.btn.title = 'Weather on the farm';
     (sync && sync.parentNode === top ? sync : top.lastChild).after(this.btn);
@@ -31,8 +31,15 @@ export class WeatherUI {
     addEventListener('keydown', e => { if (e.key === 'Escape') { if (!this.ask.classList.contains('hidden')) this.closeAsk(); else if (this.open) this.toggle(false); } });
   }
   get w() { return this.g.sync.w; }
+  // the panel or a question is on screen: the mouse is free (a cursor to click with), the game keys rest
+  get isOpen() { return this.open || !this.ask.classList.contains('hidden'); }
+  _mouse() {
+    const want = this.isOpen;
+    if (want && !this.freed) { this.freed = true; if (this.g.onOpen) this.g.onOpen(); }
+    else if (!want && this.freed) { this.freed = false; if (this.g.onClose) this.g.onClose(); }
+  }
   show(on) { this.btn.classList.toggle('hidden', !on); if (!on) { this.toggle(false); this.closeAsk(); } }
-  toggle(on = !this.open) { this.open = on; this.panel.classList.toggle('hidden', !on); if (on) this.renderPanel(); }
+  toggle(on = !this.open, quiet = false) { this.open = on; this.panel.classList.toggle('hidden', !on); if (on) this.renderPanel(); if (!quiet) this._mouse(); }
 
   /* ---------- the chip ---------- */
   render() {
@@ -93,7 +100,7 @@ export class WeatherUI {
 
   /* ---------- questions for the weather leader ---------- */
   showAsk(kind, opts = {}) {
-    this.toggle(false);
+    this.toggle(false, true);
     if (kind === 'choose') {
       this.ask.innerHTML = `<div class="wx-askh">${icon('cloudSun', 'big')}<b>Bring your real weather to the farm?</b></div>
         <p>You ${opts.first ? 'are the first one here' : 'lead the weather now'}, so everyone's farm will show the weather where you are — rain, clouds, wind and air quality. Your location is only used to look up the weather; other players never see it.</p>
@@ -107,8 +114,9 @@ export class WeatherUI {
       setTimeout(() => { const q = document.getElementById('wxQ'); if (q) q.focus(); }, 30);
     }
     this.ask.classList.remove('hidden');
+    this._mouse();
   }
-  closeAsk() { this.ask.classList.add('hidden'); this.ask.innerHTML = ''; }
+  closeAsk(quiet = false) { this.ask.classList.add('hidden'); this.ask.innerHTML = ''; if (!quiet) this._mouse(); }
   _search(text) {
     clearTimeout(this.qT);
     const list = document.getElementById('wxList');
@@ -128,7 +136,13 @@ export class WeatherUI {
     if (!b) return;
     const S = this.g.sync, k = b.dataset.wx;
     if (k === 'close') this.toggle(false);
-    else if (k === 'gps') { this.closeAsk(); this.toggle(false); this.g.toast('📍 Looking up your location for the weather…'); if (await S.useLocation()) this.g.toast('🌦 The farm now shows the weather where you are'); }
+    else if (k === 'gps') {
+      // the browser may ask "Allow location?" next: the cursor stays until that's answered
+      this.closeAsk(true); this.toggle(false, true); this.g.toast('📍 Looking up your location for the weather…');
+      const ok = await S.useLocation();
+      this._mouse();
+      if (ok) this.g.toast('🌦 The farm now shows the weather where you are');
+    }
     else if (k === 'city') this.showAsk('city', {});
     else if (k === 'skip') { this.closeAsk(); S.notNow(); this.g.toast('🌦 OK — the farm keeps its current weather. Set it any time from the weather chip at the top.'); }
     else if (k === 'cancel') this.closeAsk();

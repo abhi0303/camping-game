@@ -219,7 +219,7 @@ const grass = new Grass(scene, world);             // wild flowers around the pl
 const weatherFX = new WeatherFX(scene, { world, grass, now: () => farmEco.serverNow(), inside: () => player.frame === 'rv' });
 const weather = new WeatherSync({ farm, net, toast: m => toast(m), now: () => farmEco.serverNow(),
   onChange: (w, prev) => { weatherFX.set(w); weatherUI.render(); weatherUI.notify(w, prev); }, ask: (kind, o) => weatherUI.showAsk(kind, o) });
-const weatherUI = new WeatherUI({ sync: weather, toast: m => toast(m) });
+const weatherUI = new WeatherUI({ sync: weather, toast: m => toast(m), onOpen: uiHooks.onOpen, onClose: uiHooks.onClose });
 const music = new Music();                         // Farm World's tune (js/music.js)
 const ambience = new Ambience();
 // thieves come for eggs left in the nests, guard dogs keep them off (the server decides: server/src/thieves.js)
@@ -879,8 +879,9 @@ M.join.onclick = async () => {
   catch (e) { M.status.textContent = '⚠ ' + (e.message || e); busy(false); }
 };
 function resume() {
-  overlay.classList.add('hidden'); paused = false; input.muted = false;
-  input.requestLock(); lastT = performance.now();
+  overlay.classList.add('hidden'); paused = false; input.muted = weatherUI.isOpen;
+  if (!weatherUI.isOpen) input.requestLock();       // (the weather's question still open: keep the cursor)
+  lastT = performance.now();
 }
 function openMenu() {
   if (!started) return;
@@ -925,7 +926,7 @@ overlay.addEventListener('click', e => { if (e.target === overlay && started) re
 $('menuBtn').addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); openMenu(); });
 document.addEventListener('pointerlockchange', () => {
   // Esc frees the mouse -> pause menu
-  if (!document.pointerLockElement && started && !input.dragging && !inv.isOpen && !farmUI.isOpen && !notebook.isOpen && !minimap.bigOpen && !editor.open && !designer.open && !fishing.cardOpen) openMenu();
+  if (!document.pointerLockElement && started && !input.dragging && !inv.isOpen && !farmUI.isOpen && !notebook.isOpen && !minimap.bigOpen && !editor.open && !designer.open && !fishing.cardOpen && !weatherUI.isOpen) openMenu();
 });
 // installable app: back button (Android) closes the open popup or shows the menu
 app.init({
@@ -953,7 +954,7 @@ const musicLabel = () => { musicBtn.innerHTML = `${icon('music')} ${music.on ? '
 musicLabel();
 musicBtn.addEventListener('click', e => { e.stopPropagation(); music.toggle(); musicLabel(); });
 if (input.touch) { const l = document.createElement('label'); l.className = 'qlab'; l.textContent = 'Graphics '; l.appendChild(qSel); $('qualSlot').appendChild(l); }
-canvas.addEventListener('click', () => { if (started && !paused && !input.locked) input.requestLock(); });
+canvas.addEventListener('click', () => { if (started && !paused && !input.locked && !weatherUI.isOpen) input.requestLock(); });
 
 /* ---------- global keys ---------- */
 function globalKeys() {
