@@ -7,8 +7,8 @@
 //     at the crops (a level 1 scarecrow keeps most of them off now and then, level 2 all of them).
 //   - Everyone sees the same fields: the stage comes from the server's times, the crops sway in the wind.
 //   - You can tell the farm's own fields from far away: a field for sale is rough, grassy, unplowed land with weeds;
-//     once it's bought it's plowed, and gets an arch over its gate with the farm's name on a green board, a tall
-//     waving flag (it goes up when you buy the field), pennants on the four corners and two lanterns lit at night.
+//     once it's bought it's plowed, and gets an arch over its gate with the farm's name on a green board and two
+//     lanterns lit at night (confetti when it's bought while you're there).
 import * as THREE from 'three';
 import { GeoBuilder, MAT } from '../utils.js';
 import { limb } from '../flora.js';
@@ -23,11 +23,9 @@ const LAYOUT = [[-16.5, -10], [-16.5, 0], [-16.5, 10], [16.5, -10], [16.5, 0], [
 const prng = seed => { let s = (seed % 2147483646) + 1; return () => (s = (s * 16807) % 2147483647) / 2147483647; };
 const c01 = v => (v < 0 ? 0 : v > 1 ? 1 : v);
 const SOIL = 0x7a5534, SOIL_D = 0x5e3f24, SOIL_L = 0x8c6440;
-// a bought field's colours: the arch's wood, its painted board, gold trim; the flags
-const ARCH = { wood: 0x6e4626, woodL: 0x8a5a33, board: 0x24502a, gold: 0xd9b04a, pole: 0xe2dccd };
-const PENNANTS = [0xffc93a, 0xd7263d, 0xffc93a, 0xd7263d];
+// a bought field's colours: the arch's wood, its painted board, gold trim; the confetti when it's bought
+const ARCH = { wood: 0x6e4626, woodL: 0x8a5a33, board: 0x24502a, gold: 0xd9b04a };
 const CONFETTI = [0xffd23a, 0xd7263d, 0xffffff, 0x7fd36a, 0xff8a1f];
-const FLAG_TOP = 5.3, FLAG_LOW = 3.8, PEN_Y = 2.2;   // (flag centre when up / lowered, pennant centre: above the ground)
 
 export class FarmFields {
   // g: { world, eco, player, touch, toast, hud, openField(slot), act(body) }
@@ -61,9 +59,9 @@ export class FarmFields {
     const fence = new GeoBuilder();
     LAYOUT.forEach(([mx, mz], slot) => {
       const p = FarmFields.at(MILL, mx, mz), F = { x: p.x, z: p.z, yaw: MILL.yaw }, gs = mx < 0 ? 1 : -1;   // gs: the gate's side (toward the windmill)
-      const f = { slot, F, gs, gateX: gs * w / 2, stage: null, crop: null, key: '', owned: null, known: false, raise: 0 };
+      const f = { slot, F, gs, gateX: gs * w / 2, stage: null, crop: null, key: '', owned: null, known: false };
       f.hAt = (lx, lz) => { const q = FarmFields.at(F, lx, lz); return T.heightAt(q.x, q.z); };
-      // what a bought field has (plowed earth, the arch, flag poles) and what a field for sale has (rough grassy land)
+      // what a bought field has (plowed earth, the arch) and what a field for sale has (rough grassy land)
       f.ownG = new THREE.Group(); f.saleG = new THREE.Group(); f.ownG.visible = false;
       this.scene.add(f.ownG, f.saleG);
       // the plowed ground: ridges and furrows along the field, following the land
@@ -142,7 +140,6 @@ export class FarmFields {
     this.bits = new THREE.InstancedMesh(new THREE.BoxGeometry(0.035, 0.035, 0.035), new THREE.MeshBasicMaterial({ color: 0xffffff }), 400);
     this.bits.count = 0; this.bits.frustumCulled = false; this.bits.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(400 * 3), 3);
     this.scene.add(this.bits);
-    this._buildFlags();
     this._m = new THREE.Matrix4(); this._q = new THREE.Quaternion(); this._v = new THREE.Vector3(); this._s = new THREE.Vector3(); this._e = new THREE.Euler(); this._c = new THREE.Color();
     // the sowing meter on the screen
     this.meter = document.createElement('div'); this.meter.id = 'sowMeter'; this.meter.className = 'hidden'; this.g.hud.appendChild(this.meter);
@@ -161,7 +158,7 @@ export class FarmFields {
   }
   _cell(lx, lz) { const i = Math.max(0, Math.min(9, Math.floor((lx + FIELD.w / 2) / FIELD.w * 10))), j = Math.max(0, Math.min(5, Math.floor((lz + FIELD.d / 2) / FIELD.d * 6))); return j * 10 + i; }
 
-  /* ---------- how a field looks: for sale (rough land) or the farm's (plowed, with an arch and flags) ---------- */
+  /* ---------- how a field looks: for sale (rough land) or the farm's (plowed, with an arch) ---------- */
   // a field for sale: unplowed ground, grass in patches of green, dry yellow and bare earth, weeds, wild flowers, stones
   _buildFallow(f, T) {
     const { w, d } = FIELD, nx = 10, nz = 8, pos = [], col = [], idx = [], cc = new THREE.Color(), R = prng(4242 + f.slot * 77);
@@ -196,10 +193,10 @@ export class FarmFields {
     f.saleG.add(m);
   }
   // a bought field: an arch over the gate (two tall posts, a beam, a green board with the farm's name between two
-  // beams, a lantern hanging from each end of the beam, a flag pole on top) and a pennant pole at each corner.
+  // beams, a lantern hanging from each end of the beam).
   // The arch's frame: x along the gate, z out of the field, y up from the ground at the gate.
   _buildOwned(f, T) {
-    const fw = FIELD.w / 2 + 0.25, fd = FIELD.d / 2 + 0.25, g0 = FarmFields.at(f.F, f.gs * fw, 0);
+    const fw = FIELD.w / 2 + 0.25, g0 = FarmFields.at(f.F, f.gs * fw, 0);
     const A = f.A = { x: g0.x, z: g0.z, y: T.heightAt(g0.x, g0.z), yaw: f.F.yaw + (f.gs > 0 ? Math.PI / 2 : -Math.PI / 2) };
     const b = new GeoBuilder(), hp = s => { const q = FarmFields.at(A, s * 1.1, 0); return T.heightAt(q.x, q.z) - A.y; };
     b.group(A.x, A.y, A.z, 0, A.yaw, 0, () => {
@@ -215,16 +212,7 @@ export class FarmFields {
       b.box(3.0, 0.2, 0.24, 0, 3.0, 0, ARCH.woodL);                                                // the top beam
       b.box(2.0, 0.13, 0.17, 0, 2.3, 0, ARCH.wood);                                                // the lower beam
       b.box(1.98, 0.54, 0.1, 0, 2.63, 0, ARCH.board);                                              // the board (painted both sides)
-      b.cyl(0.04, 0.05, 2.8, 6, 0, 3.1 + 1.4, 0, ARCH.pole);                                        // the flag pole
-      b.add(new THREE.SphereGeometry(0.09, 8, 6), ARCH.gold, 0, 5.93, 0);
     });
-    f.pens = [];
-    for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
-      const q = FarmFields.at(f.F, sx * fw, sz * fd), y = T.heightAt(q.x, q.z), o = FarmFields.at(f.F, sx * (fw + 1), sz * (fd + 1));
-      b.cyl(0.03, 0.04, 2.45, 5, q.x, y + 1.2, q.z, ARCH.pole);
-      b.add(new THREE.SphereGeometry(0.06, 6, 4), ARCH.gold, q.x, y + 2.46, q.z);
-      f.pens.push({ x: q.x, y: y + PEN_Y, z: q.z, yaw: Math.atan2(-(o.z - q.z), o.x - q.x) });   // the pennant points away from the field
-    }
     const m = b.build(MAT);
     m.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; o.updateMatrixWorld(true); this.g.world.addFogCull(o); } });
     f.ownG.add(m);
@@ -251,60 +239,6 @@ export class FarmFields {
     g.fillStyle = '#f3cf63'; g.fillText(name, W / 2, 58);
     g.font = '800 27px system-ui, sans-serif'; g.fillStyle = '#f4ecd2'; g.fillText(`✦  FIELD ${f.slot + 1}  ✦`, W / 2, 104);
     f.atex.needsUpdate = true;
-  }
-  // the flags (one waving flag on each bought field's arch) and pennants (four a field): two instanced meshes,
-  // waved by the vertex shader — the further from the pole, the more it flaps
-  _buildFlags() {
-    const n = this.list.length, wave = sh => {
-      sh.uniforms.uTime = this.uTime;
-      sh.vertexShader = 'uniform float uTime;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
-        #ifdef USE_INSTANCING
-          float fp = uTime * 4.2 + instanceMatrix[3].x * 0.37 + instanceMatrix[3].z * 0.23, fx = max(transformed.x, 0.0);
-          transformed.z += (sin(fp - fx * 4.5) * 0.11 + sin(fp * 1.7 - fx * 8.0) * 0.03) * fx;
-          transformed.y -= fx * fx * 0.03 * (1.2 + sin(fp * 0.4));
-        #endif`);
-    };
-    // the flag's cloth: crimson, a cream band at the pole, a gold border and a gold wheat sheaf
-    const cv = document.createElement('canvas'); cv.width = 256; cv.height = 160;
-    const g = cv.getContext('2d');
-    g.fillStyle = '#c8233a'; g.fillRect(0, 0, 256, 160);
-    g.fillStyle = '#f2ead6'; g.fillRect(0, 0, 22, 160);
-    g.strokeStyle = '#f3c84f'; g.lineWidth = 7; g.strokeRect(30, 9, 217, 142);
-    g.strokeStyle = '#f3c84f'; g.fillStyle = '#f3c84f'; g.lineWidth = 4; g.lineCap = 'round';
-    for (const a of [-0.38, -0.19, 0, 0.19, 0.38]) {
-      const tx = 139 + Math.sin(a) * 62, ty = 80 - Math.cos(a) * 52;
-      g.beginPath(); g.moveTo(139, 128); g.lineTo(tx, ty); g.stroke();
-      for (let k = 0; k < 4; k++) {
-        const u = 0.62 + k * 0.11, px = 139 + (tx - 139) * u, py = 128 + (ty - 128) * u;
-        for (const s of [-1, 1]) { g.save(); g.translate(px, py); g.rotate(a + s * 0.5); g.beginPath(); g.ellipse(s * 5, 0, 4, 8, 0, 0, Math.PI * 2); g.fill(); g.restore(); }
-      }
-    }
-    g.fillRect(124, 104, 30, 7);
-    const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
-    const flagGeo = new THREE.PlaneGeometry(1.7, 1.06, 12, 3); flagGeo.translate(0.89, 0, 0);
-    this.flagMat = new THREE.MeshLambertMaterial({ map: tex, side: THREE.DoubleSide, flatShading: true });
-    this.flagMat.onBeforeCompile = wave; this.flagMat.customProgramCacheKey = () => 'flag-wave-v1';
-    this.flags = new THREE.InstancedMesh(flagGeo, this.flagMat, n);
-    // a pennant: a long thin triangle
-    const penGeo = new THREE.PlaneGeometry(0.75, 0.42, 6, 1); penGeo.translate(0.4, 0, 0);
-    const pp = penGeo.attributes.position;
-    for (let i = 0; i < pp.count; i++) pp.setY(i, pp.getY(i) * (1 - (pp.getX(i) - 0.03) / 0.75));
-    this.penMat = new THREE.MeshLambertMaterial({ side: THREE.DoubleSide, flatShading: true });
-    this.penMat.onBeforeCompile = wave; this.penMat.customProgramCacheKey = () => 'flag-wave-v1';
-    this.pens = new THREE.InstancedMesh(penGeo, this.penMat, n * 4);
-    for (let i = 0; i < n * 4; i++) this.pens.setColorAt(i, new THREE.Color(PENNANTS[i % 4]));
-    for (const m of [this.flags, this.pens]) { m.frustumCulled = false; m.castShadow = true; this.scene.add(m); }
-    this._flagsDirty = true;
-  }
-  _placeFlags() {
-    const m = this._m, v = this._v, q = this._q, s = this._s, up = new THREE.Vector3(0, 1, 0);
-    for (const f of this.list) {
-      const on = f.owned ? 1 : 0, A = f.A, e = 1 - Math.pow(1 - f.raise, 3);
-      m.compose(v.set(A.x, A.y + FLAG_LOW + (FLAG_TOP - FLAG_LOW) * e, A.z), q.setFromAxisAngle(up, A.yaw), s.setScalar(on));
-      this.flags.setMatrixAt(f.slot, m);
-      f.pens.forEach((p, k) => { m.compose(v.set(p.x, p.y, p.z), q.setFromAxisAngle(up, p.yaw), s.setScalar(on * Math.min(1, e * 1.5))); this.pens.setMatrixAt(f.slot * 4 + k, m); });
-    }
-    this.flags.instanceMatrix.needsUpdate = true; this.pens.instanceMatrix.needsUpdate = true;
   }
   // the farm's own fields (for the map)
   ownedSpots() { return this.on ? this.list.filter(f => f.owned).map(f => ({ x: f.F.x, z: f.F.z, label: `Field ${f.slot + 1}` })) : []; }
@@ -362,16 +296,14 @@ export class FarmFields {
     let crowN = 0;
     for (const f of this.list) {
       const I = e.ready ? this.info(f.slot, now) : { owned: false };
-      // bought or for sale: plowed with its arch and flags, or rough land. Bought while you're here: the flag goes up
+      // bought or for sale: plowed with its arch, or rough land. Bought while you're here: confetti
       const owned = !!I.owned;
       if (owned !== f.owned) {
         const seen = f.owned === false && f.known;
         f.owned = owned; f.ownG.visible = owned; f.saleG.visible = !owned;
-        f.raise = owned && !seen ? 1 : 0; this._flagsDirty = true;
         if (owned && seen) this._splash(f, 'confetti');
       }
       if (e.ready && e.fields()) f.known = true;
-      if (owned && f.raise < 1) { f.raise = Math.min(1, f.raise + dt / 2.5); this._flagsDirty = true; }
       if (owned) this._drawArch(f);
       // what the field shows: nothing (empty / for sale), seeds (sown, or where you've sown), or the growing crop
       const mine = this.sow && this.sow.slot === f.slot;
@@ -396,7 +328,6 @@ export class FarmFields {
       if (show && lv < 2) crowN = this._crows(f, lv, crowN);
     }
     this.crows.count = crowN; if (crowN) { this.crows.instanceMatrix.needsUpdate = true; }
-    if (this._flagsDirty) { this._flagsDirty = false; this._placeFlags(); }
     this._sowing(dt);
     this._bits(dt);
   }
