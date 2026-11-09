@@ -11,6 +11,10 @@ import { GeoBuilder, MAT } from '../utils.js';
 import { limb } from '../flora.js';
 
 export const MILL = { x: -4, z: -124, yaw: -Math.PI / 2 - 0.25 };     // the front (the sails) toward the road and the farm
+// the second one, by the goat field across the road from the Farm Store (where the little wooden windmill stood), its
+// sails toward the road
+const RT = { x: 0.925, z: 0.381 }, RN = { x: -0.381, z: 0.925 }, R0 = { x: -101.82, z: -136.77 };
+export const MILL2 = { x: R0.x + RT.x * -35 + RN.x * 22, z: R0.z + RT.z * -35 + RN.z * 22, yaw: 2.7512 };
 // the gallery (deck height above the base, corner radius) and the ladder up to it on the side face at angle LADDER.a
 // (distances from the middle: its foot on the ground, its top against the deck's edge, where a gap is left in the railing)
 const GY = 5.6, GR = 5.4, AP = GR * Math.cos(Math.PI / 8);
@@ -39,13 +43,14 @@ function windowAt(b, w, h, arched, bucket, frame = C.post) {
 }
 
 export class DutchMill {
-  constructor(scene, world) { this.scene = scene; this.world = world; this.on = false; this.x = MILL.x; this.z = MILL.z; }
+  // P: where it stands ({ x, z, yaw }; the big one by the fields if left out) · opts.clear: the meadow cleared round it (m)
+  constructor(scene, world, P = MILL, opts = {}) { this.scene = scene; this.world = world; this.on = false; this.P = P; this.x = P.x; this.z = P.z; this.clear = opts.clear ?? 18; }
   enable() {
     if (this.on) return;
     this.on = true;
-    const W = this.world, T = W.T, { x, z, yaw } = MILL;
+    const W = this.world, T = W.T, { x, z, yaw } = this.P;
     // the meadow round it cleared of trees and bushes; no grass blades through the base
-    W.clearArea([{ x0: x - 18, x1: x + 18, z0: z - 18, z1: z + 18 }]);
+    W.clearArea([{ x0: x - this.clear, x1: x + this.clear, z0: z - this.clear, z1: z + this.clear }]);
     W.addGrassBlock((px, pz) => Math.hypot(px - x, pz - z) < 4.6);
     let gy = -Infinity;
     for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2; gy = Math.max(gy, T.heightAt(x + Math.cos(a) * 4.3, z + Math.sin(a) * 4.3)); }
@@ -77,8 +82,8 @@ export class DutchMill {
     const prev = W.constrain;
     W.constrain = p => { if (prev) prev(p); this._constrain(p); };
   }
-  _toWorld(lx, lz) { const c = Math.cos(MILL.yaw), s = Math.sin(MILL.yaw); return { x: MILL.x + lx * c + lz * s, z: MILL.z - lx * s + lz * c }; }
-  _toLocal(x, z) { const c = Math.cos(MILL.yaw), s = Math.sin(MILL.yaw), dx = x - MILL.x, dz = z - MILL.z; return { x: dx * c - dz * s, z: dx * s + dz * c }; }
+  _toWorld(lx, lz) { const P = this.P, c = Math.cos(P.yaw), s = Math.sin(P.yaw); return { x: P.x + lx * c + lz * s, z: P.z - lx * s + lz * c }; }
+  _toLocal(x, z) { const P = this.P, c = Math.cos(P.yaw), s = Math.sin(P.yaw), dx = x - P.x, dz = z - P.z; return { x: dx * c - dz * s, z: dx * s + dz * c }; }
   // a point along the ladder's face, d from the middle, at height y above the base → world
   _ladderPt(d, y) { const w = this._toWorld(Math.sin(LADDER.a) * d, Math.cos(LADDER.a) * d); return new THREE.Vector3(w.x, this.base + y, w.z); }
   // up on the gallery: stay between the boarded storey and the railing
@@ -106,7 +111,7 @@ export class DutchMill {
   _climb(p, up) {
     const f = LADDER, along = y => f.foot + (f.top - f.foot) * (y - this.footY) / (GY + 1.05 - this.footY);   // the ladder's distance out at height y
     const foot = this._ladderPt(f.foot + 0.45, this.footY), high = this._ladderPt(along(GY - 0.9) + 0.32, GY - 0.9), gap = this._ladderPt(AP - 0.15, GY), on = this._ladderPt(AP - 0.7, GY);
-    const face = MILL.yaw + f.a + Math.PI, out = face + Math.PI, climbT = Math.max(1.6, (GY - this.footY) / 2.2);
+    const face = this.P.yaw + f.a + Math.PI, out = face + Math.PI, climbT = Math.max(1.6, (GY - this.footY) / 2.2);
     const end = yaw => { p.mode = 'foot'; p.grounded = true; p.vy = 0; p.yaw = yaw; };
     if (up) p.startTween([foot], { dur: 0.4, yaw: face, done: () => p.startTween([high], { dur: climbT, anim: 'climb', yaw: face, done: () => p.startTween([gap, on], { dur: 0.6, yaw: face, done: () => end(out) }) }) });
     else p.startTween([gap, high], { dur: 0.7, yaw: face, done: () => p.startTween([foot], { dur: climbT, anim: 'climb', yaw: face, done: () => end(out) }) });

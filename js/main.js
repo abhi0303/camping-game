@@ -44,7 +44,7 @@ import { GuardDogs } from './farm/dogs.js';
 import { Thieves } from './farm/thieves.js';
 import { Football } from './village/football.js';
 import { FarmGuide } from './farm/guide.js';
-import { DutchMill } from './farm/dutchmill.js';
+import { DutchMill, MILL2 } from './farm/dutchmill.js';
 import { FarmFields } from './farm/fields.js';
 import { Machines } from './farm/machines/machines.js';
 import { Ambience } from './ambience.js';
@@ -189,6 +189,7 @@ farmUI.book = notebook;
 const fishArea = new FishingArea(scene, world);
 const village = new Village(scene, world);
 const mill = new DutchMill(scene, world);   // the big Dutch windmill on the meadow east of the road
+const mill2 = new DutchMill(scene, world, MILL2, { clear: 13 });   // and its twin by the goat field, across from the Farm Store
 // the six crop fields round the windmill (wheat): buy, sow, water, harvest; scarecrows; crows
 const fields = new FarmFields(scene, { world, eco: farmEco, player, touch, toast: m => toast(m), hud: $('hud'),
   openField: slot => farmUI.open('field', slot), act: b => farmEco.act(b) });
@@ -269,7 +270,7 @@ player.worldActs = () => {
   l.push(...obstacles.acts(eq && eq.type));
   for (const a of crateActs) if (!a.c.taken) l.push(a);
   l.push(benchAct, boardAct, towerBenchAct, castleBenchAct, ...flagActs, ...survival.acts(), ...structures.acts());
-  if (farm.active) l.push(...farmland.acts(), ...fishing.acts(), ...village.acts(player), ...football.acts(), ...fields.acts(), ...mill.acts(player), ...machines.acts());
+  if (farm.active) l.push(...farmland.acts(), ...fishing.acts(), ...village.acts(player), ...football.acts(), ...fields.acts(), ...mill.acts(player), ...mill2.acts(player), ...machines.acts());
   return l;
 };
 
@@ -363,7 +364,7 @@ function mapMarkers() {
   for (const z of zombies.list) if (z.st !== 4) markers.push({ x: z.x, z: z.z, dot: '#e0362a' });
   if (farm.active) {
     if (village.on) markers.push({ x: village.spots.square.x, z: village.spots.square.z, icon: 'home', label: 'Sonpur village' });
-    if (mill.on) markers.push({ x: mill.x, z: mill.z, icon: 'windmill', label: 'Windmill' });
+    if (mill.on) markers.push({ x: mill.x, z: mill.z, icon: 'windmill', label: 'Windmill' }, { x: mill2.x, z: mill2.z, icon: 'windmill', label: 'Windmill' });
     if (machines.on) markers.push({ x: machines.minePos.x, z: machines.minePos.z, icon: 'mine', label: 'Gold mine' }, { x: machines.flourPos.x, z: machines.flourPos.z, icon: 'flour', label: 'Flour mill' });
     if (thieves.thiefPos) markers.push({ x: thieves.thiefPos.x, z: thieves.thiefPos.z, icon: 'thief', label: 'Thief!' });
     markers.push({ x: STORE.x, z: STORE.z, icon: 'store', label: 'Farm Store' }, { x: MARKET.x, z: MARKET.z, icon: 'market', label: 'Market' },
@@ -802,7 +803,7 @@ async function enterFarm(L, status, isNew) {
   farmland.enable();                   // clear the ground, put up the market, the store and the plots
   fishArea.enable();                   // the Fish Market, the path and the docks on the river
   village.enable({ farmland, minimap });   // the village behind the Market
-  mill.enable();                           // the big windmill
+  mill.enable(); mill2.enable();           // the big windmills
   fields.enable();                         // its crop fields
   machines.enable();                       // the gold mine and the flour machine
   if (village.people) village.people.onWhistle = (x, z) => ambience.onWhistle(x, z, listener);   // the night watchman
@@ -1002,7 +1003,7 @@ function step(dt) {
       village.update(dt, world.dayNight.now(), villageViewers);
     }
     football.update(dt);
-    mill.update(farmEco.serverNow());
+    mill.update(farmEco.serverNow()); mill2.update(farmEco.serverNow() + 1700);
     fields.update(dt, farmEco.serverNow());
     machines.update(dt);
     fishArea.update(dt, player.mode === 'foot' ? player.pos : null);
@@ -1089,7 +1090,7 @@ function debugStage(st, build) {
   if (build) { designer.show(build); designer._action('build'); designer.close(); }
   if (st === 'siege' || st === 'giants') survival._toStage(st);
 }
-window.__game = { renderer, dogs, thieves, football, mill, fields, machines, debugStage, net, session, voice, birds, ambience, notebook, grass, farmPanel, minimap, village, structures, designer, giants, player, rvs, remotes, obstacles, bridgeWorld, materials, world, inv, gear, editor, input, rig, camera, zombies, survival, combat, applySave, collectSave, saveNow, farm, farmEco, farmUI, farmland, fishArea, fishing, dayNight: world.dayNight, get objI() { return objI; },
+window.__game = { renderer, dogs, thieves, football, mill, mill2, fields, machines, debugStage, net, session, voice, birds, ambience, notebook, grass, farmPanel, minimap, village, structures, designer, giants, player, rvs, remotes, obstacles, bridgeWorld, materials, world, inv, gear, editor, input, rig, camera, zombies, survival, combat, applySave, collectSave, saveNow, farm, farmEco, farmUI, farmland, fishArea, fishing, dayNight: world.dayNight, get objI() { return objI; },
   // test hooks: advance the game n frames / pin the camera
   run: n => { for (let i = 0; i < n; i++) step(1 / 60); renderer.render(scene, camera); }, setCam: a => { freezeCam = a; } };
 

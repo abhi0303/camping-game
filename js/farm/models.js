@@ -1,6 +1,6 @@
 // Low-poly farm models: plot shelters with their pens (fence, gate, troughs, dirt ground), plot
 // signboards, the farm storage (level 1 and 2), the Farm Store, the Market, the delivery truck, the
-// windmill and the animals. Models are built in their own frame (front = +z, ground at y = 0 under the
+// and the animals. Models are built in their own frame (front = +z, ground at y = 0 under the
 // centre); hAt(x, z) gives the ground height at a local point, so posts and floors sit on slopes.
 import * as THREE from 'three';
 import { GeoBuilder, canvasTexture } from '../utils.js';
@@ -479,22 +479,6 @@ export function truckModel() {
   }
   for (let i = 0; i < 2; i++) crate(b, -0.5 + i, 1.08, -3.0, 0.45, C.woodXL);
   return build(b);
-}
-
-/* ---------- windmill (the wheel turns: returned separately) ---------- */
-export function windmillModel() {
-  const tower = new GeoBuilder(), H = 8;
-  for (const sx of [-1, 1]) for (const sz of [-1, 1]) tower.group(sx * 0.9, H / 2, sz * 0.9, sz * 0.11, 0, -sx * 0.11, () => tower.box(0.14, H, 0.14, 0, 0, 0, C.woodD));
-  for (let i = 1; i < 5; i++) { const y = i * H / 5, k = 1 - y / H * 0.75, s = 0.9 * k + 0.1; for (const [ry, ox, oz] of [[0, 0, s], [0, 0, -s], [Math.PI / 2, s, 0], [Math.PI / 2, -s, 0]]) tower.box(s * 2, 0.08, 0.08, ox, y, oz, C.wood, 'solid', 0, ry, 0); }
-  tower.box(0.6, 0.5, 0.9, 0, H + 0.1, 0, C.woodD);
-  tower.box(0.08, 0.7, 1.6, 0, H + 0.2, -1.2, C.woodL);                                   // tail vane
-  const wheelG = new GeoBuilder();
-  for (let i = 0; i < 12; i++) wheelG.group(0, 0, 0, 0, 0, i * Math.PI / 6, () => { wheelG.box(0.06, 1.7, 0.04, 0, 0.95, 0, C.woodD); wheelG.box(0.34, 1.1, 0.03, 0.12, 1.15, 0.02, C.woodXL, 'solid', 0, 0.35, 0); });
-  wheelG.cyl(0.18, 0.18, 0.3, 8, 0, 0, 0, C.iron, Math.PI / 2, 0, 0);
-  const g = new THREE.Group(), w = build(wheelG);
-  g.add(build(tower));
-  w.position.set(0, H + 0.15, 0.55); g.add(w);
-  return { group: g, wheel: w };
 }
 
 /* ---------- animals: one merged geometry each, facing +z, feet at y = 0 ---------- */

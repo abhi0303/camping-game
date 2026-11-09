@@ -22,7 +22,6 @@ export const STORE = uv(0, 19);           // front (porch, steps) toward the roa
 export const MARKET = uv(17, 16);
 export const TRUCK = uv(-12.5, 13.5);
 export const GOATS = { c: uv(-21.5, 20.5), hu: 5.5, hv: 6.5 };    // fenced goat field (half sizes along u / v)
-export const WINDMILL = uv(-30, 23);
 export const LAMPS = [uv(-8, 9), uv(8, 9), uv(13, 10), uv(22, 10)];
 export const ROAD_U = { x: RT.x, z: RT.z }, ROAD_V = { x: RN.x, z: RN.z };
 export const SIGN = { x: -114.5, z: -149 };                       // by the road on the farm side, pointing to the farm

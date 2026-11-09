@@ -6,8 +6,8 @@
 // the same animals in the same places without sending positions over the network.
 import * as THREE from 'three';
 import { GeoBuilder } from '../utils.js';
-import { PLOTS, PLOT_HW, PEN, PEN_BOX, GATE, SIGN_AT, STORAGE, STORE, MARKET, TRUCK, GOATS, WINDMILL, LAMPS, SIGN, STORE_SIGN, CLEAR, toWorld, toLocal } from './layout.js';
-import { shelterModel, penGround, gateModel, signboard, wallSign, storageModel, storeModel, storeSteps, STORE_DIM, marketModel, truckModel, windmillModel,
+import { PLOTS, PLOT_HW, PEN, PEN_BOX, GATE, SIGN_AT, STORAGE, STORE, MARKET, TRUCK, GOATS, LAMPS, SIGN, STORE_SIGN, CLEAR, toWorld, toLocal } from './layout.js';
+import { shelterModel, penGround, gateModel, signboard, wallSign, storageModel, storeModel, storeSteps, STORE_DIM, marketModel, truckModel,
   SHELTER_FOOT, PEN_FENCE, TROUGH_FEED, TROUGH_WATER, ANIMAL_GEO } from './models.js';
 import { C, FARM_MAT, crate, barrel, eggStack, milkCan, hayBale, sack, lampPost, woodPile, stoneBin, fenceRun } from './props.js';
 import { FarmerNPC } from './npc.js';
@@ -56,7 +56,7 @@ export class Farmland {
       if (x > -107 && x < -49 && z > -184 && z < -173) return true;                                       // the walkway
       if (x > path.x0 && x < path.x1 && z > path.z0 && z < path.z1) return true;
       if (Math.abs(x - STORAGE.x) < 7.5 && Math.abs(z - STORAGE.z) < 7.5) return true;
-      if (near(MARKET, x, z, 9.5) || near(TRUCK, x, z, 4.5) || near(WINDMILL, x, z, 3)) return true;
+      if (near(MARKET, x, z, 9.5) || near(TRUCK, x, z, 4.5)) return true;
       const ls = toLocal(STORE, x, z);
       if (Math.abs(ls.x) < STORE_DIM.w / 2 + 1.2 && ls.z > -STORE_DIM.d / 2 - 1.2 && ls.z < STORE_DIM.d / 2 + STORE_DIM.porch + 3) return true;
       for (const P of PLOTS) { const l = toLocal(P, x, z); if (Math.abs(l.x) < PLOT_HW + 0.5 && l.z > -7.2 && l.z < 7.6) return true; }
@@ -249,7 +249,7 @@ export class Farmland {
     const truck = this.place(truckModel(), T, tb + (ha + hf) / 2 - 0.04);
     truck.rotation.order = 'YXZ'; truck.rotation.x = -Math.atan2(hf - ha, 3.65);
     this.wall(T, 0, -3.1, 0, 3.1, 1.15, 1.0, cols);
-    // the goat field with its own goats, a windmill beside it
+    // the goat field with its own goats
     const G = { x: GOATS.c.x, z: GOATS.c.z, yaw: STORE.yaw }, gb = this.H(G.x, G.z), gh = this.hAt(G, gb), hu = GOATS.hu, hv = GOATS.hv;
     const fb = new GeoBuilder();
     fenceRun(fb, -hu, -hv, hu, -hv, gh); fenceRun(fb, -hu, hv, hu, hv, gh); fenceRun(fb, hu, -hv, hu, hv, gh);
@@ -265,8 +265,7 @@ export class Farmland {
     this.goatField = { F: G, pen: { x0: -hu + 0.8, x1: hu - 0.8, z0: -hv + 0.8, z1: hv - 0.8 } };
     this.decor = ['gA', 'gB', 'gC', 'gD'].map((id, gi) => ({ id, type: 'goat', k: hash(id), field: true, gi, gn: 4, gk: hash('field') }));
     this.decor[0].partner = this.decor[1]; this.decor[1].partner = this.decor[0];      // these two always butt heads
-    const wm = windmillModel(); this.wheel = wm.wheel;
-    this.place(wm.group, WINDMILL); this.dot(WINDMILL, 0, 0, 1.2, cols);
+    // (the windmill beside it is the big Dutch one now: js/farm/dutchmill.js, MILL2)
     // lamps and the roadside sign
     const lb = new GeoBuilder();
     for (const L of LAMPS) lb.group(L.x, this.H(L.x, L.z), L.z, 0, L.yaw + Math.PI / 2, 0, () => lampPost(lb, 0, 0, 0));
@@ -435,7 +434,6 @@ export class Farmland {
       if (g.open && g.cols) { for (const c of g.cols) this.world.removeCollider(c); g.cols = null; }
       if (!g.open && !g.cols && g.cur < 0.25) g.cols = this.wall(s.P, GATE.x + 0.25, GATE.z, GATE.x + GATE.w - 0.25, GATE.z, 0.24, 0.45);
     }
-    if (this.wheel) this.wheel.rotation.z -= dt * 1.4;
     if (this.npc) this.npc.update(dt, me);
     // inside the store: hide its front wall and roof so the camera sees in
     if (this.store && me) {
