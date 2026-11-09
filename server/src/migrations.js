@@ -430,6 +430,29 @@ INSERT INTO catalog (item, kind, name, icon, buy_price, sell_price, data, sort) 
   ('flour', 'good', 'Wheat flour packets (10 kg)', '🥡', NULL, 2, '{"cap": 500, "capStep": 500, "kg": 10}', 57);
 `,
   },
+  {
+    id: 12,
+    name: 'real_weather',
+    sql: `
+-- real-world weather and air quality for each world (server/src/weather.js): the weather leader (whose place the
+-- weather comes from), the place (rounded to ~1 km, never sent to players), the last weather, when to ask again
+ALTER TABLE rooms
+  ADD COLUMN weather          JSONB,
+  ADD COLUMN weather_rev      INTEGER NOT NULL DEFAULT 0,
+  ADD COLUMN weather_leader   UUID REFERENCES room_members(id) ON DELETE SET NULL,
+  ADD COLUMN weather_loc      JSONB,
+  ADD COLUMN weather_at       TIMESTAMPTZ,
+  ADD COLUMN weather_tried_at TIMESTAMPTZ,
+  ADD COLUMN weather_next     TIMESTAMPTZ,
+  ADD COLUMN weather_lock     TIMESTAMPTZ,
+  ADD COLUMN weather_fails    INTEGER NOT NULL DEFAULT 0,
+  ADD COLUMN weather_status   TEXT NOT NULL DEFAULT 'no_location';
+-- each member's place in the join order of the live game (live_since) and the last time they were in it
+ALTER TABLE room_members
+  ADD COLUMN live_since   TIMESTAMPTZ,
+  ADD COLUMN live_seen_at TIMESTAMPTZ;
+`,
+  },
 ];
 
 const LOCK_ID = 727001;   // advisory lock: two migrate runs never overlap

@@ -98,8 +98,30 @@ export class World {
   }
 
   /* ---------------- vegetation (instanced, chunked) ---------------- */
+  // trees and bushes sway in the wind: the higher up a tree, the more it moves (Farm World's weather sets how
+  // hard and which way: js/weather/effects.js). Shadows stay still.
+  _vegMaterial() {
+    const m = MAT.solid.clone(), U = this.windU = { uWT: { value: 0 }, uWA: { value: 0.12 }, uWD: { value: new THREE.Vector2(0.6, 0.8) } };
+    m.onBeforeCompile = sh => {
+      Object.assign(sh.uniforms, U);
+      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nuniform float uWT, uWA; uniform vec2 uWD;')
+        .replace('#include <project_vertex>', `vec4 mvPosition = vec4(transformed, 1.0);
+          #ifdef USE_INSTANCING
+            mvPosition = instanceMatrix * mvPosition;
+            float wh = max(transformed.y, 0.0) * length(instanceMatrix[1].xyz), wp = instanceMatrix[3].x * 0.21 + instanceMatrix[3].z * 0.17;
+            float ws = (0.55 + 0.45 * sin(uWT * 1.3 + wp) + 0.2 * sin(uWT * 3.1 + wp * 1.7)) * uWA * wh * wh * 0.006;
+            mvPosition.xz += uWD * ws;
+          #endif
+          mvPosition = modelViewMatrix * mvPosition;
+          gl_Position = projectionMatrix * mvPosition;`);
+    };
+    m.customProgramCacheKey = () => 'veg-wind-v1';
+    return m;
+  }
+
   _vegetation() {
     const geo = fn => { const b = new GeoBuilder(); fn(b); return b.build().children[0].geometry; };
+    this.vegMat = this._vegMaterial();
     // every kind has one or more looks (js/flora.js); which look a spot gets comes from its position (w: how
     // often each look appears), so the world's random sequence — and where everything stands — is unchanged
     const rocks = [geo(F.boulderA), geo(F.boulderB), geo(F.standingRock), geo(F.redRock)], bushG = geo(F.roundBush);
@@ -161,7 +183,7 @@ export class World {
       }
       for (let vi = 0; vi < t.geos.length; vi++) for (const list of chunks[vi]) {
         if (!list.length) continue;
-        const im = new THREE.InstancedMesh(t.geos[vi], MAT.solid, list.length);
+        const im = new THREE.InstancedMesh(t.geos[vi], t.rock ? MAT.solid : this.vegMat, list.length);
         list.forEach((mm, i) => im.setMatrixAt(i, mm));
         im.castShadow = t.shadow; im.receiveShadow = !t.shadow;
         im.computeBoundingSphere();
@@ -463,7 +485,7 @@ export class World {
       for (let k = 0; k < 4; k++) b.add(new THREE.IcosahedronGeometry(rand(7, 13), 0), 0xffffff, x + rand(-14, 14), y + rand(-2, 3), z + rand(-6, 6), 0, rand(0, 3), 0, 'solid', 1.4, 0.55, 1);
     }
     this.cloudMat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, fog: false, emissive: 0x9db0c8, emissiveIntensity: 0.5 });
-    const g = b.build({ solid: this.cloudMat });
+    const g = this.cloudGroup = b.build({ solid: this.cloudMat });    // (Farm World's real weather has its own drifting clouds: js/weather/effects.js)
     g.traverse(o => { o.castShadow = false; o.receiveShadow = false; });
     this.scene.add(g);
   }
@@ -488,6 +510,7 @@ export class World {
 
   update(dt, focus, camera) {
     this.time += dt;
+    if (this.windU) this.windU.uWT.value = this.time;
     // Zombie Trail: the night comes and goes with the campaign (in Farm World DayNight follows the real time)
     if (this.dayNight.mode !== 'real' && Math.abs(this.night - this.nightTarget) > 0.001)
       this.night = clamp(this.night + Math.sign(this.nightTarget - this.night) * dt * 0.8, 0, 1);

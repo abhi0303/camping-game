@@ -33,8 +33,22 @@ What it stores:
 | `POST /v1/rooms/:code/members/:id/permissions` | owner | `{ canInvite: true \| false }` — let a member invite friends too (`room_members.can_invite`, migration 10) |
 | `POST /v1/rooms/:code/members/:id/owner` | owner | `{ confirm: true }` — hand the world over: that member becomes the owner; the old owner stays a member who can invite |
 | `POST /v1/rooms/:code/farm` | member | one action with a `requestId`: `buy {item, qty, shelter?}`, `sell {item, qty}`, `build {type, plot}`, `deposit {items: {wood, stone}}`, `feed {shelter, count \| all}`, `upgrade {target: 'storage', level}`, `gate {shelter, open}`, `collect {shelter}`, `cast {spot}`, `reel {cast, log}`, `rod {level}`, `order {order}`, `rent {offer}`, `sellhorse {animal}`, `catch {theft}`, `dog {op: 'buy' \| 'feed' \| 'train', dog?, food?, level?}`, `seen {}`, `field {op: 'buy' \| 'sowstart' \| 'sow' \| 'water' \| 'harvest' \| 'scarecrow', slot, crop?, level?}`, `outfit {op: 'buy' \| 'wear' \| 'off', item?}`, `machine {machine: 'mine' \| 'flour', op: 'collect' \| 'upgrade' \| 'buy' \| 'add' \| 'turnstart' \| 'turn', level?, qty?}` |
+| `GET /v1/rooms/:code/weather` | member | the world's real weather (asks the weather service first when it's due): condition, temperature, wind, AQI, the weather leader, where it comes from (no coordinates) |
+| `POST /v1/rooms/:code/weather` | weather leader | the place: `{ op: 'gps', lat, lon }` · a city `{ op: 'place', lat, lon, label }` · `{ op: 'skip' }` (not now) |
+| `GET /v1/rooms/:code/weather/places?q=` | member | towns and cities with that name (to pick one by hand) |
 | `GET /v1/rooms/:code/farm/history` | member | the last 30 purchases / sales / builds / feedings / upgrades, with who did them |
 | `POST /v1/admin/migrate` | admin secret | apply database migrations |
+
+The host's heartbeat also sends `wxRev` (the weather version it has); the answer carries `weather` when it changed, and the host passes it to the others in the live game.
+
+### Real weather (`src/weather.js`, migration 12)
+
+- **Weather leader:** the first member to join the live game (`room_members.live_since`, from the host's heartbeat and `/session`). A leader who drops out keeps the job for 120 s (`WEATHER.leaderGraceS`, the game's reconnect window); then the earliest joiner still playing takes over. Chosen with the world's row locked, so there is one leader at a time (`rooms.weather_leader`).
+- **Place:** sent by the leader's game, kept rounded to 2 decimals (~1 km) in `rooms.weather_loc`, never returned to players.
+- **Weather service:** [Open-Meteo](https://open-meteo.com) forecast + air quality (CAMS) + geocoding — no key needed for non-commercial use (free: 10,000 calls a day, 5,000 an hour, 600 a minute; CC BY 4.0, attribution shown in the game). For commercial use buy an API plan (Standard ≈ $29 a month for 1 million calls) and set `npx wrangler secret put OPEN_METEO_KEY` — the server then uses the `customer-*` endpoints with the key.
+- **Calls:** at most once per `WEATHER_TTL_MIN` (default 60) per world, and only while the world is played (the host's heartbeat or a request finds the data old). `weather_lock` makes sure one request asks while the others get the saved data; never more than once a minute per world. Cloudflare's cache keeps an answer for a place 15 minutes, so worlds at the same place share it. Two calls a refresh (weather + air quality): about 48 a day for a world played all day.
+- **Failures:** the last good weather stays (`weather_status: 'error'`); the next try waits 2, 4, 8, 16, 32, then 60 minutes. No air-quality data → `aqi: null` (no haze), the weather still shows.
+- **AQI:** India's National AQI (CPCB), worked out from the pollutant concentrations: 24-hour averages for PM2.5, PM10, NO₂, SO₂ and the highest 8-hour average for O₃ and CO; the highest sub-index; at least 3 pollutants including PM2.5 or PM10 (`js/weather/rules.js`, `WEATHER.aqiScale: 'us'` switches to the US EPA AQI).
 
 Members send `Authorization: Bearer <token>`. Errors look like `{ "error": { "code": "members_full", "message": "…" } }`.
 

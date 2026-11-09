@@ -219,6 +219,18 @@ const UI = {
   shield: U('M12 2.8l7.6 3v5.6c0 4.6-3.2 8.4-7.6 9.8-4.4-1.4-7.6-5.2-7.6-9.8V5.8z'),
   bolt: UF('M13.4 2.4L4.6 13.6h6l-1.2 8 8.8-11.2h-6z'),
   bubble: U('', '<circle cx="9" cy="14" r="4.4" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="16.4" cy="7.4" r="2.8" fill="none" stroke="currentColor" stroke-width="2"/>'),
+  // weather (js/weather/ui.js)
+  cloud: U('M7 18.4h10.2a4 4 0 0 0 .6-8 5.6 5.6 0 0 0-10.8 1.4A3.4 3.4 0 0 0 7 18.4z'),
+  cloudSun: U('M7.4 4.4v1.4M2.6 9.2H4M3.8 5.6l1 1M11 5.6l-1 1', '<path d="M5.2 11.2a3.2 3.2 0 0 1 5.4-2.6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M8.4 20h9.2a3.6 3.6 0 0 0 .4-7.2 5 5 0 0 0-9.6 1.2A3 3 0 0 0 8.4 20z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>'),
+  cloudMoon: U('M8.4 20h9.2a3.6 3.6 0 0 0 .4-7.2 5 5 0 0 0-9.6 1.2A3 3 0 0 0 8.4 20z', '<path d="M9.6 3.6a4.6 4.6 0 0 0-5.4 6.2 4.6 4.6 0 0 0 4 1.6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>'),
+  rain: U('M7 15.4h10.2a4 4 0 0 0 .6-8 5.6 5.6 0 0 0-10.8 1.4A3.4 3.4 0 0 0 7 15.4zM8.4 18.2l-1 2.4M12.4 18.2l-1 2.4M16.4 18.2l-1 2.4'),
+  storm: U('M7 14.4h1.6M15.4 14.4h1.8a4 4 0 0 0 .6-8 5.6 5.6 0 0 0-10.8 1.4A3.4 3.4 0 0 0 7 14.4', '<path d="M12.8 11.6l-3 5h3.4l-2 4.6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>'),
+  fog: U('M3.6 9.4h12.8M6 13h14.4M3.6 16.6h11M8 20.2h9.6M7 6a5 5 0 0 1 9.2-1'),
+  wind: U('M3 9.2h11.4a2.8 2.8 0 1 0-2.8-2.8M3 13.4h16a2.8 2.8 0 1 1-2.8 2.8M3 17.4h7.6'),
+  drop: U('M12 3.4c3 3.8 5.4 6.8 5.4 10a5.4 5.4 0 0 1-10.8 0c0-3.2 2.4-6.2 5.4-10z'),
+  thermo: U('M10 13.4V5.2a2 2 0 0 1 4 0v8.2a4 4 0 1 1-4 0zM12 9.6v6'),
+  pin: U('M12 21.2s-6.4-6-6.4-11a6.4 6.4 0 0 1 12.8 0c0 5-6.4 11-6.4 11z', '<circle cx="12" cy="10.2" r="2.2" fill="currentColor"/>'),
+  air: U('M3.4 8.6h9.2a2.4 2.4 0 1 0-2.4-2.4M3.4 12.4h15a2.6 2.6 0 1 1-2.6 2.6M3.4 16.2h5.2', '<circle cx="18.6" cy="7.2" r="1.3" fill="currentColor"/><circle cx="11.6" cy="19.2" r="1.3" fill="currentColor"/>'),
 };
 
 const NAME_OF = { money: 'coin', rupee: 'coin', worm: 'worms', fish: 'fish_medium', locker: 'locker', bay: 'camp', milk: 'cow_milk' };

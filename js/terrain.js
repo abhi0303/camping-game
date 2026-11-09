@@ -232,6 +232,7 @@ export function groundMaterial() {
   const mat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
   const u = { uVN: { value: 0 }, uVSeg: { value: Array.from({ length: 24 }, () => new THREE.Vector4()) }, uVW: { value: new Float32Array(24) },
     uVBox: { value: new THREE.Vector4(1e5, 1e5, -1e5, -1e5) }, uVSq: { value: new THREE.Vector3(1e5, 1e5, 0) },
+    uWet: { value: 0 },             // rain: the ground darkens (js/weather/effects.js)
     uV_dirt: { value: new THREE.Color(0xc9a06a) }, uV_dirtD: { value: new THREE.Color(0xa77f4e) }, uV_stone: { value: new THREE.Color(0xc4bcab) }, uV_stoneD: { value: new THREE.Color(0xa59d8c) }, uV_grout: { value: new THREE.Color(0x7d7466) } };
   for (const k in GROUND) u['uGr_' + k] = { value: new THREE.Color(GROUND[k]) };
   mat.userData.ground = u;
@@ -246,9 +247,10 @@ export function groundMaterial() {
         if (vGrass > 0.01) {
           float far = smoothstep(30.0, 110.0, distance(vGWorld, cameraPosition));
           diffuseColor.rgb = mix(diffuseColor.rgb, groundColor(vGWorld.xz, far), vGrass);
-        }`);
+        }
+        diffuseColor.rgb *= 1.0 - 0.3 * uWet;`);
   };
-  mat.customProgramCacheKey = () => 'ground-v15';
+  mat.customProgramCacheKey = () => 'ground-v16';
   return mat;
 }
 const GROUND_GLSL = /* glsl */`
@@ -256,7 +258,7 @@ varying float vGrass; varying vec3 vGWorld;
 uniform vec3 uGr_g0, uGr_g1, uGr_g2, uGr_g3, uGr_m0, uGr_m1, uGr_m2;
 // the village (Farm World): its dirt lanes (segments ax, az, bx, bz with widths) and its paved square
 uniform int uVN; uniform vec4 uVSeg[24]; uniform float uVW[24]; uniform vec4 uVBox; uniform vec3 uVSq;
-uniform vec3 uV_dirt, uV_dirtD, uV_stone, uV_stoneD, uV_grout;
+uniform vec3 uV_dirt, uV_dirtD, uV_stone, uV_stoneD, uV_grout; uniform float uWet;
 const float MUD_T = ${MUD_T};
 float gh12(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
 vec2 gh22(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973)); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.xx + p3.yz) * p3.zy); }

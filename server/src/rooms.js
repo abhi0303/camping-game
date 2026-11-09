@@ -4,9 +4,10 @@
 import { ApiError, badInput, json, rateLimit, readJson } from './http.js';
 import { one, rows, tx, isUniqueViolation } from './db.js';
 import { b64urlText, fromB64urlText, hmacHex, randomCode, randomToken, safeEqual, sha256Hex, b64url, randomBytes } from './crypto.js';
+import { markLive, electLeader, refreshDue, weatherIfNew } from './weather.js';
 
 export const MAX_MEMBERS = 4;
-const HOST_STALE_S = 35;        // no host heartbeat for this long = the host is gone (heartbeat every 15 s)
+export const HOST_STALE_S = 35;        // no host heartbeat for this long = the host is gone (heartbeat every 15 s)
 const HOST_GRACE_S = 10;        // a brand-new host gets this long to come online before others may replace it
 const INVITE_HOURS = 72;
 const TICKET_MS = 10 * 60 * 1000;
@@ -296,6 +297,7 @@ export async function openSession(req, env, db, code) {
     // a guest that lost the host and could not find it on the PeerJS server
     if (!take && b.hostGone === r.host_epoch && b.unavailable === true && !r.young) take = true;
     await c.rows('UPDATE room_members SET last_seen_at = now() WHERE id = $1', [me.id]);
+    await markLive(c, [me.id]);                    // (the weather leader is the first to join: server/src/weather.js)
     if (take) {
       const epoch = r.host_epoch + 1;
       const peer = `rvfarm-${code.toLowerCase()}-${epoch}-${randomCode(5).toLowerCase()}`;
@@ -322,11 +324,11 @@ export async function heartbeat(req, env, db, code) {
     world = b.world;
   }
   const ids = Array.isArray(b.online) ? b.online.filter(x => typeof x === 'string' && UUID_RE.test(x)).slice(0, MAX_MEMBERS * 2) : [];
-  return tx(db, async c => {
+  const out = await tx(db, async c => {
     const r = await c.one('SELECT host_member_id, host_epoch, world_rev FROM rooms WHERE id = $1 FOR UPDATE', [me.room_id]);
     if (r.host_member_id !== me.id || r.host_epoch !== b.epoch) {
       const h = r.host_member_id ? await c.one('SELECT name FROM room_members WHERE id = $1', [r.host_member_id]) : null;
-      return json({ ok: false, superseded: true, hostId: r.host_member_id, hostName: h ? h.name : '' });
+      return { ok: false, superseded: true, hostId: r.host_member_id, hostName: h ? h.name : '' };
     }
     const online = (await c.rows('SELECT id FROM room_members WHERE room_id = $1 AND (id = ANY($2::uuid[]) OR id = $3)', [me.room_id, ids, me.id])).map(x => x.id);
     const rel = b.release === true;
@@ -340,10 +342,19 @@ export async function heartbeat(req, env, db, code) {
         world_saved_at = CASE WHEN $4::jsonb IS NULL THEN world_saved_at ELSE now() END
         WHERE id = $1 RETURNING world_rev, world_saved_at`, [me.room_id, online, rel, world ? JSON.stringify(world) : null]);
     await c.rows('UPDATE room_members SET last_seen_at = now() WHERE id = ANY($1::uuid[])', [online]);
+    // who is in the game: their place in the join order, and who leads the weather (server/src/weather.js)
+    if (!rel) { await markLive(c, online); await electLeader(c, me.room_id, online); }
     // players in the live game who are no longer members (removed by the owner): the host puts them out
     const gone = ids.filter(id => !online.includes(id));
-    return json({ ok: true, worldRev: w.world_rev, savedAt: w.world_saved_at, online: online.length, gone });
+    return { ok: true, worldRev: w.world_rev, savedAt: w.world_saved_at, online: online.length, gone, rel };
   });
+  if (out.ok && !out.rel) {
+    // the weather: asked again when it's due (one request at a time per world); the host gets it when it changed
+    await refreshDue(db, env, me.room_id).catch(e => console.warn('weather:', e && e.message));
+    if (Number.isInteger(b.wxRev)) { const w = await weatherIfNew(db, me.room_id, b.wxRev).catch(() => null); if (w) out.weather = w; }
+  }
+  delete out.rel;
+  return json(out);
 }
 
 // host: is this PeerJS guest really a member? (their ticket came from /session)

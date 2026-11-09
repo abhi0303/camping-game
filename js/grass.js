@@ -119,24 +119,25 @@ export class Grass {
     // [0] white daisies, [1] yellow flowers
     this.geos = [daisy(), yellowFlower()];
     this.time = { value: 0 }; this.pressAt = { value: new THREE.Vector3(1e5, 1e5, 0) }; this.glow = { value: 0.16 };
+    this.wind = { value: 1 };                     // how hard the wind blows (Farm World's weather: js/weather/effects.js)
     const mat = this.mat = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
     mat.onBeforeCompile = sh => {
-      sh.uniforms.uTime = this.time; sh.uniforms.uPress = this.pressAt; sh.uniforms.uGlow = this.glow;
-      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nuniform float uTime;\nuniform vec3 uPress;')
+      sh.uniforms.uTime = this.time; sh.uniforms.uPress = this.pressAt; sh.uniforms.uGlow = this.glow; sh.uniforms.uWind = this.wind;
+      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nuniform float uTime, uWind;\nuniform vec3 uPress;')
         .replace('#include <begin_vertex>', `#include <begin_vertex>
           #ifdef USE_INSTANCING
           // pressed down and leaning away around the player's feet (you can always see where you walk)
           vec2 away = instanceMatrix[3].xz - uPress.xy; float pd = length(away), pk = mix(0.28, 1.0, smoothstep(0.45, 1.7, pd));
           transformed.y *= pk;
-          float sw = sin(uTime * 1.6 + instanceMatrix[3].x * 0.35 + instanceMatrix[3].z * 0.27);
-          transformed.x += sw * 0.07 * transformed.y * transformed.y; transformed.z += sw * 0.04 * transformed.y * transformed.y;
+          float sw = sin(uTime * (1.2 + 0.4 * uWind) + instanceMatrix[3].x * 0.35 + instanceMatrix[3].z * 0.27) + 0.35 * (uWind - 1.0);
+          transformed.x += sw * 0.07 * uWind * transformed.y * transformed.y; transformed.z += sw * 0.04 * uWind * transformed.y * transformed.y;
           #endif`);
       // both sides of a blade are lit the same (the normals already point up toward the light)
       sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform float uGlow;')
         .replace('#include <normal_fragment_begin>', THREE.ShaderChunk.normal_fragment_begin.replace('normal *= faceDirection;', ''))
         .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += diffuseColor.rgb * uGlow;');   // soft daylight glow
     };
-    mat.customProgramCacheKey = () => 'grass-v5';
+    mat.customProgramCacheKey = () => 'grass-v6';
     this.setQuality('medium');
   }
   setQuality(name) {

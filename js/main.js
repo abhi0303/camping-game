@@ -46,6 +46,9 @@ import { Football } from './village/football.js';
 import { FarmGuide } from './farm/guide.js';
 import { DutchMill, MILL2 } from './farm/dutchmill.js';
 import { FarmFields } from './farm/fields.js';
+import { WeatherFX } from './weather/effects.js';
+import { WeatherSync } from './weather/sync.js';
+import { WeatherUI } from './weather/ui.js';
 import { Machines } from './farm/machines/machines.js';
 import { Ambience } from './ambience.js';
 import { Birds } from './birds.js';
@@ -153,7 +156,8 @@ function backToMenu(msg, mode) {
 /* ---------- Farm World: a permanent world saved online, for up to 4 members (js/farm) ---------- */
 const farm = new Farm({ net, session, toast: m => toast(m),
   collectWorld: () => collectWorld(), applyWorld: w => applyWorld(w), freshWorld: () => survival.setFarm(),
-  onGone: msg => backToMenu(msg, 'farm'), onRoster: () => renderRoster(), onHosting: () => renderRoster(), onRoles: () => { renderRoster(); farmPanel.render(); } });
+  onGone: msg => backToMenu(msg, 'farm'), onRoster: () => renderRoster(), onHosting: () => renderRoster(), onRoles: () => { renderRoster(); farmPanel.render(); },
+  wxRev: () => weather.rev, onWeather: w => weather.fromHeartbeat(w) });   // (the world's real weather: js/weather)
 session.farm = farm;
 survival.g.farmHud = () => farmHud();
 // the farm itself: plots, shelters, animals and the market. The numbers come from the server (farmEco).
@@ -211,6 +215,11 @@ player.fishing = fishing;
 // birds in the trees and the sky; the jungle's sounds (crickets, toads, birdsong, the river, footsteps)
 const birds = new Birds(scene, world);
 const grass = new Grass(scene, world);             // wild flowers around the player (js/grass.js)
+// Farm World's real weather: the leader's place, from the farm server; clouds, rain, wind, fog, haze, thunder (js/weather)
+const weatherFX = new WeatherFX(scene, { world, grass, now: () => farmEco.serverNow(), inside: () => player.frame === 'rv' });
+const weather = new WeatherSync({ farm, net, toast: m => toast(m), now: () => farmEco.serverNow(),
+  onChange: (w, prev) => { weatherFX.set(w); weatherUI.render(); weatherUI.notify(w, prev); }, ask: (kind, o) => weatherUI.showAsk(kind, o) });
+const weatherUI = new WeatherUI({ sync: weather, toast: m => toast(m) });
 const music = new Music();                         // Farm World's tune (js/music.js)
 const ambience = new Ambience();
 // thieves come for eggs left in the nests, guard dogs keep them off (the server decides: server/src/thieves.js)
@@ -460,6 +469,8 @@ function applyQuality(name) {
   renderer.setSize(innerWidth, innerHeight, false);
   renderer.shadowMap.enabled = q.shadows;
   camera.far = q.far; camera.updateProjectionMatrix(); scene.fog.far = q.fog; scene.fog.near = q.fog * 0.25;
+  world.fogBase = q.fog;                                        // (the weather's fog and haze shorten it: js/weather/effects.js)
+  weatherFX.setQuality(QUALITY[name] ? name : 'medium');       // how many raindrops and flying leaves
   world.sun.castShadow = q.shadows;
   world.dayNight.setQuality(QUALITY[name] ? name : 'medium');   // lamps' real lights + torch smoke
   grass.setQuality(QUALITY[name] ? name : 'medium');            // how far and how dense the grass blades grow
@@ -807,10 +818,12 @@ async function enterFarm(L, status, isNew) {
   mill.enable(); mill2.enable();           // the big windmills
   fields.enable();                         // its crop fields
   machines.enable();                       // the gold mine and the flour machine
+  weatherFX.enable(); weatherUI.show(true); // the real weather where the weather leader is
   if (village.people) village.people.onWhistle = (x, z) => ambience.onWhistle(x, z, listener);   // the night watchman
   dogs.enable(); thieves.enable();      // guard dogs and thieves
   football.enable();                    // football on the village green
   farmEco.start(L);
+  weather.start();
   startGame(r.role === 'host'
     ? (isNew || r.fresh ? `🌾 Welcome to ${L.roomName}! World code ${L.code} — invite friends from the menu (Esc)` : `🌾 Welcome back to ${L.roomName}`)
     : `🌾 You joined ${r.hostName || 'your friend'} in ${L.roomName}`);
@@ -1015,6 +1028,7 @@ function step(dt) {
   player.char.root.getWorldPosition(pw);
   focus.copy(drone.active ? drone.pos : player.mode === 'drive' ? player.rv.root.position : pw);
   world.dayNight.setMode(survival.farm ? 'real' : 'game');     // Farm World: real time · Zombie Trail: zombie nights
+  weatherFX.update(dt, camera);                                // Farm World's real weather (before the sky is drawn)
   world.update(dt, focus, camera);
   flags.update(dt);
   minimap.update(dt, whereAmI(), mapMarkers());
@@ -1047,7 +1061,8 @@ function sounds(dt) {
     walk = { speed: player.vel.length(), surface };
   }
   ambience.update(dt, { dark, phase: dn.phase, water: Math.max(0, world.T.riverDistAt(pw.x, pw.z) - RIVER_HALF), fishing: fishing.active,
-    muffled: player.frame === 'rv', walk, listener, birds: birds.perched(), animals: farm.active && player.mode === 'foot' ? farmland.near : null });
+    muffled: player.frame === 'rv', walk, listener, birds: birds.perched(), animals: farm.active && player.mode === 'foot' ? farmland.near : null,
+    weather: weatherFX.on ? weatherFX.audio : null });
 }
 
 function frame(now) {
@@ -1091,7 +1106,7 @@ function debugStage(st, build) {
   if (build) { designer.show(build); designer._action('build'); designer.close(); }
   if (st === 'siege' || st === 'giants') survival._toStage(st);
 }
-window.__game = { renderer, dogs, thieves, football, mill, mill2, fields, machines, debugStage, net, session, voice, birds, ambience, notebook, grass, farmPanel, minimap, village, structures, designer, giants, player, rvs, remotes, obstacles, bridgeWorld, materials, world, inv, gear, editor, input, rig, camera, zombies, survival, combat, applySave, collectSave, saveNow, farm, farmEco, farmUI, farmland, fishArea, fishing, dayNight: world.dayNight, get objI() { return objI; },
+window.__game = { renderer, weather, weatherFX, weatherUI, dogs, thieves, football, mill, mill2, fields, machines, debugStage, net, session, voice, birds, ambience, notebook, grass, farmPanel, minimap, village, structures, designer, giants, player, rvs, remotes, obstacles, bridgeWorld, materials, world, inv, gear, editor, input, rig, camera, zombies, survival, combat, applySave, collectSave, saveNow, farm, farmEco, farmUI, farmland, fishArea, fishing, dayNight: world.dayNight, get objI() { return objI; },
   // test hooks: advance the game n frames / pin the camera
   run: n => { for (let i = 0; i < n; i++) step(1 / 60); renderer.render(scene, camera); }, setCam: a => { freezeCam = a; } };
 

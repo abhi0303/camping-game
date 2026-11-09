@@ -6,6 +6,7 @@ import { safeEqual } from './crypto.js';
 import { migrate } from './migrations.js';
 import * as R from './rooms.js';
 import * as F from './farm.js';
+import * as W from './weather.js';
 
 const routes = [
   ['GET', /^\/v1\/health$/, health],
@@ -27,6 +28,9 @@ const routes = [
   ['GET', /^\/v1\/rooms\/([^/]+)\/farm$/, F.farmState, true],
   ['POST', /^\/v1\/rooms\/([^/]+)\/farm$/, F.farmAct, true],
   ['GET', /^\/v1\/rooms\/([^/]+)\/farm\/history$/, F.farmHistory, true],
+  ['GET', /^\/v1\/rooms\/([^/]+)\/weather$/, W.weatherGet, true],
+  ['POST', /^\/v1\/rooms\/([^/]+)\/weather$/, W.weatherPost, true],
+  ['GET', /^\/v1\/rooms\/([^/]+)\/weather\/places$/, W.weatherPlaces, true],
 ];
 
 async function health(req, env, db) {

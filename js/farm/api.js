@@ -49,6 +49,10 @@ export const api = {
   farm: L => req('GET', `/v1/rooms/${enc(L.code)}/farm`, { token: L.token }),
   farmAct: (L, body) => req('POST', `/v1/rooms/${enc(L.code)}/farm`, { token: L.token, body }),
   farmHistory: L => req('GET', `/v1/rooms/${enc(L.code)}/farm/history`, { token: L.token }),
+  // real-world weather (js/weather/sync.js): the world's weather · the weather leader's place · towns by name
+  weather: L => req('GET', `/v1/rooms/${enc(L.code)}/weather`, { token: L.token }),
+  weatherSet: (L, body) => req('POST', `/v1/rooms/${enc(L.code)}/weather`, { token: L.token, body }),
+  weatherPlaces: (L, q) => req('GET', `/v1/rooms/${enc(L.code)}/weather/places?q=${enc(q)}`, { token: L.token }),
   // last save while the page closes: a beacon can't carry headers, so the token goes in the body
   beacon(L, body) {
     if (!API_BASE || !navigator.sendBeacon) return false;

@@ -25,7 +25,10 @@ export const DAY_NIGHT = {
   fixed: { sunrise: '06:00', sunset: '18:00', noon: 65 },   // for 'fixed': sunrise / sunset in timeZone, the sun's height at midday (°)
   shadowAngle: [10, 85],         // the sun's height used for shadows stays in this range (very low sun: shadows stay on screen)
   sunSize: 1.6, moonSize: 2.4,   // drawn sizes in the sky (degrees; bigger than the real ones, easier to see)
-  weather: { clouds: 0, fog: 0 },   // for weather later (0..1): clouds dim the sun and grey the sky, fog thickens the haze
+  // Farm World's real weather sets these (js/weather/effects.js), all 0..1: clouds dim the sun and grey the sky ·
+  // fog: weather fog (grey) · haze: pollution haze from the AQI (yellow-brown, a dimmer warmer sun) · flash:
+  // lightning · dark: the gloom under rain clouds. How far you can see is set there too (scene.fog distance).
+  weather: { clouds: 0, fog: 0, haze: 0, flash: 0, dark: 0 },
 };
 
 const RAD = Math.PI / 180, DEG = 180 / Math.PI, UP = new THREE.Vector3(0, 1, 0);
@@ -108,6 +111,7 @@ for (const k of LOOK) for (const c of COLS) { const v = Array.isArray(k[c]) ? k[
 const MOONLIGHT = new THREE.Color(0x9fb4e8), CLASSIC_DIR = new THREE.Vector3(34, 60, 20).normalize();
 const DAY_GLASS = new THREE.Color(0x4f6170), NIGHT_WINDOW = new THREE.Color(0xffc773), GLASS_DAY = new THREE.Color(0.55, 0.52, 0.48), GLASS_NIGHT = new THREE.Color(1, 0.97, 0.9);
 const DAY_SKY = { top: new THREE.Color(0x4a8fd6), hor: new THREE.Color(0xd3e6f0), fog: new THREE.Color(0xa9cbe0), night: new THREE.Color(0x0c1220) };
+const HAZE_DAY = new THREE.Color(0xa99c7e), HAZE_NIGHT = new THREE.Color(0x2b2822), HAZY_SUN = new THREE.Color(0xffc48a), FLASH = new THREE.Color(0xdce4ff);
 
 /* ---------------- lamps ---------------- */
 // kinds of light point: colour, strength of the real light (when one of the pool's lights is on it), its reach,
@@ -338,14 +342,24 @@ export class DayNight {
       sunI *= 1 - 0.75 * k; moonI *= 1 - 0.8 * k; glowK *= 1 - 0.7 * k; starVis *= 1 - k; moonVis *= 1 - 0.85 * k;
       for (const c of [L.top, L.hor, L.fog]) { const g = (c.r + c.g + c.b) / 3 * 0.9; c.lerp(this._c.setRGB(g, g, g), 0.6 * k); }
     }
-    if (W.fog > 0) L.fog.lerp(L.hor, 0.5).lerp(this._c.setRGB(0.55, 0.57, 0.6).multiplyScalar(1 - dark * 0.85), 0.6 * W.fog);
+    if (W.fog > 0) { L.fog.lerp(L.hor, 0.5).lerp(this._c.setRGB(0.55, 0.57, 0.6).multiplyScalar(1 - dark * 0.85), 0.6 * W.fog); L.top.lerp(L.fog, 0.55 * W.fog); L.hor.lerp(L.fog, 0.6 * W.fog); }
+    // pollution haze: a dusty veil, the sun dimmer and warmer, fewer stars
+    if (W.haze > 0) {
+      const k = W.haze, hz = this._c.copy(HAZE_DAY).lerp(HAZE_NIGHT, dark);
+      L.fog.lerp(hz, 0.85 * k); L.hor.lerp(hz, 0.75 * k); L.top.lerp(hz, 0.5 * k); L.sun.lerp(HAZY_SUN, 0.5 * k);
+      sunI *= 1 - 0.4 * k; starVis *= 1 - 0.8 * k; moonVis *= 1 - 0.45 * k;
+    }
+    // rain clouds: gloomier light · lightning: the whole sky lights up for a moment
+    let hemiK = 1 - 0.45 * (W.dark || 0);
+    if (W.dark > 0) for (const c of [L.top, L.hor, L.fog]) c.multiplyScalar(1 - 0.42 * W.dark);
+    if (W.flash > 0) { for (const c of [L.top, L.hor, L.fog]) c.lerp(FLASH, 0.65 * W.flash); hemiK += 2.2 * W.flash; }
 
     // sky, fog, clouds
     const sc = Math.min(1, (camera.far * 0.92) / 500);
     this.dome.scale.setScalar(sc); this.dome.position.copy(camera.position);
     const u = this.skyMat.uniforms;
     u.uTop.value.copy(L.top); u.uHor.value.copy(L.hor); u.uGlow.value.copy(L.glow); u.uGlowK.value = glowK;
-    u.uSunDir.value.copy(sunDir); u.uSun.value.copy(L.sun); u.uSunVis.value = (this.mode === 'real' ? smoothstep(-2, 0.5, alt) : 1 - this.world.night) * (1 - 0.8 * W.clouds);
+    u.uSunDir.value.copy(sunDir); u.uSun.value.copy(L.sun); u.uSunVis.value = (this.mode === 'real' ? smoothstep(-2, 0.5, alt) : 1 - this.world.night) * (1 - 0.97 * W.clouds) * (1 - 0.5 * (W.haze || 0));
     this.scene.background.copy(L.fog); this.scene.fog.color.copy(L.fog);
     if (this.world.cloudMat) { this.world.cloudMat.emissive.copy(L.cl); this.world.cloudMat.emissiveIntensity = L.ci; }
     // stars turn around the celestial pole with the time of day
@@ -364,7 +378,7 @@ export class DayNight {
     const useMoon = moonI > sunI, I = Math.max(sunI, moonI);
     this.sun.intensity = I;
     this.sun.color.copy(useMoon ? MOONLIGHT : L.sun);
-    this.hemi.intensity = L.hi; this.hemi.color.copy(L.hs); this.hemi.groundColor.copy(L.hg);
+    this.hemi.intensity = L.hi * hemiK; this.hemi.color.copy(L.hs); this.hemi.groundColor.copy(L.hg);
     this.sun.shadow.autoUpdate = I > 0.02;           // no light: no need to draw its shadows
     const d = useMoon ? moonDir : sunDir, [a0, a1] = DAY_NIGHT.shadowAngle;
     const el = clamp(Math.asin(clamp(d.y, -1, 1)) * DEG, a0, a1), az = Math.atan2(d.x, d.z);

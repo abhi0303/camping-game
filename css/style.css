@@ -1458,3 +1458,50 @@ body.touch #turnMeter { bottom: 10px; width: min(300px, 44vw); font-size: 11px; 
 .mc-hours { display: flex; justify-content: space-between; font-size: 10.5px; color: #9a7c58; margin-top: 2px; }
 .mc-hours span:nth-child(2) { margin-left: -6%; } .mc-hours span:nth-child(4) { margin-right: -8%; }
 .nb-money.gold b { color: #b8860b; }
+
+/* ---------- real weather (Farm World, js/weather/ui.js) ---------- */
+#wxBtn { pointer-events: auto; cursor: pointer; flex: none; color: #eef4f8; font: 700 13px system-ui, sans-serif; padding: 5px 10px; display: inline-flex; gap: 6px; align-items: center; white-space: nowrap; }
+#wxBtn .ic { width: 17px; height: 17px; color: #cfe3f4; }
+#wxBtn b { font-size: 13.5px; }
+#wxBtn .dim { opacity: .7; }
+#wxBtn .wx-aqi { font-size: 11px; font-weight: 800; padding: 1px 6px; border-radius: 6px; background: color-mix(in srgb, var(--c) 30%, transparent); border: 1px solid var(--c); color: #fff; }
+#wxBtn.nudge { background: rgba(40, 90, 140, .85); border-color: rgba(140, 200, 255, .6); animation: syncPulse 1.6s ease-in-out infinite; }
+#wxBtn.stale .ic { opacity: .6; }
+#wxBtn:hover { filter: brightness(1.12); }
+body.touch #wxBtn { height: 30px; padding: 0 8px; font-size: 11.5px; gap: 4px; }
+body.touch #wxBtn .wx-aqi, body.touch #wxBtn .lbl { display: none; }
+body.farm #topc { width: max-content; }             /* (a row of chips: don't wrap at half the screen) */
+#wxPanel { background: rgba(22, 26, 36, .9); }
+#wxPanel { position: absolute; top: 64px; left: 50%; transform: translateX(-50%); width: min(380px, calc(100vw - 32px)); padding: 12px 14px; color: #eef2f6; font-size: 13px; pointer-events: auto; z-index: 4; display: flex; flex-direction: column; gap: 9px; max-height: calc(100vh - 120px); overflow: auto; }
+#wxPanel .ic, #wxAsk .ic { width: 16px; height: 16px; flex: none; }
+#wxPanel .ic.big, #wxAsk .ic.big { width: 34px; height: 34px; color: #cfe3f4; }
+.wx-head { display: flex; align-items: center; gap: 10px; }
+.wx-head > div { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.wx-head b { font-size: 16px; }
+.wx-head span { opacity: .8; }
+.wx-x { pointer-events: auto; cursor: pointer; background: none; border: 0; color: #ccd; padding: 4px; }
+.wx-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px 12px; }
+.wx-grid > div { display: flex; align-items: center; gap: 5px; white-space: nowrap; }
+.wx-grid span { opacity: .72; }
+.wx-grid b { margin-left: auto; }
+.wx-aqirow { display: flex; align-items: center; gap: 10px; padding: 7px 9px; border-radius: 9px; background: color-mix(in srgb, var(--c) 18%, rgba(0,0,0,.2)); border: 1px solid color-mix(in srgb, var(--c) 70%, transparent); }
+.wx-aqibig { font-size: 22px; font-weight: 900; min-width: 46px; text-align: center; color: var(--c); }
+.wx-aqirow > div { display: flex; flex-direction: column; }
+.wx-aqirow small { opacity: .78; font-size: 11.5px; }
+.wx-where, .wx-note { display: flex; gap: 6px; align-items: flex-start; line-height: 1.35; }
+.wx-note { opacity: .85; font-size: 12px; }
+.wx-note.warn { color: #ffd59a; opacity: 1; }
+.wx-acts { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.wx-acts .fu-go { display: inline-flex; align-items: center; gap: 5px; padding: 7px 10px; font-size: 12.5px; }
+.wx-lead { font-size: 11.5px; font-weight: 800; color: #9fd0ff; display: inline-flex; align-items: center; gap: 4px; flex-basis: 100%; }
+.wx-src { font-size: 10.5px; opacity: .55; line-height: 1.35; }
+#wxAsk { position: absolute; top: 18%; left: 50%; transform: translateX(-50%); width: min(400px, calc(100vw - 32px)); padding: 14px 16px; color: #eef2f6; font-size: 13.5px; pointer-events: auto; z-index: 6; display: flex; flex-direction: column; gap: 9px; background: rgba(22, 26, 36, .94); }
+#wxAsk p { margin: 0; line-height: 1.4; opacity: .9; }
+.wx-askh { display: flex; align-items: center; gap: 10px; font-size: 15.5px; }
+#wxQ { pointer-events: auto; font: 600 14px system-ui, sans-serif; padding: 8px 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,.2); background: rgba(0,0,0,.35); color: #fff; }
+.wx-list { display: flex; flex-direction: column; gap: 3px; max-height: 190px; overflow: auto; }
+.wx-place { pointer-events: auto; cursor: pointer; text-align: left; display: flex; gap: 6px; align-items: center; padding: 7px 9px; border-radius: 7px; border: 0; background: rgba(255,255,255,.07); color: #eef2f6; font: 600 13px system-ui, sans-serif; }
+.wx-place:hover { background: rgba(120, 190, 255, .22); }
+.wx-dim { opacity: .65; font-size: 12px; padding: 4px 2px; }
+body.touch #wxPanel { top: 46px; font-size: 12px; max-height: calc(100vh - 60px); }
+body.touch #wxAsk { top: 8%; font-size: 12.5px; }

@@ -5,6 +5,8 @@
 //   river    — flowing water when you're near it; at the docks while fishing, water lapping, little bubbles
 //              and fish jumping out of the water
 //   footsteps — soft steps on grass, gravel on the road, hollow knocks on wooden docks and the RV floor
+//   weather  — Farm World's real weather (js/weather/effects.js): rain pattering (a heavier rush in a downpour),
+//              the wind rising and falling with gusts, thunder rolling in a few seconds after the lightning
 //   farm animals — two goats butting heads clack; walk up to the pens and the hens cluck ("buk-buk… ba-gawk!") and the goats bleat, from
 //              where they are, louder the closer you get (hens mostly sleep at night)
 // Everything is quiet and low-passed so it sits under the game. Inside the RV it sounds muffled.
@@ -41,8 +43,12 @@ export class Ambience {
     const bp = (f, q) => { const b = ctx.createBiquadFilter(); b.type = 'bandpass'; b.frequency.value = f; b.Q.value = q; return b; };
     const lp = f => { const b = ctx.createBiquadFilter(); b.type = 'lowpass'; b.frequency.value = f; return b; };
     const hp = f => { const b = ctx.createBiquadFilter(); b.type = 'highpass'; b.frequency.value = f; return b; };
-    // wind through the leaves: very soft
-    this.wind = loop(this.brown, [lp(700), hp(90)], 0);
+    // wind through the leaves: very soft (stronger on a windy day: its filter opens with the gusts)
+    this.windF = lp(700);
+    this.wind = loop(this.brown, [this.windF, hp(90)], 0);
+    // rain: a bright patter, and a low rush when it pours
+    this.rainA = loop(this.white, [hp(1400), lp(7000)], 0);
+    this.rainB = loop(this.brown, [lp(1100), hp(160)], 0);
     // river: a low rush + a brighter babble whose filter wanders (lapping)
     this.river = loop(this.brown, [bp(420, 0.6), hp(120)], 0);
     this.babbleF = bp(1300, 1.4);
@@ -268,6 +274,21 @@ export class Ambience {
     l.bp.frequency.setTargetAtTime(rough > 1 ? 260 : freq * 3, t, 0.3);
     l.og.gain.setTargetAtTime(rough > 1 ? 0.12 : 0.5, t, 0.3);
   }
+  // thunder: a sharp crack (close) and a long low roll
+  thunder(vol = 0.4) {
+    if (!this.ready) return;
+    const ctx = this.ctx, t = ctx.currentTime + 0.02;
+    const roll = ctx.createBufferSource(), lp = ctx.createBiquadFilter(), g = ctx.createGain();
+    roll.buffer = this.brown; lp.type = 'lowpass'; lp.frequency.setValueAtTime(320, t); lp.frequency.exponentialRampToValueAtTime(90, t + 5);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.25);
+    g.gain.setTargetAtTime(vol * 0.55, t + 0.6, 0.6); g.gain.exponentialRampToValueAtTime(0.0001, t + 5.5);
+    roll.connect(lp); lp.connect(g); g.connect(this.bus); roll.start(t, Math.random() * 2); roll.stop(t + 5.6);
+    if (vol > 0.4) {
+      const n = ctx.createBufferSource(), f = ctx.createBiquadFilter(), ng = ctx.createGain();
+      n.buffer = this.white; f.type = 'bandpass'; f.frequency.value = 900; f.Q.value = 0.5;
+      this._env(ng, t, vol * 0.35, 0.01, 0.35); n.connect(f); f.connect(ng); ng.connect(this.bus); n.start(t); n.stop(t + 0.4);
+    }
+  }
   /* ---------- football (js/village/football.js) ---------- */
   // the referee's whistle: one sharp trilled blast
   refWhistle(vol = 0.07) {
@@ -351,8 +372,16 @@ export class Ambience {
     const morning = s.phase === 'morning' ? 1 : s.phase === 'evening' ? 0.45 : s.phase === 'night' ? 0 : 0.5;
     const near = clamp(1 - (s.water - 6) / 45, 0, 1);
     const set = (bed, v, k = 1.5) => bed.g.gain.setTargetAtTime(v, now, k);
-    // beds
-    set(this.wind, 0.022 + 0.012 * Math.sin(this.t * 0.13), 2);
+    // beds (the weather: rain and wind, then thunder that's due)
+    const Wx = s.weather, gust = 0.5 + 0.5 * Math.sin(this.t * 0.37) * Math.sin(this.t * 0.11 + 1);
+    set(this.wind, 0.022 + 0.012 * Math.sin(this.t * 0.13) + (Wx ? Wx.wind * (0.05 + 0.07 * gust) : 0), 2);
+    this.windF.frequency.setTargetAtTime(700 + (Wx ? Wx.wind * gust * 900 : 0), now, 1.5);
+    set(this.rainA, Wx ? 0.05 * Math.sqrt(Wx.rain) : 0, 1.2);
+    set(this.rainB, Wx ? 0.09 * Wx.heavy : 0, 1.5);
+    if (Wx && Wx.thunder.length) {
+      const pn = performance.now();
+      for (let i = Wx.thunder.length - 1; i >= 0; i--) if (pn >= Wx.thunder[i].at) { if (pn - Wx.thunder[i].at < 3000) this.thunder(Wx.thunder[i].vol); Wx.thunder.splice(i, 1); }
+    }
     set(this.river, (0.05 + (s.fishing ? 0.03 : 0)) * near, 1);
     set(this.babble, (0.012 + (s.fishing ? 0.022 : 0)) * near, 1);
     if ((T.lap -= dt) < 0) { T.lap = rnd(0.15, 0.5); this.babbleF.frequency.setTargetAtTime(rnd(800, 2000), now, 0.15); }

@@ -12,7 +12,8 @@ const isUuid = s => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{1
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 export class Farm {
-  // g: { net, session, toast, collectWorld, applyWorld, freshWorld, onGone(msg, forget), onRoster, onHosting }
+  // g: { net, session, toast, collectWorld, applyWorld, freshWorld, onGone(msg, forget), onRoster, onHosting,
+  //      wxRev() (the weather version this game has), onWeather(w) (the server's newer weather: js/weather/sync.js) }
   constructor(g) {
     this.g = g;
     this.L = null;            // login: { code, token, memberId, name, seat, isOwner, canInvite, roomName }
@@ -111,11 +112,14 @@ export class Farm {
     const epoch = this.epoch;
     this.beating = true;
     try {
-      const r = await api.heartbeat(this.L, { epoch, online: this.online(), world });
+      const wxRev = this.g.wxRev ? this.g.wxRev() : undefined;
+      const r = await api.heartbeat(this.L, { epoch, online: this.online(), world, wxRev });
       if (epoch !== this.epoch || this.role !== 'host') return;
       if (r.superseded) { this._superseded(r); return; }
       // someone in the game is no longer a member (removed while their kick message got lost): put them out
       for (const id of r.gone || []) this.g.session.kickMember(id, 'removed');
+      // the world's weather changed (new weather, a new weather leader…): the host passes it to everyone
+      if (r.weather && this.g.onWeather) this.g.onWeather(r.weather);
       if (world) { this.savedJs = js; this.savedAt = now; this.lastSaveAt = Date.now(); }
       if (this.fails >= 2) this.g.toast('✅ Connected to the Farm World server again — progress saved');
       this.fails = 0;
