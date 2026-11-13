@@ -183,7 +183,10 @@ world.dayNight.synced = () => farmEco.syncAt > 0;
 const PHASE_MSG = { evening: '🌇 Evening — the sun is going down; the lamps come on at dusk', night: '🌙 Night has fallen — lanterns, windows and torches light the farm', morning: '🌅 Sunrise — a new day on the farm' };
 world.dayNight.onPhase = ph => { if (started && survival.farm && PHASE_MSG[ph]) toast(PHASE_MSG[ph]); };
 const farmUI = new FarmUI({ eco: farmEco, materials, toast: m => toast(m), hooks: uiHooks, onCollect: () => { farmEco.collected = true; audio.thud(300, 0.05); },
-  beforeOpen: () => notebook.close(), onSeen: () => farmEco.act({ action: 'seen' }).catch(() => {}) });
+  beforeOpen: () => notebook.close(), onSeen: () => farmEco.act({ action: 'seen' }).catch(() => {}),
+  // a dog was fed: it eats at its bowl here and in the others' games (the same start on the shared clock)
+  onDogFed: (slot, food) => { const t0 = farmEco.serverNow() / 1000; dogs.eat(slot, t0, food); try { net.send('dogEat', { slot, t0, food }); } catch (e) { /* alone */ } } });
+net.on('dogEat', d => { if (d && Number.isInteger(d.slot) && isFinite(d.t0)) dogs.eat(d.slot, d.t0, d.food); });
 // the bag (Farm Notebook) and the order slip: floating buttons, N / O
 const notebook = new Notebook({ eco: farmEco, materials, hooks: uiHooks, worldName: () => (farm.L ? farm.L.roomName : ''),
   dateText: () => new Date(farmEco.serverNow()).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' }),
@@ -223,7 +226,7 @@ const weatherUI = new WeatherUI({ sync: weather, toast: m => toast(m), onOpen: u
 const music = new Music();                         // Farm World's tune (js/music.js)
 const ambience = new Ambience();
 // thieves come for eggs left in the nests, guard dogs keep them off (the server decides: server/src/thieves.js)
-const dogs = new GuardDogs(scene, { eco: farmEco, world, bark: (x, z, n, deep) => ambience.onBark(x, z, listener, n, deep) });
+const dogs = new GuardDogs(scene, { eco: farmEco, world, bark: (x, z, n, deep) => ambience.onBark(x, z, listener, n, deep), openKennel: slot => farmUI.open('kennel', slot) });
 const thieves = new Thieves(scene, { eco: farmEco, world, player, touch, toast: m => toast(m), hud: $('hud'),
   alarm: () => ambience.alarm(), whoosh: () => ambience.whoosh(), jingle: good => ambience.jingle(good),
   seen: () => farmEco.act({ action: 'seen' }).catch(() => {}), myName: () => (farm.L ? farm.L.name : '') });
@@ -279,7 +282,7 @@ player.worldActs = () => {
   l.push(...obstacles.acts(eq && eq.type));
   for (const a of crateActs) if (!a.c.taken) l.push(a);
   l.push(benchAct, boardAct, towerBenchAct, castleBenchAct, ...flagActs, ...survival.acts(), ...structures.acts());
-  if (farm.active) l.push(...farmland.acts(), ...fishing.acts(), ...village.acts(player), ...football.acts(), ...fields.acts(), ...mill.acts(player), ...mill2.acts(player), ...machines.acts());
+  if (farm.active) l.push(...farmland.acts(), ...fishing.acts(), ...village.acts(player), ...football.acts(), ...fields.acts(), ...mill.acts(player), ...mill2.acts(player), ...machines.acts(), ...dogs.acts());
   return l;
 };
 
