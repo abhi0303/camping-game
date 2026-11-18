@@ -6,7 +6,8 @@
 // map. Static parts are merged into a few chunk meshes (one per area and material); the many plants and the
 // trees are instanced. Windows light up at night and lamps glow (js/day-night.js, the shared IST clock).
 // The villagers (js/village/ai.js) live in it: they get the doors, gardens, pens, props and benches from here.
-// Poly View Farm, a farmstead at the village's edge by the docks path, is js/village/farmstead.js.
+// Poly View Farm, a farmstead at the village's edge by the docks path, is js/village/farmstead.js; the carrot farm and
+// the archway house across the path are js/village/modelHomes.js.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { GeoBuilder, MAT } from '../utils.js';
@@ -19,7 +20,10 @@ import { buildPen, PEN_SIZE, ANIMALS } from './animals.js';
 import { well, cart, haystack, clothesline, hearth, shed, stall, tableSet, pots } from './props.js';
 import { Villagers, benchColliders } from './ai.js';
 import { Farmstead } from './farmstead.js';
+import { ModelHomes } from './modelHomes.js';
 import { VILLAGE_NAME, SQUARE, LANES, VILLAGE_CLEAR, BOUNDS, laneDist, laneSegments, placeHouses, inside, plot } from './layout.js';
+import { FISH_MARKET, toLocal } from '../farm/layout.js';
+import { FISH_MARKET_AREA } from '../fishing/area.js';
 
 const CHUNK = 32;
 const hash = s => { let h = 2166136261; for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619); return ((h >>> 0) % 100000) / 100000; };
@@ -54,6 +58,7 @@ export class Village {
     this.scene = scene; this.world = world; this.on = false;
     this.houses = []; this.pens = []; this.objects = []; this.spots = { doors: [], benches: [], square: SQUARE }; this.addresses = [];
     this.farmstead = new Farmstead(scene, world);
+    this.modelHomes = new ModelHomes(scene, world);
   }
   // everything the village puts in the scene goes through here (so it can be found, hidden or measured)
   _add(o) { this.scene.add(o); this.objects.push(o); }
@@ -159,6 +164,7 @@ export class Village {
     this.people.prepare((x, z) => chunk(x, z));
     // Poly View Farm (after the villagers' paths are worked out: they don't go there)
     this.farmstead.enable({ farmland, chunk });
+    this.modelHomes.enable({ dayNight: W.dayNight });
     // build the meshes
     const mats = { ...MAT, win0: W.dayNight.windowMats[0], win1: W.dayNight.windowMats[1], win2: W.dayNight.windowMats[2] };
     for (const b of this.chunks.values()) { const g = b.build(mats); g.traverse(o => { if (o.isMesh) { o.matrixAutoUpdate = false; o.updateMatrix(); W.addFogCull(o); } }); this._add(g); }
@@ -167,14 +173,14 @@ export class Village {
     // the steps, porches and stone foundations are walked on (js/world.js surfaces)
     W.surfaces.push({ surfaceAt: (x, z) => this._stepAt(x, z) });
     // the lanes and the square on the ground, the grass and flowers kept off them, the map
-    const segs = laneSegments().concat(this.farmstead.segs), fb = this.farmstead.box;
-    T.setVillageGround && T.setVillageGround(segs, SQUARE, { x0: Math.min(BOUNDS.x0, fb.x0), x1: Math.max(BOUNDS.x1, fb.x1), z0: Math.min(BOUNDS.z0, fb.z0), z1: Math.max(BOUNDS.z1, fb.z1) });
+    const segs = laneSegments().concat(this.farmstead.segs, this.modelHomes.segs), fb = this.farmstead.box;
+    T.setVillageGround && T.setVillageGround(segs, SQUARE, { x0: Math.min(BOUNDS.x0, fb.x0), x1: Math.max(BOUNDS.x1, fb.x1, -80), z0: Math.min(BOUNDS.z0, fb.z0), z1: Math.max(BOUNDS.z1, fb.z1, 18) });
     W.addGrassBlock((x, z) => this.blocked(x, z));
     const mapHouses = this.houses.flatMap(H => {
       const S = H.spec, out = [{ x: H.x, z: H.z, yaw: H.yaw, w: S.shape === 'round' ? S.r * 2 : S.w, d: S.shape === 'round' ? S.r * 2 : S.d, round: S.shape === 'round', col: S.roofCol }];
       if (S.annex) { const A = S.annex, p = Village.at(H, A.side * (S.w / 2 + A.w / 2), -S.d / 2 + A.d / 2 + 0.2); out.push({ x: p.x, z: p.z, yaw: H.yaw, w: A.w, d: A.d, round: false, col: S.roofCol }); }
       return out;
-    }).concat(this.farmstead.mapHouses());
+    }).concat(this.farmstead.mapHouses(), this.modelHomes.mapHouses());
     if (minimap && minimap.addVillage) minimap.addVillage({ segs, square: SQUARE, houses: mapHouses });
   }
   // is (x, z) on a lane, the square, a house with its garden, or a pen? (no wild flowers there)
@@ -367,11 +373,12 @@ export class Village {
   }
   // trees round the village and between the houses (where there's room), and the big tree by the square
   _trees(R) {
-    const T = this.world.T, list = [];
+    const T = this.world.T, list = [], A = FISH_MARKET_AREA;
     const ok = (x, z, r) => !(x < BOUNDS.x0 + 1 || x > BOUNDS.x1 - 1 || z < BOUNDS.z0 + 1 || z > BOUNDS.z1 - 1)
       && T.roadDistAt(x, z) > 7 && T.riverDistAt(x, z) > 10 && laneDist(x, z).d > r && Math.hypot(x - SQUARE.x, z - SQUARE.z) > SQUARE.r + r
       && !this.houses.some(o => inside(o, x, z, (o.spec.shape === 'round' ? o.spec.r * 2 : o.spec.w) + r * 2, (o.spec.shape === 'round' ? o.spec.r * 2 : o.spec.d) + o.spec.garden * 2 + r))
-      && !this.pens.some(o => inside(o, x, z, PEN_SIZE.hw * 2 + r * 2, 4.2 + r * 2)) && !list.some(t => Math.hypot(t.x - x, t.z - z) < 6);
+      && !this.pens.some(o => inside(o, x, z, PEN_SIZE.hw * 2 + r * 2, 4.2 + r * 2)) && !list.some(t => Math.hypot(t.x - x, t.z - z) < 6)
+      && !(l => l.x > A.x0 - r && l.x < A.x1 + r && l.z > A.z0 - r && l.z < A.z1 + r)(toLocal(FISH_MARKET, x, z));   // (not over the Fish Market's ship)
     if (ok(this.bigTree.x, this.bigTree.z, 2)) list.push({ ...this.bigTree, k: 0, s: 1.15 });
     for (let i = 0; i < 260 && list.length < 32; i++) {
       const x = R(BOUNDS.x0 + 2, BOUNDS.x1 - 2), z = R(BOUNDS.z0 + 2, BOUNDS.z1 - 2);

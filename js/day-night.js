@@ -389,6 +389,7 @@ export class DayNight {
     MAT.lamp.emissiveIntensity = smoothstep(0.15, 0.65, lampDark) * 1.6;
     MAT.lampGlass.color.copy(GLASS_DAY).lerp(GLASS_NIGHT, smoothstep(0.15, 0.6, lampDark));
     this.windowMats.forEach((m, i) => m.color.copy(DAY_GLASS).lerp(NIGHT_WINDOW, smoothstep(this.windowTh[i], this.windowTh[i] + 0.25, lampDark)));
+    if (this.glowMats) { const k = smoothstep(0.15, 0.6, lampDark); for (const G of this.glowMats) G.mat.emissiveIntensity = G.day + (G.night - G.day) * k; }
     if (wall >= this.scanT) { this.scanT = wall + 1500; this._scan(); }   // new or removed models (real time, not game time)
     this._lampsFrame(dt, focus);
   }
@@ -441,6 +442,9 @@ export class DayNight {
     });
     if (changed) this._layout();
   }
+  // a material that glows more at night (lit windows painted in a model's texture, js/baked.js): its emissive
+  // intensity goes from `day` to `night` as the lamps come on
+  addGlow(mat, day, night) { (this.glowMats || (this.glowMats = [])).push({ mat, day, night }); }
   // a lamp that moves (a lantern somebody carries, js/village/ai.js): `owner` is its model in the scene (hidden:
   // the lamp is off), and whoever carries it moves lamp.p every frame — the halo and the real light follow it
   addMovingLamp(owner, kind = 'lantern') {

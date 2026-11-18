@@ -1,0 +1,11 @@
+Model Information:
+* title:	Medieval Toon House
+* source:	https://sketchfab.com/3d-models/medieval-toon-house-b8954be2359c43958c381a0972452319
+* author:	guillemvilah (https://sketchfab.com/guillemvilah)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Medieval Toon House" (https://sketchfab.com/3d-models/medieval-toon-house-b8954be2359c43958c381a0972452319) by guillemvilah (https://sketchfab.com/guillemvilah) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)

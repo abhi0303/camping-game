@@ -1,4 +1,5 @@
-// The fishing area in the world (Farm World): the Fish Market east of the Market with its fisherman, a
+// The fishing area in the world (Farm World): the Fish Market east of the Market (a ship run aground with a supply
+// store in front) and its fisherman, a
 // footpath north through the jungle to the river, and three wooden docks on the river's south bank — each
 // one a fishing spot. Fish swim (and now and then jump) around the docks; rings spread on the water.
 // Nothing here changes with the game state; the fishing itself is in fishing.js.
@@ -10,12 +11,22 @@ import { signboard, wallSign } from '../farm/models.js';
 import { C, FARM_MAT, lampPost, barrel, crate } from '../farm/props.js';
 import { FarmerNPC } from '../farm/npc.js';
 import { flambeau } from '../day-night.js';
-import { fishMarketModel, FISH_MARKET_DIM, dockModel, buildFish } from './models.js';
+import { dockModel, buildFish } from './models.js';
+import { loadBaked } from '../baked.js';
 
 const DOCK_X = [-112, -97, -82];        // roughly where the three docks meet the river (world x)
 const DOCK_LEN = 6.5, DOCK_W = 2.4;
 const SWIMMERS = 4;                     // fish swimming around each dock
 const v3 = (x, y, z) => new THREE.Vector3(x, y, z);
+// the Fish Market's model in the market's frame (FISH_MARKET): its origin sits at (x, z), to one side so the path to
+// the docks still starts clear of the hull. In the model's own frame (metres): the store (floor h), the deck round
+// it and the jetty (plank tops h), the hull (an ellipse), the fisherman's place, the sign, the lamps
+const SHIP = { x: 3.2, z: 3.5, shop: { x0: -3.3, x1: 3.45, z0: -3.95, z1: -1.1, h: 0.41 }, deck: { x0: -5.6, x1: 6.6, z0: -4.6, z1: 1.2, h: 0.13 },
+  jetty: { x0: -1.2, x1: 1.6, z0: 1.2, z1: 3.0 }, hull: { x: -0.45, z: -7.7, rx: 7.05, rz: 2.8 }, npc: { x: 0.2, z: -2.3 }, sign: { x: 0.2, y: 2.62, z: -1.02 },
+  lights: [[0.2, 1.9, -2.5, 'lamp'], [11.5, 5.1, -7.25, 'lantern'], [11.3, 4.9, -4.5, 'lantern']] };
+// the ground the ship, its deck and its sails take (the market's frame; js/village keeps its trees off it)
+export const FISH_MARKET_AREA = { x0: -8.5, x1: 16, z0: -11, z1: 10.5 };
+const PATH_START = { x: -6.2, z: -6.0 };   // the docks path leaves from behind the market (the village's main lane starts there too)
 
 export class FishingArea {
   constructor(scene, world) {
@@ -68,33 +79,48 @@ export class FishingArea {
   }
 
   /* ---------- the Fish Market ---------- */
+  // "DAE Villages | Shipwrecked Chinese Supply Store" (kennethtzh, CC-BY-4.0; baked by tools/bake-textured.mjs): a
+  // junk ship run aground behind a red supply store with a green tiled roof, on a plank deck with a jetty in front.
+  // The fisherman stands in the store behind its stall window; you talk to him from the deck. The model is drawn
+  // when its file has come; the walls, the deck, the fisherman and the signs are there right away.
   _market() {
-    const M = FISH_MARKET, mb = this.H(M.x, M.z), mh = this.hAt(M, mb), W = FISH_MARKET_DIM.w, D = FISH_MARKET_DIM.d;
-    let hi = -1e9;
-    for (let x = -W / 2; x <= W / 2; x += 1) for (let z = -D / 2; z <= D / 2; z += 1) hi = Math.max(hi, mh(x, z));
-    const floor = hi + FISH_MARKET_DIM.floor;
-    this.place(fishMarketModel(floor, mh), M, mb);
-    const sign = wallSign('FISH MARKET', 'fresh catch · worms · rods', 3.6, 0.9, '', '#1f4a63');
-    sign.position.set(0, floor + 3.78, D / 2 + 0.03);
-    this.place(new THREE.Group().add(sign), M, mb);
+    const M = FISH_MARKET, S = SHIP, at = (x, z) => toWorld(M, S.x + x, S.z + z);
+    const inShip = (x, z) => { const l = toLocal(M, x, z); return { x: l.x - S.x, z: l.z - S.z }; };
+    // it stands on the highest ground under the deck (the hull sinks into the ground)
+    let base = -1e9;
+    for (let x = S.deck.x0; x <= S.deck.x1; x += 1) for (let z = S.deck.z0; z <= S.deck.z1 + 1.8; z += 1) { const w = at(x, z); base = Math.max(base, this.H(w.x, w.z)); }
+    const deck = base + S.deck.h, floor = base + S.shop.h;
+    // no jungle under the ship and its sails (they reach past the farm's clearing)
+    const A = FISH_MARKET_AREA, cs = [[A.x0, A.z0], [A.x1, A.z0], [A.x1, A.z1], [A.x0, A.z1]].map(([x, z]) => toWorld(M, x, z));
+    this.world.clearArea([{ x0: Math.min(...cs.map(p => p.x)), x1: Math.max(...cs.map(p => p.x)), z0: Math.min(...cs.map(p => p.z)), z1: Math.max(...cs.map(p => p.z)) }]);
+    const F = { ...at(0, 0), yaw: M.yaw };
+    loadBaked('dae_villages__shipwrecked_chinese_supply_store', { dayNight: this.world.dayNight }).then(g => {
+      g.userData.lights = S.lights;                       // a lamp in the store, the two big lanterns at the stern (lit at night)
+      this.place(g, F, base); g.updateMatrixWorld(true);
+      g.children.forEach(m => this.world.addFogCull(m));    // (not drawn when it's wholly in the fog)
+      this.ship = g;
+    }, e => console.warn('[fish market] model not loaded:', e.message || e));
+    // the sign over the stall windows, and the one by the road
+    const sign = wallSign('FISH MARKET', 'fresh catch · worms · rods', 3.0, 0.62, '', '#1f4a63');
+    sign.position.set(S.x + S.sign.x, S.sign.y, S.z + S.sign.z);
+    this.place(new THREE.Group().add(sign), M, base);
     this.place(signboard('FISH MARKET', 'worms · rods · sell fish', { w: 2.0, h: 0.8, lift: 0.9, bg: '#1f4a63', hAt: this.hAt(FISH_SIGN) }), FISH_SIGN);
-    // its floor and walls
-    const top = mb + floor;
-    this.world.surfaces.push({ surfaceAt: (x, z) => {
-      const l = toLocal(M, x, z);
-      if (Math.abs(l.x) <= W / 2 && Math.abs(l.z) <= D / 2) return top;
-      if (l.x > 2.95 && l.x < 4.85 && l.z > D / 2 && l.z < D / 2 + 1.3) return mb + floor + (mh(l.x, D / 2 + 1.3) - floor) * (l.z - D / 2) / 1.3;   // the steps
-      return null;
-    } });
-    this.wall(M, -W / 2 + 0.2, -D / 2 + 0.25, W / 2 - 0.2, -D / 2 + 0.25, 0.32, 0.5);
-    for (const s of [-1, 1]) this.wall(M, s * (W / 2 - 0.15), -D / 2 + 0.2, s * (W / 2 - 0.15), D / 2 - 0.1, 0.3, 0.5);
-    this.wall(M, -W / 2 + 0.3, D / 2 - 0.75, 3.1, D / 2 - 0.75, 0.45, 0.6);              // the counter
-    for (const [x, z, r] of [[-4.0, -2.2, 0.75], [4.2, -2.2, 0.75], [3.4, -2.7, 0.35], [3.7, 2.6, 0.45], [-2.6, -3.0, 0.4], [2.9, -3.0, 0.4]]) this.dot(M, x, z, r);
-    for (const s of [-1, 1]) this.dot(M, s * (W / 2 + 0.6), D / 2 + 1.5, 0.2);
-    this.dot(M, -W / 2 - 1.9, -1, 0.9); this.dot(M, -W / 2 - 1.9, 0.5, 0.8); this.dot(M, -W / 2 - 1.9, -2.4, 0.7);
-    // the fisherman behind the counter
-    const nw = toWorld(M, -0.6, D / 2 - 1.55);
-    this.npc = new FarmerNPC(this.scene, { x: nw.x, y: top, z: nw.z, yaw: M.yaw }, {
+    // walk on the deck and the jetty
+    const inR = (l, R) => l.x >= R.x0 && l.x <= R.x1 && l.z >= R.z0 && l.z <= R.z1;
+    this.world.surfaces.push({ surfaceAt: (x, z) => { const l = inShip(x, z); return inR(l, S.deck) || inR(l, S.jetty) ? deck : null; } });
+    // the hull and the store are solid
+    const ring = (pts, r) => pts.forEach(([x, z]) => { const w = at(x, z); this.world.addCollider({ x: w.x, z: w.z, r }); });
+    const H = S.hull, hull = [];
+    for (let i = 0; i < 40; i++) { const a = i / 40 * Math.PI * 2; hull.push([H.x + Math.cos(a) * (H.rx - 0.5), H.z + Math.sin(a) * (H.rz - 0.5)]); }
+    ring(hull, 0.62);
+    for (let x = H.x - H.rx + 1.5; x <= H.x + H.rx - 1.5; x += 1.4) ring([[x, H.z]], 0.9);
+    const R = S.shop, edge = [];
+    for (let x = R.x0 + 0.3; x <= R.x1 - 0.3; x += 0.5) edge.push([x, R.z1 - 0.3], [x, R.z0 + 0.3]);
+    for (let z = R.z0 + 0.3; z <= R.z1 - 0.3; z += 0.5) edge.push([R.x0 + 0.3, z], [R.x1 - 0.3, z]);
+    ring(edge, 0.32);
+    // the fisherman behind the stall window
+    const nw = at(S.npc.x, S.npc.z);
+    this.npc = new FarmerNPC(this.scene, { x: nw.x, y: floor, z: nw.z, yaw: M.yaw }, {
       colors: { jacket: 0x2f5d7a, jacketLt: 0x3d7091, shirt: 0xd9e6ee, jeans: 0x3b4655, jeansDk: 0x2e3846, belt: 0x2a1a10,
         skin: 0xa86f48, skinDk: 0x8f5c3a, hair: 0x6a5a4a, shoe: 0x2a2a2a, shoeGrey: 0x3a3a3a, sole: 0x1a1a1a, watch: 0x4a4a4a },
       hat: b => {                                          // an olive bucket hat with a fly hook
@@ -105,15 +131,16 @@ export class FishingArea {
       },
       lines: ['Welcome! Looking for worms or fishing rods?', 'Or do you want to sell your catch?'],
     });
-    const front = toWorld(M, -0.6, D / 2 + 1.3), inside = toWorld(M, -0.6, D / 2 - 2.4);
-    this.marketSpots = [v3(front.x, this.H(front.x, front.z), front.z), v3(inside.x, top, inside.z)];
-    this.marketTop = top;
+    // talk to him from the deck in front of the window, or from the jetty
+    const front = at(S.npc.x, R.z1 + 0.9), jetty = at(S.jetty.x0 + 1.4, S.jetty.z0 + 1.0);
+    this.marketSpots = [v3(front.x, deck, front.z), v3(jetty.x, deck, jetty.z)];
+    this.marketTop = floor;
   }
 
   /* ---------- the footpath: Fish Market -> river bank, with lamps and signposts ---------- */
   _path() {
-    const M = FISH_MARKET, W = FISH_MARKET_DIM.w, s = this.spots;
-    const start = toWorld(M, -W / 2 - 1.2, -FISH_MARKET_DIM.d / 2 - 2.5);
+    const M = FISH_MARKET, s = this.spots;
+    const start = toWorld(M, PATH_START.x, PATH_START.z);
     const pts = [[start.x, start.z], [-91.5, -78], [-93, -45], [-95.5, -10], [s[1].bank.x, s[1].bank.z]];
     const branch = [[s[0].bank.x, s[0].bank.z], [s[1].bank.x, s[1].bank.z], [s[2].bank.x, s[2].bank.z]];
     const rects = [], b = new GeoBuilder(), lamps = [];
@@ -159,7 +186,7 @@ export class FishingArea {
     }
     this.scene.add(b.build(FARM_MAT));
     // signposts: by the Fish Market and at the bank
-    const sw = toWorld(M, -W / 2 - 1.4, -FISH_MARKET_DIM.d / 2 - 1.2);
+    const sw = toWorld(M, -6.4, -4.7);
     this.place(signboard('FISHING DOCKS', '↑ follow the path to the river', { w: 1.9, h: 0.72, lift: 0.85, bg: '#1f4a63', hAt: this.hAt({ x: sw.x, z: sw.z, yaw: Math.PI }) }), { x: sw.x, z: sw.z, yaw: Math.PI });
     const bw = s[1].bank, back = { x: bw.x - 2.6, z: bw.z - 2.2, yaw: s[1].yaw + Math.PI };
     this.place(signboard('FISH MARKET', '↓ worms · rods · sell your catch', { w: 1.9, h: 0.72, lift: 0.85, bg: '#1f4a63', hAt: this.hAt(back) }), back);
@@ -167,7 +194,10 @@ export class FishingArea {
     const segs = [];
     for (const list of [pts, branch]) for (let i = 0; i < list.length - 1; i++) segs.push([...list[i], ...list[i + 1]]);
     const segD = (x, z, [ax, az, bx, bz]) => { const vx = bx - ax, vz = bz - az, t = Math.max(0, Math.min(1, ((x - ax) * vx + (z - az) * vz) / (vx * vx + vz * vz || 1))); return Math.hypot(x - ax - vx * t, z - az - vz * t); };
-    this.world.addGrassBlock((x, z) => Math.hypot(x - M.x, z - M.z) < 9 || segs.some(g => segD(x, z, g) < 1.5) || s.some(sp => Math.hypot(x - sp.bank.x, z - sp.bank.z) < 3.2));
+    this.world.addGrassBlock((x, z) => {
+      const l = toLocal(M, x, z);
+      return (l.x > -5 && l.x < 11 && l.z > -7.8 && l.z < 7.2) || segs.some(g => segD(x, z, g) < 1.5) || s.some(sp => Math.hypot(x - sp.bank.x, z - sp.bank.z) < 3.2);   // (the ship and its deck)
+    });
   }
 
   /* ---------- water life: swimming fish, jumps, rings and drops ---------- */

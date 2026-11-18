@@ -1,9 +1,9 @@
-// Low-poly fishing models: the three rods (each looks different), the three fish, the bobber, a wooden
-// dock and the Fish Market building. Built like the farm models: their own frame, front = +z, ground at
+// Low-poly fishing models: the three rods (each looks different), the three fish, the bobber and a wooden
+// dock (the Fish Market is a baked model: js/fishing/area.js). Built like the farm models: their own frame, front = +z, ground at
 // y = 0 under the centre; hAt(x, z) gives the ground height at a local point.
 import * as THREE from 'three';
 import { GeoBuilder } from '../utils.js';
-import { C, FARM_MAT, planks, boards, crate, barrel, lantern, lampPost, sack } from '../farm/props.js';
+import { C, FARM_MAT, barrel, lampPost } from '../farm/props.js';
 
 const flat = () => 0;
 const build = b => b.build(FARM_MAT);
@@ -142,76 +142,3 @@ export function dockModel(len, wid, deck, hAt = flat, seed = 0) {
   return build(b);
 }
 
-/* ---------- the Fish Market (front = +z, toward the road) ---------- */
-export const FISH_MARKET_DIM = { w: 10, d: 7, floor: 0.6 };
-const SEA = 0x4f7f95, SEA_D = 0x3d6578, SEA_L = 0x6c97aa, TRIM = 0xeef0ea, ICE = 0xdff2f8;
-export function fishMarketModel(floor, hAt = flat) {
-  const b = new GeoBuilder(), W = FISH_MARKET_DIM.w, D = FISH_MARKET_DIM.d;
-  // stilts and a raised plank floor
-  for (const x of [-W / 2 + 0.3, -W / 6, W / 6, W / 2 - 0.3]) for (const z of [-D / 2 + 0.3, 0, D / 2 - 0.3]) {
-    const g = hAt(x, z) - 0.3;
-    b.box(0.26, floor - g, 0.26, x, (floor + g) / 2, z, C.woodD);
-  }
-  const n = 24;
-  for (let i = 0; i < n; i++) b.box(W, 0.1, D / n - 0.015, 0, floor - 0.05, -D / 2 + (i + 0.5) * D / n, [C.woodL, C.woodXL, C.wood][i % 3]);
-  b.group(0, floor, 0, 0, 0, 0, () => {
-    // walls: weathered blue-grey planks with white trim; the front is open over a long counter
-    planks(b, W, 3.2, 0, 1.6, -D / 2 + 0.05, SEA);
-    planks(b, D, 3.2, -W / 2 + 0.05, 1.6, 0, SEA_D, undefined, H);
-    planks(b, D, 3.2, W / 2 - 0.05, 1.6, 0, SEA_D, undefined, H);
-    for (const x of [-W / 2 + 0.1, W / 2 - 0.1]) for (const z of [-D / 2 + 0.1, D / 2 - 0.1]) b.box(0.2, 3.3, 0.2, x, 1.65, z, TRIM);
-    b.box(W + 0.1, 0.22, 0.24, 0, 3.25, D / 2 - 0.1, TRIM);
-    b.box(W + 0.1, 0.18, 0.22, 0, 3.25, -D / 2 + 0.1, TRIM);
-    // roof: a gable along x with blue tin sheets
-    const half = D / 2 + 0.5, rise = 1.5, len = Math.hypot(half, rise), a = Math.atan2(rise, half);
-    for (const s of [1, -1]) b.group(0, 3.35 + rise / 2, s * half / 2, s * a, 0, 0, () => {
-      b.box(W + 1, 0.1, len, 0, 0, 0, SEA_D);
-      for (let i = 0; i < 14; i++) b.box(0.4, 0.06, len + 0.02, -W / 2 - 0.2 + i * (W + 0.6) / 13, 0.07, 0, i % 2 ? SEA_L : 0x8fb3c2);
-    });
-    b.box(W + 1.1, 0.16, 0.28, 0, 3.35 + rise + 0.03, 0, TRIM);
-    for (let i = 0; i < 6; i++) { const k = 1 - (i + 0.5) / 6; for (const z of [D / 2 - 0.1, -D / 2 + 0.1]) b.box(W * k, rise / 6 * 0.95, 0.1, 0, 3.35 + (i + 0.5) * rise / 6, z, i % 2 ? SEA : SEA_L); }
-    // striped awning over the counter
-    for (let i = 0; i < 12; i++) b.box(W / 12 + 0.02, 0.06, 1.5, -W / 2 + (i + 0.5) * W / 12, 2.65, D / 2 + 0.6, i % 2 ? TRIM : 0x2f7fb0, 'solid', -0.32, 0, 0);
-    for (const s of [-1, 1]) b.box(0.1, 2.3, 0.1, s * (W / 2 - 0.2), 1.3, D / 2 + 1.2, C.woodD);
-    // the counter: a fish display on crushed ice, a scale, price slates
-    b.box(W - 2.4, 1.0, 0.9, -0.6, 0.5, D / 2 - 0.75, C.wood);
-    boards(b, W - 2.4, 0.9, -0.6, 0.5, D / 2 - 0.29, C.woodL, 3, 0, 0.05);
-    b.box(W - 2.3, 0.08, 1.0, -0.6, 1.04, D / 2 - 0.75, C.woodXL);
-    b.box(3.4, 0.12, 0.75, -1.9, 1.12, D / 2 - 0.75, ICE);
-    for (let i = 0; i < 9; i++) b.group(-3.4 + i * 0.36, 1.2, D / 2 - 0.75 + (i % 2 ? 0.14 : -0.14), 0, 0.15 * (i % 3 - 1) + H, H, () => buildFish(b, i % 3 === 2 ? 'fish_medium' : 'fish_small'));
-    b.group(0.6, 1.22, D / 2 - 0.75, 0, H + 0.2, H, () => buildFish(b, 'fish_large'));
-    b.box(0.3, 0.05, 0.3, 2.2, 1.11, D / 2 - 0.8, C.metalD); b.box(0.04, 0.3, 0.04, 2.2, 1.26, D / 2 - 0.8, C.metalD); b.box(0.5, 0.03, 0.03, 2.2, 1.42, D / 2 - 0.8, C.metalD);
-    for (const x of [-3.6, -0.6, 2.4]) { b.box(0.5, 0.36, 0.04, x, 1.35, D / 2 - 0.25, 0x2a3a2e); b.box(0.56, 0.42, 0.03, x, 1.35, D / 2 - 0.27, C.woodD); }
-    // worm containers by the counter's end: tubs of soil with pink worms
-    for (const [x, z] of [[3.6, D / 2 - 0.6], [4.05, D / 2 - 0.9], [3.55, D / 2 - 1.15]]) {
-      b.cyl(0.2, 0.17, 0.32, 9, x, 0.16, z, 0x7a5a3a); b.cyl(0.18, 0.18, 0.03, 9, x, 0.31, z, 0x4a3220);
-      for (let k = 0; k < 4; k++) b.box(0.1, 0.02, 0.02, x - 0.08 + (k % 2) * 0.12, 0.34, z - 0.06 + (k >> 1) * 0.12, 0xe08a8a, 'solid', 0, k * 0.8, 0);
-    }
-    // back wall: a rack with the three rods, nets, a hanging fish line and a menu board
-    b.box(3.0, 0.08, 0.1, -2.6, 2.3, -D / 2 + 0.2, C.woodD); b.box(3.0, 0.08, 0.1, -2.6, 0.9, -D / 2 + 0.2, C.woodD);
-    for (let i = 1; i <= 3; i++) b.group(-3.7 + i * 0.6, 0.2, -D / 2 + 0.3, -H + 0.02, 0, 0, () => buildRod(b, i));
-    for (let i = 0; i < 6; i++) b.box(0.012, 1.4, 0.012, 0.6 + i * 0.25, 2.1, -D / 2 + 0.15, 0x3a4a3a);
-    for (let i = 0; i < 6; i++) b.box(1.3, 0.012, 0.012, 1.25, 1.5 + i * 0.25, -D / 2 + 0.15, 0x3a4a3a);
-    b.box(2.6, 0.06, 0.06, 2.9, 2.55, -D / 2 + 0.6, C.woodD);
-    for (let i = 0; i < 6; i++) { const t = ['fish_small', 'fish_medium', 'fish_small', 'fish_large', 'fish_small', 'fish_medium'][i]; b.box(0.01, 0.2, 0.01, 1.8 + i * 0.42, 2.45, -D / 2 + 0.6, C.rope); b.group(1.8 + i * 0.42, 2.38 - FISH_LOOK[t].len * 0.55, -D / 2 + 0.6, H, 0, 0, () => buildFish(b, t)); }
-    // crates of fish on ice, barrels, sacks, a red and white buoy
-    for (const [x, z, r] of [[-4.2, -2.4, 0.2], [-3.5, -2.6, -0.1], [-4.2, -1.6, 0]]) { crate(b, x, 0, z, 0.6, C.woodL, r); b.box(0.52, 0.06, 0.52, x, 0.6, z, ICE); }
-    for (let k = 0; k < 4; k++) b.group(-4.25 + (k % 2) * 0.22, 0.66, -2.45 + (k >> 1) * 0.2, 0, 0.3, H, () => buildFish(b, 'fish_small'));
-    barrel(b, 4.2, 0, -2.6, SEA_D); barrel(b, 4.25, 0, -1.8); sack(b, 3.4, 0, -2.7, 0.3);
-    b.add(new THREE.TorusGeometry(0.28, 0.08, 6, 12), 0xe0302a, W / 2 - 0.16, 2.0, 1.2, 0, H, 0);
-    for (let i = 0; i < 4; i++) b.box(0.1, 0.12, 0.17, W / 2 - 0.16, 2.0 + Math.sin(i * H) * 0.28, 1.2 + Math.cos(i * H) * 0.28, TRIM, 'solid', i * H, 0, 0);
-    lantern(b, -3.0, 2.25, D / 2 - 0.2); lantern(b, 2.8, 2.25, D / 2 - 0.2);
-    // a step in front of the counter's open end (the way in)
-  });
-  // steps up at the open (east) side of the front
-  for (let i = 0; i < 3; i++) { const g = hAt(3.9, D / 2 + 0.4 + i * 0.4); b.box(1.8, Math.max(0.1, floor - i * floor / 3 - g), 0.4, 3.9, (floor - i * floor / 3 + g) / 2, D / 2 + 0.2 + i * 0.4, C.woodL); }
-  // lamp posts and a rowing boat on the side
-  lampPost(b, -W / 2 - 0.6, hAt(-W / 2 - 0.6, D / 2 + 1.5), D / 2 + 1.5, 0);
-  lampPost(b, W / 2 + 0.6, hAt(W / 2 + 0.6, D / 2 + 1.5), D / 2 + 1.5, Math.PI);
-  b.group(-W / 2 - 1.9, hAt(-W / 2 - 1.9, -1) + 0.25, -1, 0, 0.1, 0.25, () => {
-    for (const s of [-1, 1]) b.box(0.08, 0.4, 3.2, s * 0.55, 0.15, 0, 0x2f6a8a, 'solid', 0, 0, s * 0.35);
-    b.box(1.0, 0.08, 3.0, 0, -0.04, 0, 0x2a5a76); b.box(1.1, 0.06, 0.3, 0, 0.25, 0.3, C.woodL);
-    b.box(0.05, 0.05, 2.4, 0.2, 0.35, -0.2, C.woodXL, 'solid', 0.1, 0.2, 0);
-  });
-  return build(b);
-}

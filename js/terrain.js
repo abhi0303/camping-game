@@ -14,10 +14,13 @@ export const VALLEY = { x: 70, z: 368 };                                  // Wat
 export const TOWER_ZONE = { x: 70, z: 368, hw: 17, hd: 13 };              // where towers may stand (half sizes)
 export const GIANT = { x: -80, z: 592, r: 26 };                           // Giant Plateau: castle ring (max radius)
 export const RIVER_HALF = 6.5;
-// level ground (Farm World): Poly View Farm at the edge of Sonpur village (js/village/farmstead.js). x, z, yaw: its
-// frame; hw, hd: the half sizes of the level part in it (local x, z); edge: how far the ground eases back to its own
-// height. The level is the middle height of the ground there (so it's cut on one side and filled on the other).
-export const PADS = [{ x: -117, z: 1, yaw: Math.PI / 2, hw: 12.6, hd: 12.4, edge: 8 }];
+// level ground (Farm World): at Sonpur village's lower end, Poly View Farm (js/village/farmstead.js) and, across the
+// docks path, the carrot farm and the archway house (js/village/modelHomes.js). x, z, yaw: the frame; hw, hd: the
+// half sizes of the level part in it (local x, z); edge: how far the ground eases back to its own height. The level
+// is the middle height of the ground there (so it's cut on one side and filled on the other).
+export const PADS = [{ x: -117, z: 1, yaw: Math.PI / 2, hw: 12.6, hd: 12.4, edge: 8 },
+  { x: -86.5, z: -4.5, yaw: -Math.PI / 2, hw: 4.6, hd: 5.1, edge: 4 },
+  { x: -86.5, z: 10, yaw: -Math.PI / 2, hw: 6.8, hd: 4.4, edge: 4 }];
 export const BRIDGE = (() => {
   const mx = 0, mz = 10, l = Math.hypot(0.25, 1), dx = 0.25 / l, dz = 1 / l, span = 16;
   return { mx, mz, dx, dz, span, width: 4.4, ax: mx - dx * span / 2, az: mz - dz * span / 2, bx: mx + dx * span / 2, bz: mz + dz * span / 2 };

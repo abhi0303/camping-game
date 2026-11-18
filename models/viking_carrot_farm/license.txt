@@ -1,0 +1,11 @@
+Model Information:
+* title:	Viking Carrot Farm
+* source:	https://sketchfab.com/3d-models/viking-carrot-farm-a5f9fd422a3a4ee58ed1b1c3db7dafb7
+* author:	Tom Verbeeck (https://sketchfab.com/VerbeeckTom)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Viking Carrot Farm" (https://sketchfab.com/3d-models/viking-carrot-farm-a5f9fd422a3a4ee58ed1b1c3db7dafb7) by Tom Verbeeck (https://sketchfab.com/VerbeeckTom) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
