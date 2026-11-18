@@ -6,6 +6,7 @@
 // map. Static parts are merged into a few chunk meshes (one per area and material); the many plants and the
 // trees are instanced. Windows light up at night and lamps glow (js/day-night.js, the shared IST clock).
 // The villagers (js/village/ai.js) live in it: they get the doors, gardens, pens, props and benches from here.
+// Poly View Farm, a farmstead at the village's edge by the docks path, is js/village/farmstead.js.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { GeoBuilder, MAT } from '../utils.js';
@@ -17,6 +18,7 @@ import { buildGarden, PLANTS, SHADOW_PLANTS } from './gardens.js';
 import { buildPen, PEN_SIZE, ANIMALS } from './animals.js';
 import { well, cart, haystack, clothesline, hearth, shed, stall, tableSet, pots } from './props.js';
 import { Villagers, benchColliders } from './ai.js';
+import { Farmstead } from './farmstead.js';
 import { VILLAGE_NAME, SQUARE, LANES, VILLAGE_CLEAR, BOUNDS, laneDist, laneSegments, placeHouses, inside, plot } from './layout.js';
 
 const CHUNK = 32;
@@ -51,6 +53,7 @@ export class Village {
   constructor(scene, world) {
     this.scene = scene; this.world = world; this.on = false;
     this.houses = []; this.pens = []; this.objects = []; this.spots = { doors: [], benches: [], square: SQUARE }; this.addresses = [];
+    this.farmstead = new Farmstead(scene, world);
   }
   // everything the village puts in the scene goes through here (so it can be found, hidden or measured)
   _add(o) { this.scene.add(o); this.objects.push(o); }
@@ -154,6 +157,8 @@ export class Village {
     W.addCollider = addCollider;
     this.people = new Villagers(this);
     this.people.prepare((x, z) => chunk(x, z));
+    // Poly View Farm (after the villagers' paths are worked out: they don't go there)
+    this.farmstead.enable({ farmland, chunk });
     // build the meshes
     const mats = { ...MAT, win0: W.dayNight.windowMats[0], win1: W.dayNight.windowMats[1], win2: W.dayNight.windowMats[2] };
     for (const b of this.chunks.values()) { const g = b.build(mats); g.traverse(o => { if (o.isMesh) { o.matrixAutoUpdate = false; o.updateMatrix(); W.addFogCull(o); } }); this._add(g); }
@@ -162,14 +167,14 @@ export class Village {
     // the steps, porches and stone foundations are walked on (js/world.js surfaces)
     W.surfaces.push({ surfaceAt: (x, z) => this._stepAt(x, z) });
     // the lanes and the square on the ground, the grass and flowers kept off them, the map
-    const segs = laneSegments();
-    T.setVillageGround && T.setVillageGround(segs, SQUARE, BOUNDS);
+    const segs = laneSegments().concat(this.farmstead.segs), fb = this.farmstead.box;
+    T.setVillageGround && T.setVillageGround(segs, SQUARE, { x0: Math.min(BOUNDS.x0, fb.x0), x1: Math.max(BOUNDS.x1, fb.x1), z0: Math.min(BOUNDS.z0, fb.z0), z1: Math.max(BOUNDS.z1, fb.z1) });
     W.addGrassBlock((x, z) => this.blocked(x, z));
     const mapHouses = this.houses.flatMap(H => {
       const S = H.spec, out = [{ x: H.x, z: H.z, yaw: H.yaw, w: S.shape === 'round' ? S.r * 2 : S.w, d: S.shape === 'round' ? S.r * 2 : S.d, round: S.shape === 'round', col: S.roofCol }];
       if (S.annex) { const A = S.annex, p = Village.at(H, A.side * (S.w / 2 + A.w / 2), -S.d / 2 + A.d / 2 + 0.2); out.push({ x: p.x, z: p.z, yaw: H.yaw, w: A.w, d: A.d, round: false, col: S.roofCol }); }
       return out;
-    });
+    }).concat(this.farmstead.mapHouses());
     if (minimap && minimap.addVillage) minimap.addVillage({ segs, square: SQUARE, houses: mapHouses });
   }
   // is (x, z) on a lane, the square, a house with its garden, or a pen? (no wild flowers there)
@@ -214,6 +219,7 @@ export class Village {
         const what = D.where === 'table' ? 'stool' : D.h < 0.46 ? 'cot' : 'bench';
         return { pos, r: 1.45, label: () => `Sit on the ${what}`, act: () => this._sit(D, player) };
       });
+      for (const D of this.farmstead.seats) this._acts.push({ pos: { x: D.F.x, y: T.heightAt(D.F.x, D.F.z), z: D.F.z }, r: 1.3, label: () => 'Sit on the porch bench', act: () => this._sit(D, player) });
     }
     return this._acts;
   }

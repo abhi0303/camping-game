@@ -27,7 +27,9 @@ vec2 rigRot(vec2 p, vec2 o, float a) { vec2 d = p - o; float c = cos(a), s = sin
 // kinds (aRig.x): 1 leg (swings from the hip) · 2 neck (turns down from its base) · 3 wing / tail (flaps, swishes)
 //   4.x lower leg: swings with the leg and also bends at the knee (height (x - 4) * 2) while the hoof comes forward
 //   5.x head on a long neck: turns down with the neck (base y (x - 5) * 4, z aRig.y) and nods back at the poll
-//       (aRig.zw), so a grazing horse or cow gets its nose down to the grass
+//       (aRig.zw), so a grazing horse gets its nose down to the grass
+//   6   neck and head of a one-piece model (js/farm/polyRig.js: the cow, the pig): turns down about the neck's
+//       base (aRig.zw) by aRig.y of the head's angle (0 at the shoulder … 1 at the head), so the neck bends
 const RIG_VERTEX = `#include <begin_vertex>
   float rk = aRig.x;
   if (rk > 0.5 && rk < 1.5) transformed.yz = rigRot(transformed.yz, aRig.zw, sin(iAnim.x + aRig.y) * iAnim.y);
@@ -36,9 +38,10 @@ const RIG_VERTEX = `#include <begin_vertex>
   else if (rk > 3.5 && rk < 4.99) { float ph = iAnim.x + aRig.y;
     transformed.yz = rigRot(transformed.yz, vec2((rk - 4.0) * 2.0, aRig.w), max(0.0, -cos(ph)) * iAnim.y * 1.6);
     transformed.yz = rigRot(transformed.yz, aRig.zw, sin(ph) * iAnim.y); }
-  else if (rk >= 4.99) { transformed.z += iAnim.w;
+  else if (rk >= 4.99 && rk < 5.5) { transformed.z += iAnim.w;
     transformed.yz = rigRot(transformed.yz, aRig.zw, -iAnim.z * 0.62);
-    transformed.yz = rigRot(transformed.yz, vec2((rk - 5.0) * 4.0, aRig.y), iAnim.z); }`;
+    transformed.yz = rigRot(transformed.yz, vec2((rk - 5.0) * 4.0, aRig.y), iAnim.z); }
+  else if (rk >= 5.5) transformed.yz = rigRot(transformed.yz, aRig.zw, iAnim.z * aRig.y);`;
 function rigged(mat, key) {
   mat.onBeforeCompile = sh => {
     sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\n' + RIG_GLSL).replace('#include <begin_vertex>', RIG_VERTEX);
@@ -46,8 +49,8 @@ function rigged(mat, key) {
   mat.customProgramCacheKey = () => key;
   return mat;
 }
-export const rigMaterial = () => rigged(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }), 'animal-rig-v2');
-export const rigDepthMaterial = () => rigged(new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking }), 'animal-rig-depth-v2');
+export const rigMaterial = () => rigged(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }), 'animal-rig-v3');
+export const rigDepthMaterial = () => rigged(new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking }), 'animal-rig-depth-v3');
 // add the per-animal animation values to an instanced mesh's geometry
 export function addAnimAttributes(mesh, n) {
   const a = new THREE.InstancedBufferAttribute(new Float32Array(n * 4), 4), b = new THREE.InstancedBufferAttribute(new Float32Array(n * 2), 2);
@@ -55,19 +58,22 @@ export function addAnimAttributes(mesh, n) {
   mesh.geometry.setAttribute('iAnim', a); mesh.geometry.setAttribute('iAnim2', b);
 }
 // gait per kind: leg swing (radians at full walk), one full step cycle (m), walking speed for a full swing (m/s)
-export const GAIT = { goat: { amp: 0.5, cycle: 0.95, ref: 0.55 }, chicken: { amp: 0.75, cycle: 0.24, ref: 0.32 }, cow: { amp: 0.34, cycle: 1.5, ref: 0.32 }, horse: { amp: 0.38, cycle: 1.75, ref: 0.42 } };
+export const GAIT = { goat: { amp: 0.5, cycle: 0.95, ref: 0.55 }, chicken: { amp: 0.75, cycle: 0.24, ref: 0.32 }, cow: { amp: 0.42, cycle: 1.25, ref: 0.32 },
+  horse: { amp: 0.38, cycle: 1.75, ref: 0.42 }, pig: { amp: 0.5, cycle: 0.55, ref: 0.4 } };
 
-/* ---------- cows and horses ---------- */
+/* ---------- cows, horses and pigs ---------- */
 // standing, they graze: the head goes down to the grass for a while (nodding a little as they crop it), comes
 // up to look about, goes down again; walking, the head is carried low and bobs. The tail swishes now and then,
-// with a quick flick from time to time (flies). head: how far down (radians) · tail: the swish angle
-const HORSE_GRAZE = 1.85, COW_GRAZE = 1.55;          // how far the neck turns down to graze (the head nods back as it goes)
+// with a quick flick from time to time (flies). A pig roots about with quick little nods, and its curly tail
+// twitches. head: how far down (radians) · tail: the swish angle
+const GRAZE = { horse: 1.85, cow: 1.2, pig: 0.5 };   // how far the neck turns down to graze (a horse's head nods back as it goes)
 export function grazePose(a, ms, walking, out) {
-  const t = ms / 1000, k = a.k, u = (t + k * 97) % 16, horse = a.type.startsWith('horse');
+  const t = ms / 1000, k = a.k, u = (t + k * 97) % 16, kind = a.type.startsWith('horse') ? 'horse' : a.type, pig = kind === 'pig';
   const down = walking ? 0.25 : u < 10 ? Math.min(1, u / 1.2, (10 - u) / 1.2) : 0;
-  out.head = walking ? 0.22 + Math.sin(t * 3.2 + k * 9) * 0.05 : ease(Math.max(0, down)) * (horse ? HORSE_GRAZE : COW_GRAZE) + (down > 0.9 ? Math.sin(t * 2.4 + k * 3) * 0.07 : -0.08);
+  const nod = pig ? Math.sin(t * 6.5 + k * 3) * 0.1 : Math.sin(t * 2.4 + k * 3) * 0.07;
+  out.head = walking ? (pig ? 0.1 : 0.22) + Math.sin(t * 3.2 + k * 9) * 0.05 : ease(Math.max(0, down)) * (GRAZE[kind] || GRAZE.cow) + (down > 0.9 ? nod : -0.08);
   const flick = (t + k * 31) % 7 < 0.9 ? Math.sin(t * 11) * 0.45 : 0;
-  out.tail = Math.sin(t * 1.7 + k * 5) * 0.22 + flick;
+  out.tail = pig ? Math.sin(t * 9 + k * 5) * ((t + k * 13) % 5 < 1.6 ? 0.4 : 0.08) : Math.sin(t * 1.7 + k * 5) * 0.22 + flick;
   return out;
 }
 

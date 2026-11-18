@@ -14,6 +14,10 @@ export const VALLEY = { x: 70, z: 368 };                                  // Wat
 export const TOWER_ZONE = { x: 70, z: 368, hw: 17, hd: 13 };              // where towers may stand (half sizes)
 export const GIANT = { x: -80, z: 592, r: 26 };                           // Giant Plateau: castle ring (max radius)
 export const RIVER_HALF = 6.5;
+// level ground (Farm World): Poly View Farm at the edge of Sonpur village (js/village/farmstead.js). x, z, yaw: its
+// frame; hw, hd: the half sizes of the level part in it (local x, z); edge: how far the ground eases back to its own
+// height. The level is the middle height of the ground there (so it's cut on one side and filled on the other).
+export const PADS = [{ x: -117, z: 1, yaw: Math.PI / 2, hw: 12.6, hd: 12.4, edge: 8 }];
 export const BRIDGE = (() => {
   const mx = 0, mz = 10, l = Math.hypot(0.25, 1), dx = 0.25 / l, dz = 1 / l, span = 16;
   return { mx, mz, dx, dz, span, width: 4.4, ax: mx - dx * span / 2, az: mz - dz * span / 2, bx: mx + dx * span / 2, bz: mz + dz * span / 2 };
@@ -123,6 +127,14 @@ export function buildTerrain() {
   for (let i = iB + 6; i <= road.n; i++) hr[i] = clamp(hr[i], hr[i - 1] - G, hr[i - 1] + G);
   for (let i = iA - 6; i >= 0; i--) hr[i] = clamp(hr[i], hr[i + 1] - G, hr[i + 1] + G);
   const W = D - 3.4, BED = W - 2.4, campH = hr[iC], startH = hr[8], valleyH = hr[iV], giantH = hr[iG];
+  // the pads: their level (the median of the ground's own heights inside), and how much a point belongs to one
+  const padK = (P, x, z) => { const c = Math.cos(P.yaw), s = Math.sin(P.yaw), dx = x - P.x, dz = z - P.z, lx = Math.abs(dx * c - dz * s) - P.hw, lz = Math.abs(dx * s + dz * c) - P.hd;
+    return 1 - smoothstep(0, P.edge, Math.hypot(Math.max(0, lx), Math.max(0, lz))); };
+  for (const P of PADS) {
+    const hs = [];
+    for (let j = 0; j < NZ; j++) for (let i = 0; i < NX; i++) if (padK(P, X0 + i * CELL, Z0 + j * CELL) >= 1) hs.push(H[j * NX + i]);
+    hs.sort((a, b) => a - b); P.h = hs.length ? hs[hs.length >> 1] : baseHeight(P.x, P.z);
+  }
   const sA = road.s[iA], sB = road.s[iB];
   const roadH = s => { const f = clamp(s / road.length, 0, 1) * road.n, i = Math.min(road.n - 1, Math.floor(f)); return lerp(hr[i], hr[i + 1], f - i); };
 
@@ -136,6 +148,7 @@ export function buildTerrain() {
     const ds = Math.hypot(x - START.x, z - START.z); h = lerp(h, startH, 1 - smoothstep(26, 42, ds));
     const dv = Math.hypot(x - VALLEY.x, z - VALLEY.z); h = lerp(h, valleyH, 1 - smoothstep(30, 46, dv));
     const dg = Math.hypot(x - GIANT.x, z - GIANT.z); h = lerp(h, giantH, 1 - smoothstep(34, 50, dg));
+    for (const P of PADS) { const k = padK(P, x, z); if (k > 0) h = lerp(h, P.h, k); }
     const s = roadS[idx], inSpan = s > sA + 1.5 && s < sB - 1.5;
     if (!inSpan && rd > RIVER_HALF + 1) { const w = 1 - smoothstep(6.5, 15, roadD[idx]); h = lerp(h, roadH(s) - 0.02, w); }
     H[idx] = h;
@@ -164,7 +177,7 @@ export function buildTerrain() {
   T.mesh = terrainMesh(T, riverD, roadD);
   // the village's lanes and square, painted on the ground by its shader (js/village)
   T.setVillageGround = (segs, sq, box) => {
-    const u = T.mesh.material.userData.ground, n = Math.min(24, segs.length);
+    const u = T.mesh.material.userData.ground, n = Math.min(VSEGS, segs.length);
     for (let i = 0; i < n; i++) { u.uVSeg.value[i].set(segs[i][0], segs[i][1], segs[i][2], segs[i][3]); u.uVW.value[i] = segs[i][4]; }
     u.uVN.value = n; u.uVBox.value.set(box.x0, box.z0, box.x1, box.z1); u.uVSq.value.set(sq.x, sq.z, sq.r);
   };
@@ -227,10 +240,11 @@ export const GROUND = { g0: 0x64b237, g1: 0x74c343, g2: 0x84d14d, g3: 0x95dc5a, 
 // how much of each green (by the meadow-tone noise): close lime shades, mostly the two middle ones
 export const TONE_STEPS = [0.25, 0.5, 0.82];
 export const MUD_T = 0.68;
+export const VSEGS = 28;             // the most lane segments the village ground can paint (the village's and its farm's)
 export const SOIL_T = 0.86;          // small bare-soil spots (a second, finer noise) above this
 export function groundMaterial() {
   const mat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
-  const u = { uVN: { value: 0 }, uVSeg: { value: Array.from({ length: 24 }, () => new THREE.Vector4()) }, uVW: { value: new Float32Array(24) },
+  const u = { uVN: { value: 0 }, uVSeg: { value: Array.from({ length: VSEGS }, () => new THREE.Vector4()) }, uVW: { value: new Float32Array(VSEGS) },
     uVBox: { value: new THREE.Vector4(1e5, 1e5, -1e5, -1e5) }, uVSq: { value: new THREE.Vector3(1e5, 1e5, 0) },
     uWet: { value: 0 },             // rain: the ground darkens (js/weather/effects.js)
     uV_dirt: { value: new THREE.Color(0xc9a06a) }, uV_dirtD: { value: new THREE.Color(0xa77f4e) }, uV_stone: { value: new THREE.Color(0xc4bcab) }, uV_stoneD: { value: new THREE.Color(0xa59d8c) }, uV_grout: { value: new THREE.Color(0x7d7466) } };
@@ -250,14 +264,14 @@ export function groundMaterial() {
         }
         diffuseColor.rgb *= 1.0 - 0.3 * uWet;`);
   };
-  mat.customProgramCacheKey = () => 'ground-v16';
+  mat.customProgramCacheKey = () => 'ground-v17';
   return mat;
 }
 const GROUND_GLSL = /* glsl */`
 varying float vGrass; varying vec3 vGWorld;
 uniform vec3 uGr_g0, uGr_g1, uGr_g2, uGr_g3, uGr_m0, uGr_m1, uGr_m2;
 // the village (Farm World): its dirt lanes (segments ax, az, bx, bz with widths) and its paved square
-uniform int uVN; uniform vec4 uVSeg[24]; uniform float uVW[24]; uniform vec4 uVBox; uniform vec3 uVSq;
+uniform int uVN; uniform vec4 uVSeg[${VSEGS}]; uniform float uVW[${VSEGS}]; uniform vec4 uVBox; uniform vec3 uVSq;
 uniform vec3 uV_dirt, uV_dirtD, uV_stone, uV_stoneD, uV_grout; uniform float uWet;
 const float MUD_T = ${MUD_T};
 float gh12(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
@@ -301,7 +315,7 @@ vec4 villageGround(vec2 p, float far) {
     return vec4(c, 1.0);
   }
   float dl = 1e9;
-  for (int i = 0; i < 24; i++) { if (i >= uVN) break; dl = min(dl, vSegD(p, uVSeg[i]) - uVW[i] * 0.5); }
+  for (int i = 0; i < ${VSEGS}; i++) { if (i >= uVN) break; dl = min(dl, vSegD(p, uVSeg[i]) - uVW[i] * 0.5); }
   if (dl + fray < 0.0) {                                                         // a lane: packed earth, a little rutted
     vec3 c = mix(uV_dirt, uV_dirtD, 0.35 + 0.5 * gnoise(p * 0.45)) * (0.95 + 0.1 * gnoise(p * 2.2));
     if (far < 0.6) { vec2 q = p * 2.6, ip = floor(q), fp = fract(q); vec2 c2 = 0.2 + gh22(ip) * 0.6; float ph = gh12(ip + 5.0);

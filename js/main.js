@@ -376,6 +376,7 @@ function mapMarkers() {
   for (const z of zombies.list) if (z.st !== 4) markers.push({ x: z.x, z: z.z, dot: '#e0362a' });
   if (farm.active) {
     if (village.on) markers.push({ x: village.spots.square.x, z: village.spots.square.z, icon: 'home', label: 'Sonpur village' });
+    if (village.on) markers.push({ x: village.farmstead.F.x, z: village.farmstead.F.z, icon: 'barn', label: village.farmstead.F.name, bigOnly: true });
     if (mill.on) markers.push({ x: mill.x, z: mill.z, icon: 'windmill', label: 'Windmill' }, { x: mill2.x, z: mill2.z, icon: 'windmill', label: 'Windmill' });
     for (const f of fields.ownedSpots()) markers.push({ x: f.x, z: f.z, icon: 'field', label: f.label, bigOnly: true });   // the farm's own fields (the big map)
     if (machines.on) markers.push({ x: machines.minePos.x, z: machines.minePos.z, icon: 'mine', label: 'Gold mine' }, { x: machines.flourPos.x, z: machines.flourPos.z, icon: 'flour', label: 'Flour mill' });
