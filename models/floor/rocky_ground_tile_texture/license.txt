@@ -1,0 +1,11 @@
+Model Information:
+* title:	Rocky Ground| Tile Texture
+* source:	https://sketchfab.com/3d-models/rocky-ground-tile-texture-bedc7b5b9b304406a39ea936439fc937
+* author:	CATholic (https://sketchfab.com/CATholic)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Rocky Ground| Tile Texture" (https://sketchfab.com/3d-models/rocky-ground-tile-texture-bedc7b5b9b304406a39ea936439fc937) by CATholic (https://sketchfab.com/CATholic) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)

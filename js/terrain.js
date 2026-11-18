@@ -84,8 +84,8 @@ function sampleCurve(pts, step) {
   return { n, x, z, tx, tz, s, length: L };
 }
 
-// Write the distance to a polyline into a grid (only near the line, so it's fast)
-function rasterDist(curve, R, dist, param) {
+// Write the distance to a polyline into a grid (only near the line, so it's fast); signed: the same with its side
+function rasterDist(curve, R, dist, param, signed) {
   for (let i = 0; i < curve.n; i++) {
     const x0 = curve.x[i], z0 = curve.z[i], x1 = curve.x[i + 1], z1 = curve.z[i + 1];
     const ex = x1 - x0, ez = z1 - z0, el = ex * ex + ez * ez || 1;
@@ -95,17 +95,21 @@ function rasterDist(curve, R, dist, param) {
       const px = X0 + k * CELL, pz = Z0 + j * CELL;
       const t = clamp(((px - x0) * ex + (pz - z0) * ez) / el, 0, 1);
       const d = Math.hypot(px - x0 - ex * t, pz - z0 - ez * t), idx = j * NX + k;
-      if (d < dist[idx]) { dist[idx] = d; if (param) param[idx] = curve.s[i] + (curve.s[i + 1] - curve.s[i]) * t; }
+      if (d < dist[idx]) {
+        dist[idx] = d;
+        if (param) param[idx] = curve.s[i] + (curve.s[i + 1] - curve.s[i]) * t;
+        if (signed) signed[idx] = (ex * (pz - z0) - ez * (px - x0)) < 0 ? -d : d;
+      }
     }
   }
 }
 
 export function buildTerrain() {
-  const NN = NX * NZ, H = new Float32Array(NN), riverD = new Float32Array(NN).fill(1e4), roadD = new Float32Array(NN).fill(1e4), roadS = new Float32Array(NN);
+  const NN = NX * NZ, H = new Float32Array(NN), riverD = new Float32Array(NN).fill(1e4), roadD = new Float32Array(NN).fill(1e4), roadS = new Float32Array(NN), roadSD = new Float32Array(NN).fill(30);
   for (let j = 0; j < NZ; j++) for (let i = 0; i < NX; i++) H[j * NX + i] = baseHeight(X0 + i * CELL, Z0 + j * CELL);
   const road = sampleCurve(ROAD_PTS, 2), river = sampleCurve(RIVER_PTS, 3);
   rasterDist(river, 30, riverD, null);
-  rasterDist(road, 22, roadD, roadS);
+  rasterDist(road, 22, roadD, roadS, roadSD);
 
   // road height profile: smoothed terrain, flat across the bridge, slope-limited
   const hr = new Float32Array(road.n + 1);
@@ -177,14 +181,13 @@ export function buildTerrain() {
     return { x: lerp(road.x[i], road.x[i + 1], t), z: lerp(road.z[i], road.z[i + 1], t), tx: road.tx[i], tz: road.tz[i], y: roadH(s) }; };
 
   const T = { H, heightAt, riverDistAt: bilin(riverD), roadDistAt: bilin(roadD), road, river, D, W, BED, campH, startH, valleyH, giantH };
-  T.mesh = terrainMesh(T, riverD, roadD);
+  T.mesh = terrainMesh(T, riverD, roadD, roadSD);
   // the village's lanes and square, painted on the ground by its shader (js/village)
   T.setVillageGround = (segs, sq, box) => {
     const u = T.mesh.material.userData.ground, n = Math.min(VSEGS, segs.length);
     for (let i = 0; i < n; i++) { u.uVSeg.value[i].set(segs[i][0], segs[i][1], segs[i][2], segs[i][3]); u.uVW.value[i] = segs[i][4]; }
     u.uVN.value = n; u.uVBox.value.set(box.x0, box.z0, box.x1, box.z1); u.uVSq.value.set(sq.x, sq.z, sq.r);
   };
-  T.roadMesh = roadMesh(T);
   T.waterMesh = waterMesh(T);
   return T;
 }
@@ -193,8 +196,8 @@ export function buildTerrain() {
 const _c = new THREE.Color();
 const GRASS = [0x3f7a35, 0x46833a, 0x4d8c3e, 0x3a7032, 0x427d36];
 const GRASS_N = [0x5c9a3a, 0x67a442, 0x70ab47, 0x568f37, 0x62a03f];     // brighter highland grass
-function terrainMesh(T, riverD, roadD) {
-  const { H, W } = T, pos = [], col = [], grass = [];
+function terrainMesh(T, riverD, roadD, roadSD) {
+  const { H, W } = T, pos = [], col = [], grass = [], road = [];
   let seed = 7;
   const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
   const face = (ia, ib, ic) => {
@@ -207,13 +210,14 @@ function terrainMesh(T, riverD, roadD) {
     const cx = (a[0] + b[0] + c[0]) / 3, cz = (a[2] + b[2] + c[2]) / 3;
     let gk = 0;                                   // how much of the painted grass-and-mud ground this face gets
     if (h < W + 0.9 && rd < RIVER_HALF + 3) _c.set(h < W - 0.2 ? 0x6b5d42 : 0x9a8a62);
-    else if (od < 7.5) { gk = smoothstep(5.5, 7.5, od); _c.set(0x7a6446).lerp(_c.clone().set(GRASS[0]), gk); }
+    else if (od < 7.5) { gk = 1; _c.set(GRASS[0]); }            // the road and its verges: painted by the shader (smooth edges)
     else if (ny1 < 0.78) _c.set(cz > NORTH - 20 ? (rnd() > 0.5 ? 0x8f887a : 0x7e786c) : rnd() > 0.5 ? 0x7d7a70 : 0x6e6b62);
     else if (Math.hypot(cx - START.x, cz - START.z) < 34 || Math.hypot(cx - CAMP.x, cz - CAMP.z) < 28) { gk = 1; _c.set(rnd() > 0.5 ? 0x7fa652 : 0x77a04c); }
     else if (Math.hypot(cx - GIANT.x, cz - GIANT.z) < 40 || (Math.abs(cx - TOWER_ZONE.x) < TOWER_ZONE.hw + 4 && Math.abs(cz - TOWER_ZONE.z) < TOWER_ZONE.hd + 4)) _c.set(rnd() > 0.5 ? 0xa39463 : 0x9a8b5c);
     else if (cz > NORTH) { gk = 1; _c.set(GRASS_N[(rnd() * GRASS_N.length) | 0]); if (h > 40) { const a = Math.min(1, (h - 40) / 25); _c.lerp(_c.clone().set(0x7b8a5a), a); gk = 1 - a * 0.7; } }
     else { gk = 1; _c.set(GRASS[(rnd() * GRASS.length) | 0]); if (h > T.campH - 8) _c.lerp(_c.clone().set(0x6f9c48), 0.5); }
     for (let k = 0; k < 3; k++) { col.push(_c.r, _c.g, _c.b); grass.push(gk); }
+    road.push(Math.max(-30, Math.min(30, roadSD[ia])), Math.max(-30, Math.min(30, roadSD[ib])), Math.max(-30, Math.min(30, roadSD[ic])));
   };
   for (let j = 0; j < SEGZ; j++) for (let i = 0; i < SEGX; i++) {
     const a = j * NX + i, b = a + 1, c = a + NX, d = c + 1;
@@ -223,6 +227,7 @@ function terrainMesh(T, riverD, roadD) {
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
   g.setAttribute('aGrass', new THREE.Float32BufferAttribute(grass, 1));
+  g.setAttribute('aRoad', new THREE.Float32BufferAttribute(road, 1));
   g.computeVertexNormals();
   const m = new THREE.Mesh(g, groundMaterial());
   m.receiveShadow = true;
@@ -249,41 +254,47 @@ export const MUD_T = 0.68;
 export const VSEGS = 28;             // the most lane segments the village ground can paint (the village's and its farm's)
 export const SOIL_T = 0.86;          // small bare-soil spots (a second, finer noise) above this
 export const GRASS_TEX = 'models/floor/generic_grass/game-grass.jpg', GRASS_TILE = 4.5;   // the grass texture, metres per tile
+export const ROAD_TEX = 'models/floor/rocky_ground_tile_texture/game-rock.jpg', ROAD_TILE = 3.0;   // the road's gravel
+export const ROAD_HW = 4.4;          // the road's half width (m); its edge blends into the verge over about a metre
+const groundTexture = (url, on) => {
+  const t = new THREE.TextureLoader().load(url, () => { on.value = 1; }, undefined, () => console.warn('[ground] texture not loaded:', url));
+  t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8;
+  return t;
+};
 export function groundMaterial() {
   const mat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
-  const grass = new THREE.TextureLoader().load(GRASS_TEX, () => { u.uGrassOn.value = 1; }, undefined, () => console.warn('[ground] grass texture not loaded'));
-  grass.colorSpace = THREE.SRGBColorSpace; grass.wrapS = grass.wrapT = THREE.RepeatWrapping; grass.anisotropy = 8;
+  const grassOn = { value: 0 }, rockOn = { value: 0 };
   const u = { uVN: { value: 0 }, uVSeg: { value: Array.from({ length: VSEGS }, () => new THREE.Vector4()) }, uVW: { value: new Float32Array(VSEGS) },
     uVBox: { value: new THREE.Vector4(1e5, 1e5, -1e5, -1e5) }, uVSq: { value: new THREE.Vector3(1e5, 1e5, 0) },
     uWet: { value: 0 },             // rain: the ground darkens (js/weather/effects.js)
-    uGrassTex: { value: grass }, uGrassOn: { value: 0 },
+    uGrassTex: { value: groundTexture(GRASS_TEX, grassOn) }, uGrassOn: grassOn, uRockTex: { value: groundTexture(ROAD_TEX, rockOn) }, uRockOn: rockOn,
     uV_dirt: { value: new THREE.Color(0xc9a06a) }, uV_dirtD: { value: new THREE.Color(0xa77f4e) }, uV_stone: { value: new THREE.Color(0xc4bcab) }, uV_stoneD: { value: new THREE.Color(0xa59d8c) }, uV_grout: { value: new THREE.Color(0x7d7466) } };
   for (const k in GROUND) u['uGr_' + k] = { value: new THREE.Color(GROUND[k]) };
   mat.userData.ground = u;
   mat.onBeforeCompile = sh => {
     Object.assign(sh.uniforms, u);
     sh.vertexShader = sh.vertexShader
-      .replace('#include <common>', '#include <common>\nattribute float aGrass;\nvarying float vGrass;\nvarying vec3 vGWorld;')
-      .replace('#include <project_vertex>', '#include <project_vertex>\nvGrass = aGrass;\nvGWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+      .replace('#include <common>', '#include <common>\nattribute float aGrass; attribute float aRoad;\nvarying float vGrass; varying float vRoad;\nvarying vec3 vGWorld;')
+      .replace('#include <project_vertex>', '#include <project_vertex>\nvGrass = aGrass; vRoad = aRoad;\nvGWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;');
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', '#include <common>\n' + GROUND_GLSL)
       .replace('#include <color_fragment>', `#include <color_fragment>
         if (vGrass > 0.01) {
           float far = smoothstep(30.0, 110.0, distance(vGWorld, cameraPosition));
-          diffuseColor.rgb = mix(diffuseColor.rgb, groundColor(vGWorld.xz, far), vGrass);
+          diffuseColor.rgb = mix(diffuseColor.rgb, groundColor(vGWorld.xz, far, vRoad), vGrass);
         }
         diffuseColor.rgb *= 1.0 - 0.3 * uWet;`);
   };
-  mat.customProgramCacheKey = () => 'ground-v18';
+  mat.customProgramCacheKey = () => 'ground-v19';
   return mat;
 }
 const GROUND_GLSL = /* glsl */`
-varying float vGrass; varying vec3 vGWorld;
+varying float vGrass; varying float vRoad; varying vec3 vGWorld;
 uniform vec3 uGr_g0, uGr_g1, uGr_g2, uGr_g3, uGr_m0, uGr_m1, uGr_m2;
 // the village (Farm World): its dirt lanes (segments ax, az, bx, bz with widths) and its paved square
 uniform int uVN; uniform vec4 uVSeg[${VSEGS}]; uniform float uVW[${VSEGS}]; uniform vec4 uVBox; uniform vec3 uVSq;
 uniform vec3 uV_dirt, uV_dirtD, uV_stone, uV_stoneD, uV_grout; uniform float uWet;
-uniform sampler2D uGrassTex; uniform float uGrassOn;
+uniform sampler2D uGrassTex; uniform float uGrassOn; uniform sampler2D uRockTex; uniform float uRockOn;
 const float MUD_T = ${MUD_T};
 float gh12(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
 vec2 gh22(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973)); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.xx + p3.yz) * p3.zy); }
@@ -336,22 +347,39 @@ vec4 villageGround(vec2 p, float far) {
   if (dl + fray < 0.7) return vec4(mix(uGr_g3, uV_dirt, 0.18), 0.5);                // a worn, drier verge
   return vec4(0.0);
 }
-// the grass texture at p, without its repeat showing: one of eight offsets by a slow noise, blended into the next
+// a ground texture at p, without its repeat showing: one of eight offsets by a slow noise, blended into the next
 // where the noise crosses over (with the texture's own gradients, so there are no seams in the far mip levels)
-vec3 grassTexel(vec2 p) {
-  vec2 x = p / ${GRASS_TILE.toFixed(2)};
-  float k = gnoise(p * 0.035) * 0.65 + gnoise(p * 0.09 + 4.7) * 0.35;
+vec3 tiled(sampler2D tex, vec2 p, float tile, float seed) {
+  vec2 x = p / tile;
+  float k = gnoise(p * 0.035 + seed) * 0.65 + gnoise(p * 0.09 + 4.7 + seed) * 0.35;
   float l = k * 8.0, f = fract(l), ia = floor(l);
   vec2 oa = sin(vec2(3.0, 7.0) * ia), ob = sin(vec2(3.0, 7.0) * (ia + 1.0));
 #if __VERSION__ >= 300
   vec2 dx = dFdx(x), dy = dFdy(x);
-  vec3 a = textureGrad(uGrassTex, x + oa, dx, dy).rgb, b = textureGrad(uGrassTex, x + ob, dx, dy).rgb;
+  vec3 a = textureGrad(tex, x + oa, dx, dy).rgb, b = textureGrad(tex, x + ob, dx, dy).rgb;
 #else
-  vec3 a = texture2D(uGrassTex, x + oa).rgb, b = texture2D(uGrassTex, x + ob).rgb;
+  vec3 a = texture2D(tex, x + oa).rgb, b = texture2D(tex, x + ob).rgb;
 #endif
   return mix(a, b, smoothstep(0.2, 0.8, f - 0.1 * (a.r + a.g + a.b - b.r - b.g - b.b)));
 }
-vec3 groundColor(vec2 p, float far) {
+vec3 grassTexel(vec2 p) { return tiled(uGrassTex, p, ${GRASS_TILE.toFixed(2)}, 0.0); }
+// the road: the gravel texture (or the old packed earth), two faint wheel tracks; road: the signed distance to its
+// middle (smooth across the ground's faces). Its edge is a soft blend over about a metre with a gentle wave
+vec3 meadowColor(vec2 p, float far);
+vec3 groundColor(vec2 p, float far, float road) {
+  float rd = abs(road);
+  if (rd > ${(ROAD_HW + 1.6).toFixed(2)}) return meadowColor(p, far);
+  float wave = (gnoise(p * 0.55 + 1.3) - 0.5) * 0.7 + (gnoise(p * 1.9 - 4.0) - 0.5) * 0.22;
+  float k = 1.0 - smoothstep(${(ROAD_HW - 0.5).toFixed(2)}, ${(ROAD_HW + 0.5).toFixed(2)}, rd + wave);
+  vec3 rc = uRockOn > 0.5 ? tiled(uRockTex, p, ${ROAD_TILE.toFixed(2)}, 17.0) : mix(vec3(0.25, 0.17, 0.08), vec3(0.2, 0.13, 0.06), gnoise(p * 0.4));
+  float rut = smoothstep(0.5, 0.75, rd) * (1.0 - smoothstep(1.25, 1.5, rd));
+  rc *= (1.0 - 0.16 * rut) * (0.94 + 0.12 * gnoise(p * 0.13 + 9.0));
+  if (k > 0.995) return rc;
+  vec3 m = meadowColor(p, far);
+  m = mix(m, m * vec3(0.92, 0.88, 0.8), 0.5 * (1.0 - smoothstep(${ROAD_HW.toFixed(2)}, ${(ROAD_HW + 1.5).toFixed(2)}, rd + wave)));   // a trodden verge
+  return mix(m, rc, k);
+}
+vec3 meadowColor(vec2 p, float far) {
   vec4 vg = villageGround(p, far);
   if (vg.a > 0.99) return vg.rgb;
   float mud = gmud(p), tone = gtone(p);
@@ -409,22 +437,6 @@ function finish(pos, col, mat) {
   g.computeVertexNormals();
   const m = new THREE.Mesh(g, mat); m.receiveShadow = true;
   return m;
-}
-
-function roadMesh(T) {
-  const r = T.road, pos = [], col = [];
-  for (let i = 0; i < r.n; i++) {
-    if (i >= r.iA && i < r.iB) continue;                       // the bridge goes here
-    const nx0 = r.tz[i], nz0 = -r.tx[i], nx1 = r.tz[i + 1], nz1 = -r.tx[i + 1];
-    const y0 = r.h[i] + 0.06, y1 = r.h[i + 1] + 0.06;
-    const args = [r.x[i], r.z[i], r.x[i + 1], r.z[i + 1], nx0, nz0, nx1, nz1];
-    strip(pos, col, ...args, -4.4, -1.4, y0, y1, i % 7 ? 0x8a7350 : 0x857049);
-    strip(pos, col, ...args, -1.4, -0.7, y0 + 0.01, y1 + 0.01, 0x6d5a3d);
-    strip(pos, col, ...args, -0.7, 0.7, y0, y1, 0x8f7954);
-    strip(pos, col, ...args, 0.7, 1.4, y0 + 0.01, y1 + 0.01, 0x6d5a3d);
-    strip(pos, col, ...args, 1.4, 4.4, y0, y1, i % 5 ? 0x8a7350 : 0x84704d);
-  }
-  return finish(pos, col, new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
 }
 
 function waterMesh(T) {

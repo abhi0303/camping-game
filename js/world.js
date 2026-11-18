@@ -26,7 +26,7 @@ export class World {
     this.dayNight = new DayNight(this);     // sun, sky, fog, clouds and lamps by the time of day (js/day-night.js)
     const T = this.T = buildTerrain();
     this.W = T.W;
-    scene.add(T.mesh, T.roadMesh, T.waterMesh);
+    scene.add(T.mesh, T.waterMesh);          // (the road is painted on the ground: js/terrain.js)
     this._vegetation();
     this._groundDecor();
     const b = new GeoBuilder();

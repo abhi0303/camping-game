@@ -113,6 +113,7 @@ function bake(name, M) {
 // textures the game uses on their own: models/<dir>/<src> -> models/<dir>/<out> (JPEG, the longest side px)
 export const TEXTURES = {
   'floor/generic_grass': { src: 'textures/Material_baseColor.png', out: 'game-grass.jpg', px: 1024, quality: 78 },   // the ground's grass
+  'floor/rocky_ground_tile_texture': { src: 'textures/Material_baseColor.png', out: 'game-rock.jpg', px: 1024, quality: 78 },   // the road's gravel
 };
 
 const only = process.argv.slice(2);

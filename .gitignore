@@ -3,3 +3,6 @@
 models/floor/generic_grass/scene.bin
 models/floor/generic_grass/textures/Material_normal.png
 models/floor/generic_grass/textures/Material_metallicRoughness.png
+models/floor/rocky_ground_tile_texture/scene.bin
+models/floor/rocky_ground_tile_texture/textures/Material_normal.png
+models/floor/rocky_ground_tile_texture/textures/Material_metallicRoughness.png
