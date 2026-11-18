@@ -1,1 +1,5 @@
 .DS_Store
+# the grass model's parts the game doesn't use (only its colour texture is: tools/bake-textured.mjs)
+models/floor/generic_grass/scene.bin
+models/floor/generic_grass/textures/Material_normal.png
+models/floor/generic_grass/textures/Material_metallicRoughness.png

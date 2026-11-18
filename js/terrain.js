@@ -229,10 +229,13 @@ function terrainMesh(T, riverD, roadD) {
   return m;
 }
 
-/* ---------- the painted ground: a bright, clean low-poly meadow with soft dirt patches ----------
-   Drawn by the terrain's shader from the world position (no texture, no extra geometry, no seams):
-   - the grass is a calm surface of soft, roughly hexagonal patches (about 1.2 m) in close lime shades
-     (TONE_STEPS), a touch darker in places;
+/* ---------- the painted ground: a grassy meadow with soft dirt patches ----------
+   Drawn by the terrain's shader from the world position (no extra geometry, no seams):
+   - the grass is the "Generic grass" texture (GRASS_TEX, by Aartee, CC-BY-4.0: see the README's Credits), one tile
+     every GRASS_TILE metres, never visibly repeating: each spot takes the texture at one of eight offsets picked by
+     a slow noise, blended into the next (Inigo Quilez's "texture repetition"), and a broad, gentle light / dark
+     variation lies over it. Until the texture has loaded (or if it can't be) the grass is the old painted one:
+     soft, roughly hexagonal patches (about 1.2 m) in close lime shades (TONE_STEPS);
    - dirt: where a slow noise is high the ground is light orange-brown earth with a few darker lumps and
      tiny stones, plus small spots of bare soil here and there; edges fray naturally;
    - the flowers standing on it are js/grass.js; far away the facets calm down (no shimmer).
@@ -245,11 +248,15 @@ export const TONE_STEPS = [0.25, 0.5, 0.82];
 export const MUD_T = 0.68;
 export const VSEGS = 28;             // the most lane segments the village ground can paint (the village's and its farm's)
 export const SOIL_T = 0.86;          // small bare-soil spots (a second, finer noise) above this
+export const GRASS_TEX = 'models/floor/generic_grass/game-grass.jpg', GRASS_TILE = 4.5;   // the grass texture, metres per tile
 export function groundMaterial() {
   const mat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
+  const grass = new THREE.TextureLoader().load(GRASS_TEX, () => { u.uGrassOn.value = 1; }, undefined, () => console.warn('[ground] grass texture not loaded'));
+  grass.colorSpace = THREE.SRGBColorSpace; grass.wrapS = grass.wrapT = THREE.RepeatWrapping; grass.anisotropy = 8;
   const u = { uVN: { value: 0 }, uVSeg: { value: Array.from({ length: VSEGS }, () => new THREE.Vector4()) }, uVW: { value: new Float32Array(VSEGS) },
     uVBox: { value: new THREE.Vector4(1e5, 1e5, -1e5, -1e5) }, uVSq: { value: new THREE.Vector3(1e5, 1e5, 0) },
     uWet: { value: 0 },             // rain: the ground darkens (js/weather/effects.js)
+    uGrassTex: { value: grass }, uGrassOn: { value: 0 },
     uV_dirt: { value: new THREE.Color(0xc9a06a) }, uV_dirtD: { value: new THREE.Color(0xa77f4e) }, uV_stone: { value: new THREE.Color(0xc4bcab) }, uV_stoneD: { value: new THREE.Color(0xa59d8c) }, uV_grout: { value: new THREE.Color(0x7d7466) } };
   for (const k in GROUND) u['uGr_' + k] = { value: new THREE.Color(GROUND[k]) };
   mat.userData.ground = u;
@@ -267,7 +274,7 @@ export function groundMaterial() {
         }
         diffuseColor.rgb *= 1.0 - 0.3 * uWet;`);
   };
-  mat.customProgramCacheKey = () => 'ground-v17';
+  mat.customProgramCacheKey = () => 'ground-v18';
   return mat;
 }
 const GROUND_GLSL = /* glsl */`
@@ -276,6 +283,7 @@ uniform vec3 uGr_g0, uGr_g1, uGr_g2, uGr_g3, uGr_m0, uGr_m1, uGr_m2;
 // the village (Farm World): its dirt lanes (segments ax, az, bx, bz with widths) and its paved square
 uniform int uVN; uniform vec4 uVSeg[${VSEGS}]; uniform float uVW[${VSEGS}]; uniform vec4 uVBox; uniform vec3 uVSq;
 uniform vec3 uV_dirt, uV_dirtD, uV_stone, uV_stoneD, uV_grout; uniform float uWet;
+uniform sampler2D uGrassTex; uniform float uGrassOn;
 const float MUD_T = ${MUD_T};
 float gh12(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
 vec2 gh22(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973)); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.xx + p3.yz) * p3.zy); }
@@ -328,6 +336,21 @@ vec4 villageGround(vec2 p, float far) {
   if (dl + fray < 0.7) return vec4(mix(uGr_g3, uV_dirt, 0.18), 0.5);                // a worn, drier verge
   return vec4(0.0);
 }
+// the grass texture at p, without its repeat showing: one of eight offsets by a slow noise, blended into the next
+// where the noise crosses over (with the texture's own gradients, so there are no seams in the far mip levels)
+vec3 grassTexel(vec2 p) {
+  vec2 x = p / ${GRASS_TILE.toFixed(2)};
+  float k = gnoise(p * 0.035) * 0.65 + gnoise(p * 0.09 + 4.7) * 0.35;
+  float l = k * 8.0, f = fract(l), ia = floor(l);
+  vec2 oa = sin(vec2(3.0, 7.0) * ia), ob = sin(vec2(3.0, 7.0) * (ia + 1.0));
+#if __VERSION__ >= 300
+  vec2 dx = dFdx(x), dy = dFdy(x);
+  vec3 a = textureGrad(uGrassTex, x + oa, dx, dy).rgb, b = textureGrad(uGrassTex, x + ob, dx, dy).rgb;
+#else
+  vec3 a = texture2D(uGrassTex, x + oa).rgb, b = texture2D(uGrassTex, x + ob).rgb;
+#endif
+  return mix(a, b, smoothstep(0.2, 0.8, f - 0.1 * (a.r + a.g + a.b - b.r - b.g - b.b)));
+}
 vec3 groundColor(vec2 p, float far) {
   vec4 vg = villageGround(p, far);
   if (vg.a > 0.99) return vg.rgb;
@@ -350,6 +373,12 @@ vec3 groundColor(vec2 p, float far) {
       vec2 c = 0.2 + gh22(ip) * 0.6; float e = length(fp - c), ph = gh12(ip + 11.0);
       if (ph > 0.93 && e < 0.16 + ph * 0.06) col = (ph > 0.985 ? vec3(0.42, 0.41, 0.42) : uGr_m2) * (1.0 + clamp(c.y - fp.y, -0.3, 0.3) * 0.8);
     }
+    return col;
+  }
+  if (uGrassOn > 0.5) {                                                      // the grass texture
+    vec3 col = grassTexel(p) * (0.9 + 0.2 * tone) * (1.0 - 0.06 * thick);
+    if (vg.a > 0.0) col = mix(col, uV_dirt, 0.2);                            // the worn verge of a village lane
+    if (edge > -0.6) col = mix(col, col * vec3(1.12, 1.06, 0.82), 0.5 * clamp(edge + 0.6, 0.0, 1.0));   // drier by the dirt
     return col;
   }
   vec3 col = gpal(clamp(tone + (h - 0.5) * 0.5, 0.0, 1.0)) * facet;          // each patch one of the close limes

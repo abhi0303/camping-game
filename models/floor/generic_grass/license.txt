@@ -1,0 +1,11 @@
+Model Information:
+* title:	Generic grass
+* source:	https://sketchfab.com/3d-models/generic-grass-58f3852680bb428b942a45410c0c4bcf
+* author:	Aartee (https://sketchfab.com/Aartee)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Generic grass" (https://sketchfab.com/3d-models/generic-grass-58f3852680bb428b942a45410c0c4bcf) by Aartee (https://sketchfab.com/Aartee) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)

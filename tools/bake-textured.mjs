@@ -1,4 +1,5 @@
-// Bakes textured glTF models (models/<name>/scene.gltf) into what the game loads (js/baked.js):
+// Bakes textured glTF models (models/<name>/scene.gltf) into what the game loads (js/baked.js), and textures used on
+// their own (the ground's grass, js/terrain.js):
 //   models/<name>/game.bin        the meshes, one per material: positions and normals as 16-bit / 8-bit numbers,
 //                                 texture coordinates as 16-bit numbers (each inside its part's box), indices
 //   models/<name>/game-<k>.jpg    each material's colour texture, made smaller (macOS `sips`)
@@ -109,5 +110,15 @@ function bake(name, M) {
   console.log(`${name}: game.bin ${(offset + header.length + 4) / 1024 | 0} KB`);
 }
 
+// textures the game uses on their own: models/<dir>/<src> -> models/<dir>/<out> (JPEG, the longest side px)
+export const TEXTURES = {
+  'floor/generic_grass': { src: 'textures/Material_baseColor.png', out: 'game-grass.jpg', px: 1024, quality: 78 },   // the ground's grass
+};
+
 const only = process.argv.slice(2);
 for (const [name, M] of Object.entries(MODELS)) if (!only.length || only.includes(name)) bake(name, M);
+for (const [dir, T] of Object.entries(TEXTURES)) if (!only.length || only.includes(dir)) {
+  const D = join(ROOT, 'models', dir);
+  execFileSync('sips', ['-s', 'format', 'jpeg', '-s', 'formatOptions', String(T.quality), '-Z', String(T.px), join(D, T.src), '--out', join(D, T.out)], { stdio: 'ignore' });
+  console.log(`${dir}: ${T.out} ${(readFileSync(join(D, T.out)).length / 1024) | 0} KB`);
+}
