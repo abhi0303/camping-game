@@ -15,6 +15,7 @@ export const MINE = {
     { level: 2, min: 90, cost: 5, name: 'Bigger hopper and motor' },
     { level: 3, min: 60, cost: 12, name: 'Two grinding stages' },
     { level: 4, min: 30, cost: 25, name: 'Industrial gold plant' },
+    { level: 5, min: 20, cost: 50, name: 'Deep shaft', minLevel: 8 },           // (needs farm level 8: js/farm/progression.js)
   ],
 };
 export const FLOUR = {

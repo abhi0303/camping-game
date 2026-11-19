@@ -32,10 +32,10 @@ export function mineView(ui) {
   if (next) {
     const perNight = (24 - R.start + R.end) * 60 / next.min;
     html += `<div class="fu-row"><span class="fu-ico">⬆️</span><span class="fu-main"><span class="fu-name">Level ${next.level} · ${esc(next.name)}</span>
-        <span class="fu-sub">1 coin every ${next.min} minutes (now ${L.min}) · about ${+perNight.toFixed(1)} a night · a bigger machine</span></span>
-      <button class="fu-go" data-x="mup" data-l="${next.level}" ${M.gold < next.cost ? 'disabled' : busy}>Upgrade · ${coin(next.cost)}</button></div>`;
-  } else html += '<div class="fu-sub fu-c">Top level — a coin every half hour of the night.</div>';
-  html += `<div class="fu-sub">Gold coins are the farm's second money, shared by everyone: they buy the flour machine (across from the Farm Store) and upgrade the machines. Unfinished work at 4 AM carries on the next night.</div>`;
+        <span class="fu-sub">1 coin every ${next.min} minutes (now ${L.min}) · about ${+perNight.toFixed(1)} a night · a bigger machine${!e.allowed(next) ? ` · <b class="fu-need">🔒 farm level ${next.minLevel}</b>` : ''}</span></span>
+      <button class="fu-go" data-x="mup" data-l="${next.level}" ${M.gold < next.cost || !e.allowed(next) ? 'disabled' : busy}>Upgrade · ${coin(next.cost)}</button></div>`;
+  } else html += `<div class="fu-sub fu-c">Top level — a coin every ${L.min} minutes of the night.</div>`;
+  html += `<div class="fu-sub">Gold coins are the farm's second money, shared by everyone: they buy the flour machine, upgrade the machines, the sheds and the storage at their higher levels, improve fields' soil, ripen a field at once, buy the golden hen (farm level 10) — or sell them at the Market (₹${e.goldPrice} each, less if you sell many at once). Unfinished work at 4 AM carries on the next night.</div>`;
   return html;
 }
 

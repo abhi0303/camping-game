@@ -16,7 +16,7 @@ import { rigMaterial, rigDepthMaterial, addAnimAttributes, GAIT, goatPose, chick
 
 const MAX_PER_TYPE = 64;
 const ORIGIN = { x: 0, z: 0, yaw: 0 };
-const SPEED = { chicken: 1.6, chicken_brown: 1.5, chicken_dark: 1.4, goat: 0.8, cow: 0.45, pig: 0.55, horse: 0.6,
+const SPEED = { chicken: 1.6, chicken_brown: 1.5, chicken_dark: 1.4, chicken_gold: 1.3, goat: 0.8, cow: 0.45, pig: 0.55, horse: 0.6,
   horse_bay: 0.6, horse_chestnut: 0.62, horse_black: 0.58, horse_white: 0.6, horse_palomino: 0.64, horse_pinto: 0.6 };
 const GATE_OPEN = Math.PI * 0.52;
 const NEST_AT = { x: 2.7, z: -0.9 };          // in the pen, by the coop's nest boxes (behind the back fence)

@@ -676,6 +676,8 @@ export const ANIMAL_GEO = {
   chicken: () => rigOf(b => chicken(b, { body: 0xf3efe6, wing: 0xe8e2d4, tail: 0xe0d8c6, comb: 0xd8342a, beak: 0xf0b030, legs: 0xf0b030 })),
   chicken_brown: () => rigOf(b => chicken(b, { body: 0x9a5a2a, neck: 0xc8822e, head: 0xb06a28, wing: 0x6e3c1c, tail: 0x1e2a22, tail2: 0x2e4a34, longTail: true, comb: 0xd8342a, beak: 0xd8a040, legs: 0xc89a40, size: 1.05 })),
   chicken_dark: () => rigOf(b => chicken(b, { body: 0x2a2a2e, neck: 0x34343a, head: 0x2e2e32, wing: 0x1c1d24, tail: 0x15161c, tail2: 0x22304a, longTail: true, comb: 0x5a1a2a, beak: 0x3a3a3a, legs: 0x2a2a2a, size: 1.0 })),
+  // the golden hen (bought with gold from farm level 10): a shining gold coat, a longer tail
+  chicken_gold: () => rigOf(b => chicken(b, { body: 0xf2c440, neck: 0xf7d460, head: 0xf0c038, wing: 0xe0a828, tail: 0xc88a18, tail2: 0xffe08a, longTail: true, comb: 0xd8342a, beak: 0xf08a20, legs: 0xe0a020, size: 1.05 })),
   goat: () => rigOf(b => goat(b, GOAT_COAT)),
   // the cow and the pig: the models from "Low Poly Farm V2" (js/farm/polyRig.js gives them their moving parts)
   cow: () => polyAnimal('cow'),

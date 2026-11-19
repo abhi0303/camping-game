@@ -174,8 +174,28 @@ const farmland = new Farmland(scene, world, { onMarket: () => farmUI.open('marke
   } });
 net.on('farmGate', d => { if (d && typeof d.id === 'string') farmland.setGate(d.id, !!d.open); });
 rig.clip = (t, d, dist) => (farm.active ? farmland.camClip(t, d, dist) : dist);
-const farmEco = new FarmEconomy({ net, toast: m => toast(m), onGone: msg => farm.gone(msg, true),
-  onChange: st => { farmland.setState(st); player.char.setOutfit(st.fields && st.fields.wardrobe ? st.fields.wardrobe.wearing : null); farmUI.render(); farmUI.renderBar(farm.active); notebook.render(); if (!overlay.classList.contains('hidden')) farmPanel.render(); setTimeout(theftReport, 0); } });
+const farmEco = new FarmEconomy({ net, toast: m => toast(m), onGone: msg => farm.gone(msg, true), onXp: xp => xpPop(xp),
+  onChange: st => { farmland.setState(st); player.char.setOutfit(st.fields && st.fields.wardrobe ? st.fields.wardrobe.wearing : null); farmUI.render(); farmUI.renderBar(farm.active); notebook.render(); renderLevel(); if (!overlay.classList.contains('hidden')) farmPanel.render(); setTimeout(theftReport, 0); } });
+// the farm level chip in the top bar (js/farm/progression.js): the level, the XP bar; it glows when the farm can level up
+let lvlReady = null;
+function renderLevel() {
+  const el = $('lvlBtn'), P = farm.active ? farmEco.progress() : null;
+  el.classList.toggle('hidden', !P);
+  if (!P) { lvlReady = null; return; }
+  const pct = Math.min(100, Math.round(P.xp / P.need * 100));
+  const html = `<span class="st">⭐</span><b>Lv ${P.level}</b><span class="xb"><i style="width:${pct}%"></i></span>`;
+  if (el._h !== html) { el._h = html; el.innerHTML = html; }
+  el.classList.toggle('ready', P.ready);
+  el.title = P.ready ? `The farm can reach level ${P.level + 1} — open it to level up` : `Farm level ${P.level}: ${P.xp} / ${P.need} XP · ${P.missions.filter(m => m.done).length} / ${P.missions.length} missions`;
+  if (P.ready && lvlReady === false) toast(`⭐ The farm can reach level ${P.level + 1}! Open the ⭐ farm level (top bar) and level up`);
+  lvlReady = P.ready;
+}
+function xpPop(xp) {
+  const el = $('lvlBtn');
+  if (!el || el.classList.contains('hidden')) return;
+  const p = document.createElement('span'); p.className = 'xp-pop'; p.textContent = `+${xp} XP`;
+  el.appendChild(p); setTimeout(() => p.remove(), 1500);
+}
 // day and night (js/day-night.js): Farm World follows the real time in India by the farm server's clock, the
 // same for every member, so the sun, sky and lamps match on every screen without any messages
 world.dayNight.clock = () => farmEco.serverNow();
@@ -664,6 +684,7 @@ function syncNow() {
   session.reconnect();
 }
 $('syncBtn').addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); syncNow(); });
+$('lvlBtn').addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); if (farm.active) farmUI.open('level'); });
 // is the connection in trouble? (lights up the 🔄 button)
 function linkWeak() {
   if (!net.online || session.rejoining) return false;

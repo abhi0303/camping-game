@@ -5,6 +5,7 @@
 import { api, LOGIN_GONE } from './api.js';
 import { itemIcon, noEmoji } from '../icons.js';
 import { mineAt, flourAt } from './machines/machineProduction.js';
+import { careMult, careToNext, CARE, shedLevel, shedCapacity, shedBonus, loadNow, priceShare, salePay, MARKET } from './progression.js';
 
 const REFRESH_MS = 60000, HOUR = 3600e3;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -66,6 +67,7 @@ export class FarmEconomy {
           if (body.action === 'sell') this.sold = true;
           if (body.action === 'feed') this.fedOnce = true;
           this._apply(r);
+          if (r.result && r.result.xp && this.g.onXp) this.g.onXp(r.result.xp);      // (the farm level's XP: js/farm/progression.js)
           try { this.g.net.send('farmRev', { rev: r.rev }); } catch (e) { /* playing alone */ }
           return r;
         } catch (e) {
@@ -85,19 +87,42 @@ export class FarmEconomy {
   items(kind) { return this.st ? Object.entries(this.st.catalog).filter(([, v]) => v.kind === kind).map(([k, v]) => ({ id: k, ...v })) : []; }
   animalsIn(buildingId) { return this.st ? this.st.animals.filter(a => a.shelter === buildingId) : []; }
   count(type) { return this.st ? this.st.animals.filter(a => a.type === type).length : 0; }
-  // free places for this kind of animal (in all its shelters)
+  // free places for this kind of animal (in all its shelters; a shed holds more at a higher level)
   freeFor(type) {
     const k = this.cat(type); if (!k || !this.st) return 0;
-    const home = this.cat(k.shelter);
-    return this.st.buildings.filter(b => b.type === k.shelter).reduce((t, b) => t + Math.max(0, home.capacity - this.animalsIn(b.id).length), 0);
+    return this.st.buildings.filter(b => b.type === k.shelter).reduce((t, b) => t + Math.max(0, this.capacityOf(b) - this.animalsIn(b.id).length), 0);
   }
+  /* ---------- the farm level, levels of sheds and animals, the Market's demand (js/farm/progression.js) ---------- */
+  // { level, xp, need, missions: [{ text, n, got, done }], ready, reward } (null on an older server)
+  progress() { return this.st && this.st.progress ? this.st.progress : null; }
+  get farmLevel() { const P = this.progress(); return P ? P.level : 99; }
+  // can the farm have this yet? (catalog minLevel / a level's minLevel)
+  allowed(k) { return !k || !k.minLevel || this.farmLevel >= k.minLevel; }
+  shedLevelOf(bd) { return shedLevel(this.cat(bd.type), bd.level || 1); }
+  nextShedLevel(bd) { const k = this.cat(bd.type); return ((k && k.levels) || []).find(l => l.level === (bd.level || 1) + 1) || null; }
+  capacityOf(bd) { return shedCapacity(this.cat(bd.type), bd.level || 1); }
+  // what one animal makes an hour while fed (its health, care level and shed)
+  rateOf(a) {
+    const c = this.cat(a.type) || {}, bd = this.st.buildings.find(b => b.id === a.shelter);
+    return (c.rate || 0) * (a.health / 100) * (c.grow ? 1 : careMult(a.level || 1) * (bd ? shedBonus(this.cat(bd.type), bd.level || 1) : 1));
+  }
+  // an animal's care: { level, max, mult, toNext (hours fed still needed) } (horses grow instead)
+  careOf(a) { const lv = a.level || 1; return { level: lv, max: CARE.max, mult: careMult(lv), toNext: careToNext(a.care || 0, lv), hours: a.care || 0 }; }
+  // the Market's price share for an item now, and what selling qty pays (gold: the farm's coins)
+  priceNow(item) { const M = this.st && this.st.market, L = M && M.load[item]; return priceShare(item, L ? loadNow(L.load, Date.parse(L.at), this.serverNow()) : 0); }
+  salePay(item, qty) {
+    const M = this.st && this.st.market, L = M && M.load[item], base = item === 'gold' ? MARKET.gold : (this.cat(item) || {}).sell || 0;
+    if (!M) return base * qty;
+    return salePay(item, base, L ? loadNow(L.load, Date.parse(L.at), this.serverNow()) : 0, qty);
+  }
+  get goldPrice() { return MARKET.gold; }
   // one chicken's nest box right now, worked out from the server's numbers (ready, progress, fedUntil, health)
   // and its clock — so the timers and egg counts move every second without asking the server:
   // { ready (eggs waiting), nest (box size), nextMs (time to its next egg; Infinity if it isn't laying),
   //   pct (how far the next egg is, 0..1), fed, fedMs (feeding left), full (nest full), eggMs (one egg's time) }
   nestOf(a, now = this.serverNow()) {
     const c = this.cat(a.type) || {}, at = Date.parse(this.st.at), fu = a.fedUntil ? Date.parse(a.fedUntil) : -Infinity;
-    const nest = c.nest || Infinity, per = (c.rate || 0) * (a.health / 100) / HOUR;
+    const nest = c.nest || Infinity, per = this.rateOf(a) / HOUR;
     let ready = a.ready || 0, p = a.progress || 0;
     if (ready < nest && per > 0) {
       p += per * Math.max(0, Math.min(now, fu) - at);
@@ -115,7 +140,7 @@ export class FarmEconomy {
   //   nestsFull, kinds ({ type: count }), soon (next egg in under 30 s) }
   shelterInfo(bd) {
     const now = this.serverNow(), at = Date.parse(this.st.at), list = this.animalsIn(bd.id), k = this.cat(bd.type), home = this.cat(k.animal) || {};
-    const out = { count: list.length, fed: 0, hungry: 0, nextMs: Infinity, dueMs: Infinity, feedHours: home.feedHours || 2, feedCost: home.feedCost || 1, products: [], need: 0,
+    const out = { count: list.length, capacity: this.capacityOf(bd), fed: 0, hungry: 0, nextMs: Infinity, dueMs: Infinity, feedHours: home.feedHours || 2, feedCost: home.feedCost || 1, products: [], need: 0,
       nests: !!home.nest, ready: 0, readyBy: {}, nestsFull: 0, kinds: {} };
     for (const a of list) {
       const c = this.cat(a.type), fu = a.fedUntil ? Date.parse(a.fedUntil) : -Infinity;
@@ -130,7 +155,7 @@ export class FarmEconomy {
         if (n.nextMs <= n.fedMs + 1000) out.nextMs = Math.min(out.nextMs, n.nextMs);   // laid before its feed runs out
         continue;
       }
-      const per = c.rate * (a.health / 100) / HOUR;
+      const per = this.rateOf(a) / HOUR;
       if (!(fu > now) || per <= 0) continue;
       const p = a.progress + per * Math.max(0, Math.min(now, fu) - at), left = p >= 1 ? 0 : (1 - p) / per;
       if (now + left <= fu + 30e3) out.nextMs = Math.min(out.nextMs, left);    // made before this animal's feed runs out
@@ -220,10 +245,10 @@ export class FarmEconomy {
   // products per hour while fed (used in the overview)
   makesPerHour(product) {
     const now = this.serverNow();
-    return this.st ? this.st.animals.reduce((t, a) => { const k = this.cat(a.type); return t + (k.product === product && a.fedUntil && Date.parse(a.fedUntil) > now ? k.rate * (a.health / 100) : 0); }, 0) : 0;
+    return this.st ? this.st.animals.reduce((t, a) => { const k = this.cat(a.type); return t + (k.product === product && a.fedUntil && Date.parse(a.fedUntil) > now ? this.rateOf(a) : 0); }, 0) : 0;
   }
-  // the farm has earned enough (from sales) to buy this animal
-  unlocked(item) { const k = this.cat(item); return !k || !k.unlock || (this.st.totalEarned || 0) >= k.unlock; }
+  // the farm level is high enough to buy this animal (catalog minLevel)
+  unlocked(item) { return this.allowed(this.cat(item)); }
   get storageLevel() { return this.st ? this.st.storageLevel || 1 : 1; }
   storageLevels() { const s = this.cat('storage'); return (s && s.levels) || [{ level: 1, mult: 1 }]; }
 }

@@ -1,5 +1,5 @@
-// Market orders: customers ask the farm for a mix of goods it can make (eggs, milk, fish), paying 10 % more
-// than the normal price. One order at a time; after one is delivered the next arrives 30–60 minutes later, at
+// Market orders: customers ask the farm for a mix of goods it can make (eggs, milk, fish), paying 25 % more
+// than the normal price (and the full price: the Market's demand doesn't lower it, js/farm/progression.js). One order at a time; after one is delivered the next arrives 30–60 minutes later, at
 // most 3 a day. A day ends at midnight India time (IST) for everyone in the world. Delivering at least one
 // order a day for 5 days in a row pays a ₹200 bonus on the 5th day (and the 10th, 15th…); a missed day starts
 // the streak again. Orders are made lazily when the farm is opened (no timers needed on the server).
@@ -7,7 +7,7 @@ import { ApiError, badInput } from './http.js';
 
 export const ORDERS = {
   perDay: 3,                 // orders a day
-  extra: 0.10,               // paid on top of the normal selling price
+  extra: 0.25,               // paid on top of the normal selling price
   gapMin: [30, 60],          // minutes until the next order after one is delivered
   streakDays: 5,             // a bonus every this many days in a row
   bonus: 200,                // ₹ streak bonus

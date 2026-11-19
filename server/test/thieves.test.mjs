@@ -36,7 +36,7 @@ async function call(method, path, body, token) {
 const q = (sql, p) => pool.query(sql, p).then(r => r.rows);
 const act = (w, body) => call('POST', `/v1/rooms/${w.code}/farm`, { requestId: `req-${Date.now()}-${++rid}`, ...body }, w.token);
 const farm = w => call('GET', `/v1/rooms/${w.code}/farm`, undefined, w.token);
-async function world(money = 500) {
+async function world(money = 2000) {           // (a coop and six hens cost ₹630 now)
   const r = await call('POST', '/v1/rooms', { name: 'Abhi', pin: '1234', world: 'Thief Farm' });
   const w = { code: r.body.room.code, token: r.body.token };
   await farm(w);

@@ -40,7 +40,7 @@ async function world(money = 5000) {
   const r = await call('POST', '/v1/rooms', { name: 'Abhi', pin: '1234', world: 'Wheat Farm' });
   const w = { code: r.body.room.code, token: r.body.token };
   await farm(w);
-  await q('UPDATE rooms SET money = $2 WHERE code = $1', [w.code, money]);
+  await q('UPDATE rooms SET money = $2, farm_level = 10 WHERE code = $1', [w.code, money]);     // (fields from farm level 3)
   return w;
 }
 const field = (b, slot) => b.fields.list.find(f => f.slot === slot);

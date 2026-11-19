@@ -7,6 +7,9 @@
 //   - Birds eat from a field without a scarecrow: the harvest is decided when it's first taken — 70–90 % of the full
 //     yield (350–450 of 500 wheat) with no scarecrow, 80–90 % with a level 1 scarecrow, all of it with level 2. The
 //     harvest goes into the farm storage up to its limit; what doesn't fit stays in the field until there's room.
+//   - Each new field costs more than the last and needs a higher farm level (catalog field.slots). A field's soil can be
+//     improved twice (field.soils: more wheat, then faster growth too; money and gold). A growing field can be rushed
+//     with gold: 1 coin for every `rushMin` minutes still to go.
 //   - Outfits (catalog kind 'outfit') belong to the member who bought them (with the farm's money) and are worn by
 //     them; everyone sees them in the game.
 import { ApiError, badInput } from './http.js';
@@ -25,6 +28,9 @@ const capOf = (cat, item, level) => {
 };
 // the crop a seed bag grows, or the crop by its id
 const cropOf = (cat, id) => { const k = cat['crop_' + id]; return k && k.kind === 'crop' ? { id, ...k } : null; };
+// the next field's price and farm level (n: fields the farm has), and a soil level
+export const fieldSlot = (F, n) => ((F.slots || [])[n]) || { price: F.buy, minLevel: F.minLevel || 1 };
+export const soilOf = (F, level) => ((F.soils || []).find(l => l.level === level)) || { level: 1, mult: 1 };
 const scareLevels = cat => (cat.scarecrow && cat.scarecrow.levels) || [{ level: 1, share: [0.8, 0.9] }, { level: 2, cost: 800, share: [1, 1] }];
 // the share of the full yield that's left after the birds, by scarecrow level (0: none)
 export function birdShare(cat, level, r = rand) {
@@ -35,14 +41,15 @@ export function birdShare(cat, level, r = rand) {
 /* ---------- state ---------- */
 export async function fieldsState(c, roomId, s, cat, me) {
   if (!cat.field) return null;
-  const list = await c.rows(`SELECT slot, crop, stage, sow_started_at, sow_by, sown_at, watered_at, ready_at, yield, harvested, scarecrow, bought_at
+  const list = await c.rows(`SELECT slot, crop, stage, sow_started_at, sow_by, sown_at, watered_at, ready_at, yield, harvested, scarecrow, soil, bought_at
       FROM farm_fields WHERE room_id = $1 ORDER BY slot`, [roomId]);
   const iso = d => (d ? d.toISOString() : null);
   const w = me ? await c.one('SELECT outfits, outfit FROM room_members WHERE id = $1', [me.id]) : null;
   return {
     slots: FIELDS.slots,
     list: list.map(f => ({ slot: f.slot, crop: f.crop, stage: f.stage, sowStartedAt: iso(f.sow_started_at), sowBy: f.sow_by, sownAt: iso(f.sown_at),
-      wateredAt: iso(f.watered_at), readyAt: iso(f.ready_at), yield: f.yield, harvested: f.harvested, scarecrow: f.scarecrow })),
+      wateredAt: iso(f.watered_at), readyAt: iso(f.ready_at), yield: f.yield, harvested: f.harvested, scarecrow: f.scarecrow, soil: f.soil })),
+    next: fieldSlot(cat.field, list.length),
     wardrobe: w ? { owned: w.outfits || [], wearing: w.outfit || null } : null,
   };
 }
@@ -55,9 +62,11 @@ export async function fieldAction(c, { me, b, s, cat }) {
   const op = String(b.op || ''), slot = slotOf(b.slot), n = slot + 1, now = s.now.getTime();
   if (op === 'buy') {
     if (await c.one('SELECT 1 FROM farm_fields WHERE room_id = $1 AND slot = $2', [me.room_id, slot])) throw new ApiError(409, 'field_taken', `Field ${n} already belongs to the farm.`);
-    if (s.money < F.buy) throw new ApiError(409, 'not_enough_money', `Not enough money: a field costs ₹${F.buy}, the farm has ₹${s.money}.`);
+    const owned = (await c.one('SELECT count(*)::int AS n FROM farm_fields WHERE room_id = $1', [me.room_id])).n, S = fieldSlot(F, owned);
+    if ((S.minLevel || 1) > s.prog.level) throw new ApiError(409, 'locked', `The farm's ${owned ? `field number ${owned + 1}` : 'first field'} can be bought from farm level ${S.minLevel} — the farm is level ${s.prog.level}.`);
+    if (s.money < S.price) throw new ApiError(409, 'not_enough_money', `Not enough money: this field costs ₹${S.price}, the farm has ₹${s.money}.`);
     await c.rows('INSERT INTO farm_fields (room_id, slot) VALUES ($1, $2)', [me.room_id, slot]);
-    return { money: -F.buy, items: [], detail: { op, slot, cost: F.buy }, message: `${me.name} bought field ${n} by the windmill for ₹${F.buy}` };
+    return { money: -S.price, items: [], detail: { op, slot, cost: S.price }, message: `${me.name} bought field ${n} by the windmill for ₹${S.price}` };
   }
   const f = await c.one('SELECT * FROM farm_fields WHERE room_id = $1 AND slot = $2 FOR UPDATE', [me.room_id, slot]);
   if (!f) throw new ApiError(409, 'not_owned', `Field ${n} isn't the farm's yet — buy it first.`);
@@ -73,6 +82,27 @@ export async function fieldAction(c, { me, b, s, cat }) {
     await c.rows('UPDATE farm_fields SET scarecrow = $2 WHERE id = $1', [f.id, level]);
     return { money: -cost, items: [], detail: { op, slot, level, cost },
       message: level === 1 ? `${me.name} put up a scarecrow in field ${n} for ₹${cost}` : `${me.name} dressed up field ${n}'s scarecrow to level ${level} for ₹${cost}` };
+  }
+  if (op === 'soil') {                                           // improve the soil: { level }
+    const level = Number(b.level), L = (F.soils || []).find(l => l.level === level);
+    if (!L || level < 2) throw badInput('Unknown soil level.');
+    if (f.soil >= level) throw new ApiError(409, 'already_upgraded', `Field ${n} already has ${lower(soilOf(F, f.soil).name || 'that soil')}.`);
+    if (level !== f.soil + 1) throw new ApiError(409, 'one_at_a_time', `Improve field ${n}'s soil to level ${f.soil + 1} first.`);
+    if ((L.minLevel || 1) > s.prog.level) throw new ApiError(409, 'locked', `${L.name} needs farm level ${L.minLevel} — the farm is level ${s.prog.level}.`);
+    if (s.money < (L.money || 0)) throw new ApiError(409, 'not_enough_money', `Not enough money: ₹${L.money} needed, the farm has ₹${s.money}.`);
+    if (s.gold < (L.gold || 0)) throw new ApiError(409, 'not_enough_gold', `Not enough gold: ${L.gold} gold coins needed, the farm has ${s.gold}.`);
+    await c.rows('UPDATE farm_fields SET soil = $2 WHERE id = $1', [f.id, level]);
+    return { money: -(L.money || 0), gold: -(L.gold || 0), items: [], detail: { op, slot, level, cost: L.money, gold: L.gold || 0 },
+      message: `${me.name} gave field ${n} ${lower(L.name)} — ${Math.round((L.mult - 1) * 100)}% more wheat${L.grow ? `, ${Math.round((1 - L.grow) * 100)}% faster` : ''}` };
+  }
+  if (op === 'rush') {                                           // finish the growing now, for gold
+    if (f.stage !== 'growing') throw new ApiError(409, 'nothing', `Nothing is growing in field ${n}.`);
+    const leftMin = (f.ready_at.getTime() - now) / 60e3;
+    if (leftMin <= 0) throw new ApiError(409, 'ready', `Field ${n} is ripe already — harvest it.`);
+    const cost = Math.max(1, Math.ceil(leftMin / (F.rushMin || 20)));
+    if (s.gold < cost) throw new ApiError(409, 'not_enough_gold', `Not enough gold: ripening it now costs ${cost} gold coins, the farm has ${s.gold}.`);
+    await c.rows('UPDATE farm_fields SET ready_at = now() WHERE id = $1', [f.id]);
+    return { money: 0, gold: -cost, items: [], detail: { op, slot, gold: cost }, message: `${me.name} ripened field ${n}'s wheat at once for ${cost} gold coin${cost > 1 ? 's' : ''}` };
   }
   if (op === 'sowstart') {                                       // a player starts walking the field with seeds
     if (f.stage !== 'empty' && f.stage !== 'sowing') throw new ApiError(409, 'busy', `Field ${n} is already ${f.stage === 'sown' ? 'sown — water it' : 'growing'}.`);
@@ -97,10 +127,10 @@ export async function fieldAction(c, { me, b, s, cat }) {
     if (f.stage !== 'sown' || !crop) throw new ApiError(409, 'not_sown', f.stage === 'growing' ? `Field ${n} is already watered and growing.` : `Sow field ${n} first.`);
     const cost = crop.water || 20;
     if (s.money < cost) throw new ApiError(409, 'not_enough_money', `Not enough money: watering costs ₹${cost}, the farm has ₹${s.money}.`);
-    const ready = new Date(now + (crop.growH || 2) * H);
+    const ready = new Date(now + (crop.growH || 2) * (soilOf(F, f.soil).grow || 1) * H);        // (rich soil grows faster)
     await c.rows(`UPDATE farm_fields SET stage = 'growing', watered_at = now(), ready_at = $2, yield = NULL, harvested = 0 WHERE id = $1`, [f.id, ready]);
     return { money: -cost, items: [], detail: { op, slot, cost, readyAt: ready.toISOString() },
-      message: `${me.name} watered field ${n} for ₹${cost} — the ${lower(crop.name)} is ready in ${crop.growH || 2} hours` };
+      message: `${me.name} watered field ${n} for ₹${cost} — the ${lower(crop.name)} is ready in ${+((crop.growH || 2) * (soilOf(F, f.soil).grow || 1)).toFixed(2)} hours` };
   }
   if (op === 'harvest') {
     const crop = cropOf(cat, f.crop || 'wheat');
@@ -108,14 +138,14 @@ export async function fieldAction(c, { me, b, s, cat }) {
     if (now < f.ready_at.getTime()) throw new ApiError(409, 'not_ready', `Field ${n} isn't ready yet.`);
     // the birds' share is decided the first time the field is harvested (with the scarecrow it has then)
     let total = f.yield;
-    if (total === null) total = Math.round((crop.yield || 500) * birdShare(cat, f.scarecrow));
+    if (total === null) total = Math.round((crop.yield || 500) * soilOf(F, f.soil).mult * birdShare(cat, f.scarecrow));   // (better soil, more wheat)
     const p = crop.product, room = Math.max(0, capOf(cat, p, s.level) - (s.inv[p] || 0)), want = total - f.harvested, take = Math.min(want, room);
     if (take <= 0) throw new ApiError(409, 'storage_full', `The farm storage has no room for more ${lower(cat[p].name)} (it holds ${capOf(cat, p, s.level)}). Upgrade the storage.`);
     s.inv[p] = (s.inv[p] || 0) + take;
     const done = f.harvested + take >= total;
     if (done) await c.rows(`UPDATE farm_fields SET stage = 'empty', crop = NULL, yield = NULL, harvested = 0, sow_started_at = NULL, sow_by = NULL, sown_at = NULL, watered_at = NULL, ready_at = NULL WHERE id = $1`, [f.id]);
     else await c.rows('UPDATE farm_fields SET yield = $2, harvested = $3 WHERE id = $1', [f.id, total, f.harvested + take]);
-    const lost = (crop.yield || 500) - total;
+    const lost = Math.round((crop.yield || 500) * soilOf(F, f.soil).mult) - total;
     return { money: 0, items: [p], detail: { op, slot, got: take, total, left: total - f.harvested - take, lost },
       message: `${me.name} harvested ${take} ${lower(cat[p].name)} from field ${n}` + (lost > 0 && f.yield === null ? ` (birds ate ${lost})` : '') + (done ? '' : ` — storage full, ${total - f.harvested - take} wait in the field`) };
   }

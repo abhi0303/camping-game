@@ -453,6 +453,89 @@ ALTER TABLE room_members
   ADD COLUMN live_seen_at TIMESTAMPTZ;
 `,
   },
+  {
+    id: 13,
+    name: 'farm_level_progression',
+    sql: `
+-- the farm's long game (js/farm/progression.js, server/src/progress.js): a farm level with XP and missions, care
+-- levels for animals, levels for sheds, more storage levels, field soils, the Market's demand, a golden hen
+ALTER TABLE rooms
+  ADD COLUMN farm_level INTEGER NOT NULL DEFAULT 1 CHECK (farm_level >= 1),
+  ADD COLUMN xp         BIGINT NOT NULL DEFAULT 0 CHECK (xp >= 0),        -- toward the next level
+  ADD COLUMN xp_total   BIGINT NOT NULL DEFAULT 0 CHECK (xp_total >= 0),
+  ADD COLUMN stats      JSONB NOT NULL DEFAULT '{}',                    -- counters the missions count (eggs, sold, orders…)
+  ADD COLUMN missions   JSONB;                                          -- this level's missions (NULL: not made yet)
+ALTER TABLE animals ADD COLUMN care REAL NOT NULL DEFAULT 0 CHECK (care >= 0);   -- hours it has been fed (care level)
+ALTER TABLE farm_fields ADD COLUMN soil SMALLINT NOT NULL DEFAULT 1 CHECK (soil BETWEEN 1 AND 3);
+-- what the farm sold lately, per good (it pushes the price down; it fades by half every 3 hours)
+CREATE TABLE market_load (
+  room_id UUID NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
+  item    TEXT NOT NULL,
+  load    REAL NOT NULL DEFAULT 0 CHECK (load >= 0),
+  at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (room_id, item)
+);
+
+-- animals: slower eggs (server/src/animals.js), dearer animals, milk worth more; unlocked by the farm level
+UPDATE catalog SET buy_price = 60, data = (data - 'unlock') || '{"minLevel": 1}' WHERE item = 'chicken';
+UPDATE catalog SET buy_price = 250, data = (data - 'unlock') || '{"minLevel": 3}' WHERE item = 'chicken_brown';
+UPDATE catalog SET buy_price = 600, data = (data - 'unlock') || '{"minLevel": 6}' WHERE item = 'chicken_dark';
+UPDATE catalog SET sell_price = 8 WHERE item = 'egg_dark';
+UPDATE catalog SET buy_price = 300, data = data || '{"rate": 0.5, "minLevel": 2}' WHERE item = 'goat';
+UPDATE catalog SET buy_price = 800, data = data || '{"rate": 0.5, "minLevel": 4}' WHERE item = 'cow';
+UPDATE catalog SET sell_price = 60 WHERE item = 'cow_milk';
+UPDATE catalog SET data = data || '{"minLevel": 5}' WHERE item LIKE 'horse\\_%';
+INSERT INTO catalog (item, kind, name, icon, buy_price, sell_price, data, sort) VALUES
+  ('chicken_gold', 'animal', 'Golden hen', '🐔', NULL, NULL, '{"feedCost": 1, "feedHours": 2, "product": "egg_gold", "shelter": "coop", "variety": "Golden", "gold": 30, "minLevel": 10}', 3),
+  ('egg_gold', 'good', 'Golden eggs', '🥚', NULL, 30, '{"cap": 60}', 13);
+
+-- sheds: dearer to build, unlocked by the farm level, five levels each (more room, a little more production)
+UPDATE catalog SET buy_price = 150, data = data || '{"minLevel": 1, "levels": [
+  {"level": 1, "capacity": 6, "bonus": 1},
+  {"level": 2, "capacity": 8, "bonus": 1.05, "money": 600, "wood": 60, "stone": 20, "minLevel": 2},
+  {"level": 3, "capacity": 10, "bonus": 1.1, "money": 1500, "wood": 120, "stone": 60, "minLevel": 4},
+  {"level": 4, "capacity": 12, "bonus": 1.2, "money": 4000, "wood": 200, "stone": 120, "gold": 5, "minLevel": 7},
+  {"level": 5, "capacity": 14, "bonus": 1.3, "money": 9000, "wood": 300, "stone": 200, "gold": 15, "minLevel": 10}]}' WHERE item = 'coop';
+UPDATE catalog SET buy_price = 400, data = data || '{"minLevel": 2, "levels": [
+  {"level": 1, "capacity": 4, "bonus": 1},
+  {"level": 2, "capacity": 5, "bonus": 1.05, "money": 900, "wood": 80, "stone": 30, "minLevel": 3},
+  {"level": 3, "capacity": 6, "bonus": 1.1, "money": 2200, "wood": 150, "stone": 80, "minLevel": 5},
+  {"level": 4, "capacity": 7, "bonus": 1.2, "money": 5500, "wood": 250, "stone": 150, "gold": 6, "minLevel": 8},
+  {"level": 5, "capacity": 8, "bonus": 1.3, "money": 12000, "wood": 350, "stone": 250, "gold": 18, "minLevel": 11}]}' WHERE item = 'goat_shed';
+UPDATE catalog SET buy_price = 900, data = data || '{"minLevel": 4, "levels": [
+  {"level": 1, "capacity": 3, "bonus": 1},
+  {"level": 2, "capacity": 4, "bonus": 1.05, "money": 1800, "wood": 120, "stone": 60, "minLevel": 5},
+  {"level": 3, "capacity": 5, "bonus": 1.1, "money": 4000, "wood": 200, "stone": 120, "minLevel": 7},
+  {"level": 4, "capacity": 6, "bonus": 1.2, "money": 8000, "wood": 300, "stone": 200, "gold": 8, "minLevel": 10},
+  {"level": 5, "capacity": 7, "bonus": 1.3, "money": 16000, "wood": 450, "stone": 300, "gold": 22, "minLevel": 13}]}' WHERE item = 'barn';
+UPDATE catalog SET buy_price = 1200, data = data || '{"wood": 80, "stone": 30, "minLevel": 5, "levels": [
+  {"level": 1, "capacity": 4, "bonus": 1},
+  {"level": 2, "capacity": 5, "bonus": 1.05, "money": 2000, "wood": 120, "stone": 60, "minLevel": 6},
+  {"level": 3, "capacity": 6, "bonus": 1.1, "money": 4500, "wood": 200, "stone": 120, "minLevel": 8},
+  {"level": 4, "capacity": 7, "bonus": 1.2, "money": 9000, "wood": 300, "stone": 200, "gold": 8, "minLevel": 11},
+  {"level": 5, "capacity": 8, "bonus": 1.3, "money": 18000, "wood": 450, "stone": 300, "gold": 22, "minLevel": 14}]}' WHERE item = 'stable';
+
+-- the farm storage: eight levels (the higher ones cost gold and need a higher farm level)
+UPDATE catalog SET data = '{"levels": [
+  {"level": 1, "mult": 1},
+  {"level": 2, "mult": 2, "money": 600, "wood": 80, "stone": 40},
+  {"level": 3, "mult": 3, "money": 2000, "wood": 150, "stone": 100, "minLevel": 4},
+  {"level": 4, "mult": 4, "money": 5000, "wood": 250, "stone": 180, "gold": 5, "minLevel": 6},
+  {"level": 5, "mult": 5, "money": 10000, "wood": 400, "stone": 300, "gold": 15, "minLevel": 9},
+  {"level": 6, "mult": 6.5, "money": 20000, "wood": 600, "stone": 450, "gold": 30, "minLevel": 12},
+  {"level": 7, "mult": 8, "money": 35000, "wood": 800, "stone": 600, "gold": 50, "minLevel": 15},
+  {"level": 8, "mult": 10, "money": 60000, "wood": 1000, "stone": 800, "gold": 80, "minLevel": 20}]}' WHERE item = 'storage';
+
+-- fields: each one dearer than the last and unlocked later; three soils (more wheat, then faster too)
+UPDATE catalog SET data = data || '{"minLevel": 3, "slots": [
+  {"price": 500, "minLevel": 3}, {"price": 800, "minLevel": 3}, {"price": 1500, "minLevel": 5},
+  {"price": 2500, "minLevel": 7}, {"price": 4000, "minLevel": 9}, {"price": 6000, "minLevel": 12}],
+  "soils": [{"level": 1, "mult": 1, "name": "Plain soil"},
+  {"level": 2, "mult": 1.25, "money": 1500, "gold": 3, "minLevel": 6, "name": "Manured soil"},
+  {"level": 3, "mult": 1.5, "grow": 0.75, "money": 4000, "gold": 10, "minLevel": 10, "name": "Irrigated rich soil"}],
+  "rushMin": 20}' WHERE item = 'field';
+`,
+  },
 ];
 
 const LOCK_ID = 727001;   // advisory lock: two migrate runs never overlap

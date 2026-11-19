@@ -73,6 +73,7 @@ export async function machineAction(c, { me, b, s, cat }) {
     if (!L || level < 2) throw badInput('Unknown level.');
     if (m.level >= level) throw new ApiError(409, 'already_upgraded', `${name[0].toUpperCase() + name.slice(1)} is already level ${m.level}.`);
     if (m.level !== level - 1) throw new ApiError(409, 'one_at_a_time', `Upgrade ${name} to level ${m.level + 1} first.`);
+    if (L.minLevel && s.prog && s.prog.level < L.minLevel) throw new ApiError(409, 'locked', `Level ${level} needs farm level ${L.minLevel} — the farm is level ${s.prog.level}.`);
     if (s.gold < L.cost) throw new ApiError(409, 'not_enough_gold', `Not enough gold: level ${level} costs ${L.cost} gold coins, the farm has ${s.gold}.`);
     await c.rows('UPDATE farm_machines SET level = $2, grind_started_at = NULL, grind_by = NULL WHERE id = $1', [m.id, level]);
     return { money: 0, gold: -L.cost, items: [], detail: { machine: kind, op, level, gold: L.cost }, message: `${me.name} upgraded ${name} to level ${level} (${L.name.toLowerCase()}) for ${L.cost} gold coins` };

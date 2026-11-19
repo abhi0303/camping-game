@@ -83,7 +83,7 @@ export class FarmPanel {
     if (!e || !e.ready) return '';
     const tile = (ic, val, label, cls = '') => `<div class="fm-tile ${cls}">${ic}<b>${val}</b><small>${label}</small></div>`;
     const tiles = [tile(icon('coin'), '₹' + Number(e.money).toLocaleString('en-IN'), 'money')];
-    const ANIMAL = { chicken: 'hens', chicken_brown: 'desi hens', chicken_dark: 'black hens', goat: 'goats', cow: 'cows', horse: 'horses' };
+    const ANIMAL = { chicken: 'hens', chicken_brown: 'desi hens', chicken_dark: 'black hens', chicken_gold: 'golden hens', goat: 'goats', cow: 'cows', horse: 'horses' };
     for (const k of e.items('animal')) { const n = e.count(k.id); if (n) tiles.push(tile(k.icon, n, ANIMAL[k.id] || esc(k.name.toLowerCase()))); }
     const MAKES = { egg: 'eggs / h', egg_brown: 'desi eggs / h', egg_dark: 'black eggs / h', goat_milk: 'goat milk / h', cow_milk: 'cow milk / h' };
     for (const p of Object.keys(MAKES)) {

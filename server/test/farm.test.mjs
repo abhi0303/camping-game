@@ -49,7 +49,10 @@ const travel = async (w, hours) => {
   await q(`UPDATE rooms SET produced_at = produced_at - make_interval(secs => $2) WHERE code = $1`, [w.code, hours * 3600]);
   await q(`UPDATE animals a SET fed_until = fed_until - make_interval(secs => $2), born_at = born_at - make_interval(secs => $2) FROM rooms r WHERE r.id = a.room_id AND r.code = $1`, [w.code, hours * 3600]);
 };
-const coop = async (w, plot = 0) => { await act(w, { action: 'buy', item: 'wood', qty: 20 }); return (await act(w, { action: 'build', type: 'coop', plot })).body.buildings.find(b => b.plot === plot); };
+// a coop on a plot (the farm gets ₹1000 more first: a coop and its chickens cost more than the starting ₹500)
+const coop = async (w, plot = 0) => { await q(`UPDATE rooms SET money = money + 1000 WHERE code = $1`, [w.code]); await act(w, { action: 'buy', item: 'wood', qty: 20 }); return (await act(w, { action: 'build', type: 'coop', plot })).body.buildings.find(b => b.plot === plot); };
+// a farm that has grown: a high farm level (everything unlocked) and money to spend
+const grow = (w, level = 20, money = 100000) => q(`UPDATE rooms SET farm_level = $2, money = $3 WHERE code = $1`, [w.code, level, money]);
 const ready = async w => (await farm(w)).body.animals.reduce((t, a) => t + a.ready, 0);
 const emptyNests = w => q(`UPDATE animals a SET ready = 0 FROM rooms r WHERE r.id = a.room_id AND r.code = $1`, [w.code]);
 async function addMember(w, name, pin = '5555') {
@@ -66,7 +69,8 @@ test('a new farm: ₹500, 20 feed, the catalog, 8 plots, storage level 1', async
   assert.equal(f.status, 200, JSON.stringify(f.body));
   assert.equal(f.body.money, 500); assert.equal(f.body.inventory.feed, 20); assert.equal(f.body.inventory.egg, 0);
   assert.equal(f.body.plots, 8); assert.deepEqual(f.body.buildings, []); assert.deepEqual(f.body.animals, []);
-  assert.equal(f.body.catalog.chicken.buy, 40); assert.equal(f.body.catalog.coop.capacity, 6);
+  assert.equal(f.body.catalog.chicken.buy, 60); assert.equal(f.body.catalog.coop.capacity, 6); assert.equal(f.body.catalog.coop.buy, 150);
+  assert.deepEqual([f.body.progress.level, f.body.progress.xp, f.body.progress.need, f.body.progress.missions.length], [1, 0, 100, 2]);
   assert.equal(f.body.storageLevel, 1); assert.equal(f.body.caps.egg, 60); assert.equal(f.body.totalEarned, 0);
   assert.equal((await farm(w)).body.inventory.feed, 20);           // starting goods only once
   assert.equal((await call('GET', `/v1/rooms/${w.code}/farm`)).body.error.code, 'login_needed');
@@ -74,6 +78,7 @@ test('a new farm: ₹500, 20 feed, the catalog, 8 plots, storage level 1', async
 
 test('plots: two rows 21 m apart, every plot at its own place', async () => {
   const w = await world();
+  await grow(w);
   await act(w, { action: 'buy', item: 'wood', qty: 40 });
   await act(w, { action: 'build', type: 'coop', plot: 0 });
   const r = await act(w, { action: 'build', type: 'coop', plot: 4 });
@@ -91,22 +96,32 @@ test('the farm loop: coop, chickens arrive fed for 2 h, eggs wait in the nests, 
   assert.equal(c.type, 'coop');
   assert.equal((await act(w, { action: 'buy', item: 'chicken', qty: 7 })).body.error.code, 'no_space');
   r = await act(w, { action: 'buy', item: 'chicken', qty: 6 });
-  assert.equal(r.body.money, 500 - 120 - 100 - 240); assert.equal(r.body.animals.length, 6);
+  assert.equal(r.body.money, 1500 - 120 - 150 - 360); assert.equal(r.body.animals.length, 6);
   assert.ok(r.body.animals.every(a => a.shelter === c.id && a.health === 100 && a.ready === 0 && Date.parse(a.fedUntil) > Date.now() + 7000e3));
   assert.equal((await act(w, { action: 'collect', shelter: c.id })).body.error.code, 'nothing_ready');
-  // 10 hours pass: fed for the first 2 h only -> each chicken lays an egg every 5 minutes = 24 eggs, a full nest
+  // 2 hours pass: an egg every 12 minutes = 10 eggs each
+  await travel(w, 2);
+  r = await farm(w);
+  assert.ok(r.body.animals.every(a => a.ready === 10), JSON.stringify(r.body.animals[0]));
+  await emptyNests(w);
+  // fed 8 hours more, 10 hours pass: nests full (24 each)
+  await setInv(w, 'feed', 30);
+  for (let i = 0; i < 4; i++) await act(w, { action: 'feed', shelter: c.id, all: true });
   await travel(w, 10);
   r = await farm(w);
   assert.ok(r.body.animals.every(a => a.ready === 24 && a.hunger > 0 && a.health === 100), JSON.stringify(r.body.animals[0]));
-  assert.equal(r.body.inventory.egg, 0); assert.equal(r.body.inventory.feed, 20);           // nothing eaten by itself
+  assert.equal(r.body.inventory.egg, 0); assert.equal(r.body.inventory.feed, 6);            // nothing eaten by itself
   // collect: the store holds 60 eggs, the other 84 wait in the nests
   r = await act(w, { action: 'collect', shelter: c.id });
   assert.equal(r.status, 200, JSON.stringify(r.body));
   assert.deepEqual([r.body.inventory.egg, r.body.result.total, r.body.result.full], [60, 60, true]);
   assert.match(r.body.message, /Abhi collected 60 white eggs — storage full/);
   assert.equal(r.body.animals.reduce((t, a) => t + a.ready, 0), 84);
+  // selling 60 at once: each egg a little cheaper (the Market's demand), ₹48 for the lot, the price down to 60 %
+  const m0 = r.body.money;
   r = await act(w, { action: 'sell', item: 'egg', qty: 60 });
-  assert.equal(r.body.money, 40 + 60); assert.equal(r.body.totalEarned, 60);
+  assert.equal(r.body.money, m0 + 48); assert.equal(r.body.totalEarned, 48);
+  assert.match(r.body.message, /down to 60%/);
   assert.equal((await act(w, { action: 'sell', item: 'egg', qty: 1 })).body.error.code, 'not_enough');
   assert.equal((await act(w, { action: 'collect', shelter: c.id })).body.result.total, 60);
   assert.equal((await act(w, { action: 'sell', item: 'feed', qty: 1 })).body.error.code, 'bad_item');
@@ -114,7 +129,7 @@ test('the farm loop: coop, chickens arrive fed for 2 h, eggs wait in the nests, 
   assert.equal((await act(w, { action: 'buy', item: 'feed', qty: -3 })).body.error.code, 'bad_input');
   assert.equal((await act(w, { action: 'collect', shelter: 'nope' })).body.error.code, 'bad_input');
   const h = await call('GET', `/v1/rooms/${w.code}/farm/history`, undefined, w.token);
-  assert.match(h.body.history[1].message, /Abhi sold 60 white eggs for ₹60/);
+  assert.match(h.body.history[1].message, /Abhi sold 60 white eggs for ₹48/);
 });
 
 test('feeding: 1 feed per chicken for 2 h, feed some, not enough feed, already fed, timers move', async () => {
@@ -122,7 +137,7 @@ test('feeding: 1 feed per chicken for 2 h, feed some, not enough feed, already f
   const c = await coop(w);
   await act(w, { action: 'buy', item: 'chicken', qty: 4 });
   await travel(w, 3);                                       // fed 2 h, hungry for 1 h
-  assert.equal(await ready(w), 4 * 24);
+  assert.equal(await ready(w), 4 * 10);
   await emptyNests(w);
   await setInv(w, 'feed', 3);
   let r = await act(w, { action: 'feed', shelter: c.id, all: true });
@@ -134,10 +149,10 @@ test('feeding: 1 feed per chicken for 2 h, feed some, not enough feed, already f
   assert.equal(fed.length, 3);
   assert.ok(fed.every(a => Math.abs(Date.parse(a.fedUntil) - Date.now() - 2 * 3600e3) < 60e3));    // 2 h from now
   assert.equal((await act(w, { action: 'feed', shelter: c.id, all: true })).body.error.code, 'not_enough');
-  // 1 more hour: only the 3 fed chickens lay (12 eggs each); the hungry one waits with an empty nest
+  // 1 more hour: only the 3 fed chickens lay (5 eggs each); the hungry one waits with an empty nest
   await travel(w, 1);
   r = await farm(w);
-  assert.deepEqual(r.body.animals.map(a => a.ready).sort((x, y) => x - y), [0, 12, 12, 12]);
+  assert.deepEqual(r.body.animals.map(a => a.ready).sort((x, y) => x - y), [0, 5, 5, 5]);
   // feed one chosen chicken: the hungriest goes first
   await setInv(w, 'feed', 20);
   r = await act(w, { action: 'feed', shelter: c.id, count: 1 });
@@ -188,9 +203,9 @@ test('production is counted once, even when the farm is opened from many places 
   await act(w, { action: 'buy', item: 'chicken', qty: 4 });
   await setInv(w, 'feed', 100);
   for (let i = 0; i < 3; i++) await act(w, { action: 'feed', shelter: c.id, all: true });     // fed for 2 + 6 h
-  await travel(w, 1.5);                                     // 4 chickens × 12 an hour × 1.5 h = 72 eggs
+  await travel(w, 1.5);                                     // 4 chickens × 5 an hour × 1.5 h = 30 eggs
   await Promise.all([farm(w), farm(w), farm(w), farm(w)]);
-  assert.equal(await ready(w), 72);
+  assert.equal(await ready(w), 28);                         // (7.5 each: 7 laid, half of the next one made)
 });
 
 test('hungry for a day: animals get weak; fed again they recover and lay', async () => {
@@ -199,44 +214,44 @@ test('hungry for a day: animals get weak; fed again they recover and lay', async
   await act(w, { action: 'buy', item: 'chicken', qty: 2 });
   await travel(w, 50);                                      // fed 2 h, then 48 h hungry (weak after 24 h)
   let f = await farm(w);
-  assert.ok(f.body.animals.every(a => a.hunger === 100 && a.health < 100 && a.health >= 10 && a.ready === 24), 'starving: ' + JSON.stringify(f.body.animals));
+  assert.ok(f.body.animals.every(a => a.hunger === 100 && a.health < 100 && a.health >= 10 && a.ready === 10), 'starving: ' + JSON.stringify(f.body.animals));
   const weak = f.body.animals[0].health;
-  assert.equal((await act(w, { action: 'collect', shelter: c.id })).body.result.total, 48);
+  assert.equal((await act(w, { action: 'collect', shelter: c.id })).body.result.total, 20);
   for (let i = 0; i < 4; i++) await act(w, { action: 'feed', shelter: c.id, all: true });       // 8 h of food
   await travel(w, 8);
   f = await farm(w);
   assert.ok(f.body.animals.every(a => a.hunger === 0 && a.health > weak && a.ready > 0), 'fed: ' + JSON.stringify(f.body.animals));
 });
 
-test('three varieties: Brown Desi and Black are locked until the farm has earned enough; 5 / 7 / 9 minutes, own eggs and prices', async () => {
+test('three varieties: Brown Desi and Black are locked until farm level 3 and 6; 12 / 15 / 20 minutes, own eggs and prices', async () => {
   const w = await world();
   const c = await coop(w);
   let r = await act(w, { action: 'buy', item: 'chicken_brown', qty: 1 });
-  assert.equal(r.body.error.code, 'locked'); assert.match(r.body.error.message, /₹300/);
-  await q(`UPDATE rooms SET total_earned = 300, money = 5000 WHERE code = $1`, [w.code]);
+  assert.equal(r.body.error.code, 'locked'); assert.match(r.body.error.message, /farm level 3/);
+  await q(`UPDATE rooms SET farm_level = 3, money = 5000 WHERE code = $1`, [w.code]);
   r = await act(w, { action: 'buy', item: 'chicken_brown', qty: 2 });
   assert.equal(r.status, 200, JSON.stringify(r.body));
   assert.equal((await act(w, { action: 'buy', item: 'chicken_dark', qty: 1 })).body.error.code, 'locked');
-  await q(`UPDATE rooms SET total_earned = 1500 WHERE code = $1`, [w.code]);
+  await q(`UPDATE rooms SET farm_level = 6 WHERE code = $1`, [w.code]);
   r = await act(w, { action: 'buy', item: 'chicken_dark', qty: 1 });
   r = await act(w, { action: 'buy', item: 'chicken', qty: 1 });
   assert.deepEqual(r.body.animals.map(a => a.type).sort(), ['chicken', 'chicken_brown', 'chicken_brown', 'chicken_dark']);
   assert.ok(r.body.animals.every(a => a.shelter === c.id));
   const k = r.body.catalog;
   assert.deepEqual(['chicken', 'chicken_brown', 'chicken_dark'].map(x => [k[x].variety, k[x].eggMinutes, k[x].feedMinutes, k[x].feedCost, k[x].nest]),
-    [['Regular White', 5, 120, 1, 24], ['Brown Desi', 7, 120, 1, 24], ['Black', 9, 120, 1, 24]]);
-  assert.equal(k.chicken.rate, 12);
-  await travel(w, 1);                                       // all fed: 60/5 = 12, 60/7 = 8.6 -> 8, 60/9 = 6.7 -> 6
+    [['Regular White', 12, 120, 1, 24], ['Brown Desi', 15, 120, 1, 24], ['Black', 20, 120, 1, 24]]);
+  assert.equal(k.chicken.rate, 5);
+  await travel(w, 1.25);                                    // all fed: 6.25 -> 6, 5 -> 5, 3.75 -> 3
   r = await act(w, { action: 'collect', shelter: c.id });
-  assert.deepEqual([r.body.inventory.egg, r.body.inventory.egg_brown, r.body.inventory.egg_dark], [12, 16, 6]);
+  assert.deepEqual([r.body.inventory.egg, r.body.inventory.egg_brown, r.body.inventory.egg_dark], [6, 10, 3]);
   assert.deepEqual(r.body.animals.map(a => a.ready), [0, 0, 0, 0]);
-  // each keeps its own part-made egg: the Brown Desi ones are 4/7 of the way to the next
-  assert.ok(r.body.animals.filter(a => a.type === 'chicken_brown').every(a => a.progress > 0.5 && a.progress < 0.65), JSON.stringify(r.body.animals));
-  const before = r.body.money;
-  r = await act(w, { action: 'sell', item: 'egg_brown', qty: 16 });
-  assert.equal(r.body.money, before + 48);
-  r = await act(w, { action: 'sell', item: 'egg_dark', qty: 6 });
-  assert.equal(r.body.money, before + 48 + 42); assert.equal(r.body.totalEarned, 1500 + 90);
+  // each keeps its own part-made egg: the Black one is 3/4 of the way to the next
+  assert.ok(r.body.animals.filter(a => a.type === 'chicken_dark').every(a => a.progress > 0.7 && a.progress < 0.8), JSON.stringify(r.body.animals));
+  const before = r.body.money, earned = r.body.totalEarned;
+  r = await act(w, { action: 'sell', item: 'egg_brown', qty: 10 });         // 10 × ₹3, a little less each (demand 90): ₹28
+  assert.equal(r.body.money, before + 28);
+  r = await act(w, { action: 'sell', item: 'egg_dark', qty: 3 });            // 3 × ₹8 (demand 50): ₹23
+  assert.equal(r.body.money, before + 28 + 23); assert.equal(r.body.totalEarned, earned + 51);
 });
 
 test('storage: level 2 upgrade doubles the limits, costs money + wood + stone, happens once', async () => {
@@ -251,11 +266,12 @@ test('storage: level 2 upgrade doubles the limits, costs money + wood + stone, h
   r = await farm(w);
   assert.equal(r.body.storageLevel, 2); assert.equal(r.body.caps.egg, 120); assert.equal(r.body.caps.wood, 1000);
   assert.deepEqual([r.body.money, r.body.inventory.wood, r.body.inventory.stone], [1400, 20, 10]);
-  assert.equal((await act(w, { action: 'upgrade', target: 'storage', level: 3 })).body.error.code, 'max_level');
+  assert.equal((await act(w, { action: 'upgrade', target: 'storage', level: 3 })).body.error.code, 'locked');     // (farm level 4)
   // the bigger store keeps more eggs
   const c = await coop(w, 5);
   await act(w, { action: 'buy', item: 'chicken', qty: 6 });
-  await travel(w, 2);                                       // 6 full nests = 144 eggs (the level-1 store held 60)
+  for (let i = 0; i < 3; i++) await act(w, { action: 'feed', shelter: c.id, all: true });
+  await travel(w, 8);                                       // 6 full nests = 144 eggs (the level-1 store held 60)
   r = await act(w, { action: 'collect', shelter: c.id });
   assert.deepEqual([r.body.inventory.egg, r.body.result.full], [120, true]);
 });
@@ -279,6 +295,7 @@ test('pen gates: open and close for everyone, saved, not in the history', async 
 
 test('buying from a shelter\'s panel puts the animal in that shelter', async () => {
   const w = await world();
+  await grow(w);
   await act(w, { action: 'buy', item: 'wood', qty: 40 });
   await act(w, { action: 'build', type: 'coop', plot: 1 });
   const r = await act(w, { action: 'build', type: 'coop', plot: 6 });
@@ -355,7 +372,7 @@ test('upgrade from older databases: migration 1 only, 2 with animals and buildin
       const env2 = { ...env, __pool: p2 };
       const r = await worker.fetch(new Request('http://api.test/v1/health'), env2, {});
       assert.equal(r.status, 200);
-      assert.deepEqual((await p2.query('SELECT id FROM schema_migrations ORDER BY id')).rows.map(x => x.id), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+      assert.deepEqual((await p2.query('SELECT id FROM schema_migrations ORDER BY id')).rows.map(x => x.id), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]);
       const rm = (await p2.query('SELECT money, storage_level, total_earned FROM rooms')).rows[0];
       assert.deepEqual([Number(rm.money), rm.storage_level, Number(rm.total_earned)], [upTo === 4 ? 500 + 50 + 56 : 500, 1, upTo === 2 ? 42 : 0]);
       if (upTo >= 2) {
@@ -363,7 +380,7 @@ test('upgrade from older databases: migration 1 only, 2 with animals and buildin
         assert.equal((await p2.query('SELECT ready FROM animals')).rows[0].ready, 0);
       }
       const cat = Object.fromEntries((await p2.query(`SELECT item, name, kind, sell_price, buy_price FROM catalog`)).rows.map(x => [x.item, x]));
-      assert.deepEqual(['egg', 'egg_brown', 'egg_dark', 'fish_small', 'fish_medium', 'fish_large'].map(x => cat[x].sell_price), [1, 3, 7, 2, 5, 14]);
+      assert.deepEqual(['egg', 'egg_brown', 'egg_dark', 'fish_small', 'fish_medium', 'fish_large'].map(x => cat[x].sell_price), [1, 3, 8, 2, 5, 14]);
       assert.deepEqual([cat.chicken.name, cat.chicken_dark.name, cat.worm_pack.buy_price, cat.rod.kind], ['Regular White chicken', 'Black chicken', 1, 'gear']);
       assert.equal((await p2.query('SELECT rod_level FROM room_members')).rows.length, 0);
       assert.equal((await p2.query('SELECT count(*)::int AS n FROM fishing_casts')).rows[0].n, 0);
@@ -386,18 +403,18 @@ const chickenCat = () => ({
 });
 const hen = (type, fedMin, progress = 0, t0 = 0) => ({ type, health: 100, hunger: 0, progress, ready: 0, fed_until: fedMin == null ? null : new Date(t0 + fedMin * 60e3) });
 
-test('chickens: one egg every 5 / 7 / 9 minutes, from the central animal config', () => {
-  assert.deepEqual(Object.values(CHICKENS).map(c => c.eggMinutes), [5, 7, 9]);
+test('chickens: one egg every 12 / 15 / 20 / 30 minutes, from the central animal config', () => {
+  assert.deepEqual(Object.values(CHICKENS).map(c => c.eggMinutes), [12, 15, 20, 30]);
   const cat = chickenCat(), t0 = Date.UTC(2026, 0, 1), M = 60e3;
   const hens = [hen('chicken', 120, 0, t0), hen('chicken_brown', 120, 0, t0), hen('chicken_dark', 120, 0, t0)];
   const inv = {};
   const at = min => { simulate(hens, inv, cat, t0 + at.last * M, t0 + min * M); at.last = min; return hens.map(h => h.ready); };
   at.last = 0;
-  assert.deepEqual(at(4.9), [0, 0, 0]);
-  assert.deepEqual(at(5.01), [1, 0, 0]);
-  assert.deepEqual(at(7.01), [1, 1, 0]);
-  assert.deepEqual(at(9.01), [1, 1, 1]);
-  assert.deepEqual(at(63.01), [12, 9, 7]);
+  assert.deepEqual(at(11.9), [0, 0, 0]);
+  assert.deepEqual(at(12.01), [1, 0, 0]);
+  assert.deepEqual(at(15.01), [1, 1, 0]);
+  assert.deepEqual(at(20.01), [1, 1, 1]);
+  assert.deepEqual(at(120.01), [10, 8, 6]);
   assert.deepEqual(inv, {});                                // eggs wait in the nests, not in storage
 });
 
@@ -405,10 +422,10 @@ test('chickens: every chicken has its own timer; the shortest one is next', () =
   const cat = chickenCat(), t0 = Date.UTC(2026, 0, 1), M = 60e3;
   // bought at different times: one is 80 % of the way to its egg, one 10 %
   const hens = [hen('chicken', 120, 0.8, t0), hen('chicken', 120, 0.1, t0), hen('chicken_dark', 120, 0.5, t0)];
-  simulate(hens, {}, cat, t0, t0 + 1.1 * M);                // 1.1 min = 0.22 of a white egg
+  simulate(hens, {}, cat, t0, t0 + 2.64 * M);               // 2.64 min = 0.22 of a white egg
   assert.deepEqual(hens.map(h => h.ready), [1, 0, 0]);
   assert.ok(Math.abs(hens[0].progress - 0.02) < 1e-6 && Math.abs(hens[1].progress - 0.32) < 1e-6, JSON.stringify(hens));
-  assert.ok(Math.abs(hens[2].progress - (0.5 + 1.1 / 9)) < 1e-6);
+  assert.ok(Math.abs(hens[2].progress - (0.5 + 2.64 / 20)) < 1e-6);
 });
 
 test('chickens: an unfed chicken lays nothing, feeding runs out, a full nest stops laying', () => {
@@ -416,12 +433,13 @@ test('chickens: an unfed chicken lays nothing, feeding runs out, a full nest sto
   const hens = [hen('chicken', null, 0, t0), hen('chicken', 10, 0, t0), hen('chicken', 24 * 60, 0, t0)];
   const inv = {};
   simulate(hens, inv, cat, t0, t0 + 10 * H);                // 10 h away
-  assert.deepEqual(hens.map(h => h.ready), [0, 2, 24]);     // never fed · fed 10 min · nest full after 2 h
+  assert.deepEqual(hens.map(h => h.ready), [0, 0, 24]);     // never fed · fed 10 min (not one egg) · nest full after ~4 h
   assert.equal(hens[0].hunger, 100);
   assert.ok(hens[2].progress < 1);                          // no half-made eggs pile up behind a full nest
+  assert.equal(hens[2].level, 2);                           // fed 10 hours: care level 2 (+10 %)
   hens[2].ready = 0;                                        // collected
-  simulate(hens, inv, cat, t0 + 10 * H, t0 + 10 * H + 10 * 60e3);
-  assert.equal(hens[2].ready, 2);                           // laying again
+  simulate(hens, inv, cat, t0 + 10 * H, t0 + 10 * H + 30 * 60e3);
+  assert.equal(hens[2].ready, 2);                           // laying again (an egg every 12 min / 1.1)
 });
 
 test('offline: a week away never makes more than a full nest per chicken; storage untouched', async () => {
@@ -444,20 +462,20 @@ test('collect: two players press Collect at the same moment -> every egg is coll
   const w = await world(), p2 = await addMember(w, 'Rahul');
   const c = await coop(w);
   await act(w, { action: 'buy', item: 'chicken', qty: 3 });
-  await travel(w, 0.5);                                     // 3 × 6 eggs
+  await travel(w, 0.6);                                     // 3 × 3 eggs
   const [a, b] = await Promise.all([act(w, { action: 'collect', shelter: c.id }), act(p2, { action: 'collect', shelter: c.id })]);
   const ok = [a, b].filter(x => x.status === 200);
   assert.equal(ok.length, 1, JSON.stringify([a.body.error, b.body.error]));
   assert.equal([a, b].find(x => x.body.error).body.error.code, 'nothing_ready');
-  assert.equal(ok[0].body.result.total, 18);
+  assert.equal(ok[0].body.result.total, 9);
   const f = await farm(w);
-  assert.equal(f.body.inventory.egg, 18); assert.equal(await ready(w), 0);
+  assert.equal(f.body.inventory.egg, 9); assert.equal(await ready(w), 0);
   // the same request again (retry) does not collect twice
-  await travel(w, 0.5);
+  await travel(w, 0.6);
   const x = await act(w, { action: 'collect', shelter: c.id }, w.token, 'collect-once-1');
   const y = await act(w, { action: 'collect', shelter: c.id }, w.token, 'collect-once-1');
-  assert.equal(x.body.result.total, 18); assert.equal(y.body.replay, true);
-  assert.equal((await farm(w)).body.inventory.egg, 36);
+  assert.equal(x.body.result.total, 9); assert.equal(y.body.replay, true);
+  assert.equal((await farm(w)).body.inventory.egg, 18);
 });
 
 /* ---------- fishing ---------- */
@@ -619,7 +637,7 @@ const openOrder = async w => (await farm(w)).body.orders.list.find(o => o.status
 // put exactly what an order asks for into the farm storage
 const stock = async (w, o) => { for (const x of o.items) await setInv(w, x.item, x.qty); };
 
-test('orders ask only for what the farm can make, sized to it, paying 10 % more', async () => {
+test('orders ask only for what the farm can make, sized to it, paying 25 % more', async () => {
   const w = await world();
   const cat = (await farm(w)).body.catalog;
   let x = 3; const r = () => (x = (x * 16807) % 2147483647) / 2147483647;
@@ -636,7 +654,7 @@ test('orders ask only for what the farm can make, sized to it, paying 10 % more'
     assert.ok(o.items.filter(it => !it.item.startsWith('fish_')).length >= 2);
     assert.ok(o.items.every(it => it.qty >= 1 && it.qty <= 30));
     const value = o.items.reduce((t, it) => t + cat[it.item].sell * it.qty, 0);
-    assert.equal(o.pay, Math.ceil(value * 1.1));
+    assert.equal(o.pay, Math.ceil(value * 1.25));
   }
   assert.deepEqual([istDay(Date.UTC(2026, 10, 3, 18, 29)), istDay(Date.UTC(2026, 10, 3, 18, 31))], ['2026-11-03', '2026-11-04']);   // midnight IST = 18:30 UTC
   assert.equal(new Date(istDayEnd(Date.UTC(2026, 10, 3, 10))).toISOString(), '2026-11-03T18:30:00.000Z');
@@ -728,7 +746,7 @@ test('streak: an order every day for 5 days pays ₹200 on the 5th; a missed day
 /* ---------- horses: colours, babies, levels, selling, rentals ---------- */
 import { horsePrice, HORSES } from '../src/horses.js';
 const stable = async (w, plot = 7) => {
-  await q(`UPDATE rooms SET money = 20000 WHERE code = $1`, [w.code]);
+  await q(`UPDATE rooms SET money = 20000, farm_level = 5 WHERE code = $1`, [w.code]);     // (stables from farm level 5)
   await setInv(w, 'wood', 200); await setInv(w, 'stone', 100);
   return (await act(w, { action: 'build', type: 'stable', plot })).body.buildings.find(b => b.plot === plot);
 };
@@ -744,9 +762,9 @@ test('horses: six colours, a baby (Level 1) or grown (Level 10), 4 to a stable',
   assert.equal(cat.stable.capacity, 4);
   let r = await act(w, { action: 'buy', item: 'horse_palomino', qty: 1, age: 'foal' });
   assert.equal(r.status, 200, JSON.stringify(r.body));
-  assert.equal(r.body.money, 20000 - 600 - 320); assert.match(r.body.message, /bought 1 baby golden horse for ₹320/);
+  assert.equal(r.body.money, 20000 - 1200 - 320); assert.match(r.body.message, /bought 1 baby golden horse for ₹320/);        // (a stable is ₹1200)
   r = await act(w, { action: 'buy', item: 'horse_black', qty: 2 });
-  assert.equal(r.body.money, 20000 - 600 - 320 - 1600);
+  assert.equal(r.body.money, 20000 - 1200 - 320 - 1600);
   assert.deepEqual((await horses(w)).map(h => [h.type, h.level, h.shelter === st.id]), [['horse_palomino', 1, true], ['horse_black', 10, true], ['horse_black', 10, true]]);
   assert.equal((await act(w, { action: 'buy', item: 'horse_bay', qty: 2, age: 'foal' })).body.error.code, 'no_space');
 });

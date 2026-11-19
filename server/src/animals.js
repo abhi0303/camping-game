@@ -7,15 +7,19 @@
 //  nest         eggs a chicken keeps in its nest box until a player collects them. A full nest stops it
 //               laying, so an untended farm never piles up endless eggs.
 //
-// Balance (with the catalog prices of migration 5; feed is ₹2 a unit, one unit per 2 h):
-//  Regular White  ₹40  · 12 eggs/h × ₹1 = ₹12/h  → pays back in ~3.5 h
-//  Brown Desi     ₹180 · 8.6 eggs/h × ₹3 = ₹26/h → pays back in ~7 h
-//  Black          ₹450 · 6.7 eggs/h × ₹7 = ₹47/h → pays back in ~10 h
-// A premium chicken earns more per place in the coop (6 places per coop) but takes longer to pay off.
+// Balance (catalog prices of migration 13; feed is ₹2 a unit, one unit per 2 h = ₹1 an hour), before the Market's
+// demand (js/farm/progression.js: selling a lot at once pushes prices down) and the hens' care levels (+10 … 50 %):
+//  Regular White  ₹60  · 5 eggs/h × ₹1 = ₹5/h   → pays back in ~15 h
+//  Brown Desi     ₹250 · 4 eggs/h × ₹3 = ₹12/h  → ~23 h   (farm level 3)
+//  Black          ₹600 · 3 eggs/h × ₹8 = ₹24/h  → ~26 h   (farm level 6)
+//  Golden hen     30 gold · 2 eggs/h × ₹30 = ₹60/h        (farm level 10)
+// A premium chicken earns more per place in the coop but takes longer to pay off; a farm grows by levels, not
+// by a coop filling up in an afternoon.
 export const CHICKENS = {
-  chicken:       { variety: 'Regular White', eggMinutes: 5, feedMinutes: 120, feedCost: 1, nest: 24 },
-  chicken_brown: { variety: 'Brown Desi',    eggMinutes: 7, feedMinutes: 120, feedCost: 1, nest: 24 },
-  chicken_dark:  { variety: 'Black',         eggMinutes: 9, feedMinutes: 120, feedCost: 1, nest: 24 },
+  chicken:       { variety: 'Regular White', eggMinutes: 12, feedMinutes: 120, feedCost: 1, nest: 24 },
+  chicken_brown: { variety: 'Brown Desi',    eggMinutes: 15, feedMinutes: 120, feedCost: 1, nest: 24 },
+  chicken_dark:  { variety: 'Black',         eggMinutes: 20, feedMinutes: 120, feedCost: 1, nest: 24 },
+  chicken_gold:  { variety: 'Golden',        eggMinutes: 30, feedMinutes: 120, feedCost: 1, nest: 24 },
 };
 
 // catalog entry -> the same entry with this file's timing applied (rate = products per hour while fed)
