@@ -12,7 +12,8 @@ import { shelterModel, penGround, gateModel, signboard, wallSign, storageModel, 
 import { C, FARM_MAT, crate, barrel, eggStack, milkCan, hayBale, sack, lampPost, woodPile, stoneBin, fenceRun } from './props.js';
 import { FarmerNPC } from './npc.js';
 import { flambeau } from '../day-night.js';
-import { rigMaterial, rigDepthMaterial, addAnimAttributes, GAIT, goatPose, chickenExtras, grazePose } from './animals.js';
+import { rigMaterial, rigDepthMaterial, addAnimAttributes, GAIT, goatPose, chickenExtras, grazePose, rearOf, rearHeight } from './animals.js';
+import { rigOf } from './polyRig.js';
 
 const MAX_PER_TYPE = 64;
 const ORIGIN = { x: 0, z: 0, yaw: 0 };
@@ -70,10 +71,10 @@ export class Farmland {
     this._lamps();
     // animals: one instanced mesh per kind (the store's goats use the goat mesh too)
     this.inst = {};
-    const rigMat = rigMaterial(), rigDepth = rigDepthMaterial();
+    const rigMat = rigMaterial(), rigMat2 = rigMaterial(true), rigDepth = rigDepthMaterial();
     for (const [type, geo] of Object.entries(ANIMAL_GEO)) {
-      const g = geo(), rigged = !!g.attributes.aRig;                 // goats and chickens walk with moving legs (js/farm/animals.js)
-      const m = new THREE.InstancedMesh(g, rigged ? rigMat : FARM_MAT.solid, MAX_PER_TYPE);
+      const g = geo(), rigged = !!g.attributes.aRig, R = rigOf(type);   // they walk with moving legs (js/farm/animals.js)
+      const m = new THREE.InstancedMesh(g, rigged ? (R && R.twoSided ? rigMat2 : rigMat) : FARM_MAT.solid, MAX_PER_TYPE);
       if (rigged) { addAnimAttributes(m, MAX_PER_TYPE); m.customDepthMaterial = rigDepth; }
       m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); m.count = 0; m.castShadow = true; m.frustumCulled = false;
       this.scene.add(m); this.inst[type] = m;
@@ -345,14 +346,15 @@ export class Farmland {
   wanderLocal(a, serverMs) {
     const t = serverMs / 1000, k = a.k, sp = SPEED[a.type] || 1, chick = a.type.startsWith('chicken');
     const R = a.home ? a.home.R : a.field ? this.goatField.pen : PEN;
-    const inset = !a.home && a.type.startsWith('cow') ? 0.5 : 0;                // a cow is long: kept further from the pen's fence
+    const inset = a.home ? 0 : a.type.startsWith('horse') ? 0.8 : a.type.startsWith('cow') ? 0.5 : 0;   // cows and horses are long: kept further from the pen's fence
     const cx = (R.x0 + R.x1) / 2, cz = (R.z0 + R.z1) / 2, hx = Math.max(0.3, (R.x1 - R.x0) / 2 - inset), hz = Math.max(0.3, (R.z1 - R.z0) / 2 - inset);
     const at = tt => ({ x: cx + hx * 0.92 * Math.sin(tt * 0.11 + k * 40) * Math.cos(tt * 0.043 + k * 17), z: cz + hz * 0.92 * Math.sin(tt * 0.083 + k * 23) });
-    // speed swings between standing still and walking; tt is its integral over time, so the animal moves
-    // smoothly: speed ∝ 1 + sin(w·T + φ)  →  tt = 0.6·sp·(T − cos(w·T + φ) / w)
-    const w = chick ? 0.9 : 0.05, T = t + k * 1000, ph = w * T + k * 31;
-    const tt = 0.6 * sp * (T - Math.cos(ph) / w);
-    const p = at(tt), p2 = at(tt + 0.6), walking = Math.sin(ph) > -0.5;
+    // speed swings between standing still and walking in an uneven rhythm (two waves that never line up the same
+    // way twice); tt is its integral over time, so the animal moves smoothly:
+    //   speed ∝ 1 + 0.55·sin(w·T + φ) + 0.45·sin(w2·T + φ2)  →  tt = 0.6·sp·(T − 0.55·cos(w·T + φ) / w − 0.45·cos(w2·T + φ2) / w2)
+    const w = chick ? 0.9 : 0.05, w2 = w * 2.137, T = t + k * 1000, ph = w * T + k * 31, ph2 = w2 * T + k * 57;
+    const tt = 0.6 * sp * (T - 0.55 * Math.cos(ph) / w - 0.45 * Math.cos(ph2) / w2);
+    const p = at(tt), p2 = at(tt + 0.6), walking = 0.55 * Math.sin(ph) + 0.45 * Math.sin(ph2) > -0.3;
     return { x: p.x, z: p.z, walking, yaw: Math.atan2(p2.x - p.x, p2.z - p.z) + (walking ? 0 : Math.sin(t * 0.7 + k * 5) * 0.3) };
   }
   // the same in world coordinates (cows and horses)
@@ -383,17 +385,26 @@ export class Farmland {
         const G = chick ? GAIT.chicken : big ? (GAIT[a.type] || GAIT.horse) : GAIT.goat;
         let st = this.animSt.get(a.id);
         if (!st) this.animSt.set(a.id, st = { x: 0, z: 0, ph: a.k * 10, w: 0, init: false, clash: 0 });
-        let F, lx, lz, lyaw, head, lift = 0, hop = 0, flap = 0;
-        if (chick) {
-          const wl = this.wanderLocal(a, serverMs), ce = chickenExtras(a, serverMs, wl.walking, this._ce);
-          F = a.home ? a.home.F : PLOTS[a.plot]; lx = wl.x; lz = wl.z; lyaw = wl.yaw; head = ce.head; hop = ce.hop; flap = ce.flap;
-          if (head > 0.5) lift = 0.18;                   // leaning into a peck
+        let F, lx, lz, lyaw, head, lift = 0, hop = 0, flap = 0, rear = 0;
+        if (chick) {                                      // walks, pecks, hops and flaps at random moments
+          const wl = this.wanderLocal(a, serverMs), ce = chickenExtras(a, serverMs, wl.walking, this._ce || (this._ce = {}), (rigOf(a.type) || {}).peck);
+          F = a.home ? a.home.F : PLOTS[a.plot]; lx = wl.x; lz = wl.z; lyaw = wl.yaw; head = ce.head; hop = ce.hop; flap = ce.flap; lift = ce.lean;
         } else if (big) {                                 // cows, horses and pigs wander and graze
-          const p = this.posOf(a, serverMs), g = grazePose(a, serverMs, p.walking, this._gp || (this._gp = {})), pig = a.type === 'pig';
+          let p = this.posOf(a, serverMs);
+          const g = grazePose(a, serverMs, p.walking, this._gp || (this._gp = {})), pig = a.type === 'pig';
+          // a horse rears up now and then: it stays where it was, then catches up with its walk
+          const R = a.type.startsWith('horse') ? rearOf(a, serverMs) : null;
+          if (R) {
+            const h = this.posOf(a, R.at), k = R.back || 0;
+            p = { x: h.x + (p.x - h.x) * k, z: h.z + (p.z - h.z) * k, yaw: h.yaw + Math.atan2(Math.sin(p.yaw - h.yaw), Math.cos(p.yaw - h.yaw)) * k, walking: p.walking };
+            rear = R.back === undefined ? rearHeight(R.s) : 0;
+          }
           F = ORIGIN; lx = p.x; lz = p.z; lyaw = p.yaw; flap = g.tail;
-          // the head goes down to graze and comes up smoothly, and nods with each step as it walks
-          st.head = st.head === undefined ? g.head : st.head + (g.head - st.head) * (1 - Math.exp(-(pig ? 10 : 3.5) * dt));
+          // the head goes down to graze and comes up smoothly, and nods with each step as it walks (up when rearing)
+          const want = rear ? -0.4 * rear + g.head * (1 - rear) : g.head;
+          st.head = st.head === undefined ? want : st.head + (want - st.head) * (1 - Math.exp(-(pig ? 10 : rear ? 8 : 3.5) * dt));
           head = st.head + (pig ? 0 : Math.sin(st.ph * 2) * 0.07 * st.w);
+          if (rear) { lift = -0.8 * rear; pivot = (G.hind || -0.55) * size; st.ph += dt * 6.5 * rear; }   // up on the hind hooves, the front legs pawing
         } else {
           const P = goatPose(a, serverMs, this, this._pose);
           F = P.F; lx = P.x; lz = P.z; lyaw = P.yaw; head = P.head; lift = P.lift; pivot = -0.25;   // (rears up on its hind legs)
@@ -420,8 +431,8 @@ export class Farmland {
           const hf = this.H(x + sy * fz, z + cy * fz), hb = this.H(x - sy * fz, z - cy * fz), hl = this.H(x + cy * fx, z - sy * fx), hr = this.H(x - cy * fx, z + sy * fx);
           y = (hf + hb) / 2 + 0.035 + bob + hop; slope = Math.atan2(hb - hf, 2 * fz); roll = Math.atan2(hl - hr, 2 * fx);
         } else y = this.H(x, z) + 0.035 + bob + hop;
-        anim.setXYZW(i, st.ph, G.amp * st.w, head, chick ? Math.sin(st.ph * 2) * 0.024 * st.w : 0);
-        m.geometry.attributes.iAnim2.setX(i, flap);
+        anim.setXYZW(i, st.ph, G.amp * st.w * (1 - rear), head, chick ? Math.sin(st.ph * 2) * 0.024 * st.w : 0);
+        m.geometry.attributes.iAnim2.setXY(i, flap, rear);
         pitch = lift + sick;
       } else {                                          // cows and horses
         const p = this.posOf(a, serverMs), sp = SPEED[a.type] || 1;

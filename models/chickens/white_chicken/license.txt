@@ -1,0 +1,11 @@
+Model Information:
+* title:	fantasy chicken animation
+* source:	https://sketchfab.com/3d-models/fantasy-chicken-animation-f2b473b72a4048f7b45bc116a00547a3
+* author:	hino (https://sketchfab.com/Slava251114)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "fantasy chicken animation" (https://sketchfab.com/3d-models/fantasy-chicken-animation-f2b473b72a4048f7b45bc116a00547a3) by hino (https://sketchfab.com/Slava251114) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)

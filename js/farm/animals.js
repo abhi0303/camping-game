@@ -4,15 +4,20 @@
 //   10 s of fighting, 10 s rest, 5 s of fighting, 10 s rest, again and again: they walk up to each other,
 //   back off, rear up and clash. The other goats walk between the feed trough and the water trough and eat
 //   or drink there, with a little wander in between. A goat alone does the same.
-//   Chickens: short walks with quick steps and a bobbing head, peck at the ground when they stop, and now and
-//   then a little hop with a flap of the wings.
+//   Chickens: walks and stops in an uneven rhythm, quick steps and a bobbing head; they peck at the ground in random
+//   taps (single ones, two or three in a row), hop up a little with a flap of the wings or just stretch and flap them,
+//   all at random moments.
+//   Horses: graze and wander, and now and then (2–30 s apart, at random) one rears up on its hind legs, front legs
+//   pawing the air, for about three seconds.
+// "Random" here is the same on every screen: it comes from the shared clock and the animal's id (rnd).
 // The legs, head and wings move on the graphics card (rigMaterial): the models tag those parts (aRig, see
-// js/farm/models.js rigOf) and each animal gets iAnim = [step phase, leg swing, head down, head forward] and
-// iAnim2 = [wing flap].
+// js/farm/polyRig.js) and each animal gets iAnim = [step phase, leg swing, head down, head forward] and
+// iAnim2 = [wing flap / tail swish, rearing up].
 import * as THREE from 'three';
 import { toWorld } from './layout.js';
 import { PEN } from './layout.js';
 import { TROUGH_FEED, TROUGH_WATER } from './models.js';
+import { rigOf } from './polyRig.js';
 
 const TAU = Math.PI * 2;
 const ease = k => k * k * (3 - 2 * k);
@@ -22,26 +27,33 @@ const lerpAngle = (a, b, k) => a + Math.atan2(Math.sin(b - a), Math.cos(b - a)) 
 
 /* ---------- the shader: legs swing from the hip, the head turns down from the neck base, wings flap ---------- */
 const RIG_GLSL = `
-attribute vec4 aRig; attribute vec4 iAnim; attribute vec2 iAnim2;
+attribute vec4 aRig; attribute vec4 aRig2; attribute vec4 iAnim; attribute vec2 iAnim2;
 vec2 rigRot(vec2 p, vec2 o, float a) { vec2 d = p - o; float c = cos(a), s = sin(a); return o + vec2(d.x * c - d.y * s, d.x * s + d.y * c); }`;
-// kinds (aRig.x): 1 leg (swings from the hip) · 2 neck (turns down from its base) · 3 wing / tail (flaps, swishes)
+// kinds (aRig.x): 1 leg (swings from the hip) · 2 neck (turns down from its base) · 3 wing / tail (flaps, swishes;
+//   aRig.w: how much of the flap — a one-piece chicken's wing bends out of its body)
 //   4.x lower leg: swings with the leg and also bends at the knee (height (x - 4) * 2) while the hoof comes forward
 //   5.x head on a long neck: turns down with the neck (base y (x - 5) * 4, z aRig.y) and nods back at the poll
 //       (aRig.zw), so a grazing horse gets its nose down to the grass
-//   6   neck and head of a one-piece model (js/farm/polyRig.js: the cows, the pig, the goat): turns down about the neck's
-//       base (aRig.zw) by aRig.y of the head's angle (0 at the shoulder … 1 at the head), so the neck bends
+//   6   neck and head of a one-piece model (js/farm/polyRig.js): turns down about the neck's base (aRig.zw) by aRig.y
+//       of the head's angle (0 at the shoulder … 1 at the head), so the neck bends; aRig2 = [poll y, poll z, head
+//       weight, nod]: a horse's head nods back at the poll as the neck goes down, so it stays nearly upright; a
+//       chicken's head bobs forward (iAnim.w) with the neck's weight
+// iAnim2.y: rearing up (a horse on its hind legs) — the front legs (pivot z > 0) fold at the knees and paw the air
 const RIG_VERTEX = `#include <begin_vertex>
-  float rk = aRig.x;
-  if (rk > 0.5 && rk < 1.5) transformed.yz = rigRot(transformed.yz, aRig.zw, sin(iAnim.x + aRig.y) * iAnim.y);
+  float rk = aRig.x, rear = aRig.w > 0.05 ? iAnim2.y : 0.0, paw = sin(iAnim.x + aRig.y);
+  if (rk > 0.5 && rk < 1.5) transformed.yz = rigRot(transformed.yz, aRig.zw, paw * iAnim.y - rear * (0.55 + 0.3 * paw));
   else if (rk > 1.5 && rk < 2.5) { transformed.z += iAnim.w; transformed.yz = rigRot(transformed.yz, aRig.zw, iAnim.z); }
-  else if (rk > 2.5 && rk < 3.5) transformed.xy = rigRot(transformed.xy, aRig.yz, iAnim2.x * sign(aRig.y));
+  else if (rk > 2.5 && rk < 3.5) transformed.xy = rigRot(transformed.xy, aRig.yz, iAnim2.x * sign(aRig.y) * (aRig.w > 0.0 ? aRig.w : 1.0));
   else if (rk > 3.5 && rk < 4.99) { float ph = iAnim.x + aRig.y;
-    transformed.yz = rigRot(transformed.yz, vec2((rk - 4.0) * 2.0, aRig.w), max(0.0, -cos(ph)) * iAnim.y * 1.6);
-    transformed.yz = rigRot(transformed.yz, aRig.zw, sin(ph) * iAnim.y); }
+    transformed.yz = rigRot(transformed.yz, vec2((rk - 4.0) * 2.0, aRig.w), max(0.0, -cos(ph)) * iAnim.y * 1.6 + rear * (1.7 + 0.5 * max(0.0, -cos(ph))));
+    transformed.yz = rigRot(transformed.yz, aRig.zw, sin(ph) * iAnim.y - rear * (0.55 + 0.3 * paw)); }
   else if (rk >= 4.99 && rk < 5.5) { transformed.z += iAnim.w;
     transformed.yz = rigRot(transformed.yz, aRig.zw, -iAnim.z * 0.62);
     transformed.yz = rigRot(transformed.yz, vec2((rk - 5.0) * 4.0, aRig.y), iAnim.z); }
-  else if (rk >= 5.5) transformed.yz = rigRot(transformed.yz, aRig.zw, iAnim.z * aRig.y);`;
+  else if (rk >= 5.5) {
+    if (aRig2.z > 0.0) transformed.yz = rigRot(transformed.yz, aRig2.xy, -iAnim.z * aRig2.w * aRig2.z);
+    transformed.z += iAnim.w * aRig.y;
+    transformed.yz = rigRot(transformed.yz, aRig.zw, iAnim.z * aRig.y); }`;
 function rigged(mat, key) {
   mat.onBeforeCompile = sh => {
     sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\n' + RIG_GLSL).replace('#include <begin_vertex>', RIG_VERTEX);
@@ -49,8 +61,9 @@ function rigged(mat, key) {
   mat.customProgramCacheKey = () => key;
   return mat;
 }
-export const rigMaterial = () => rigged(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }), 'animal-rig-v3');
-export const rigDepthMaterial = () => rigged(new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking }), 'animal-rig-depth-v3');
+// (two-sided for the models with thin parts that show from both sides: a horse's mane)
+export const rigMaterial = (twoSided = false) => rigged(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, side: twoSided ? THREE.DoubleSide : THREE.FrontSide }), 'animal-rig-v4');
+export const rigDepthMaterial = () => rigged(new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking }), 'animal-rig-depth-v4');
 // add the per-animal animation values to an instanced mesh's geometry
 export function addAnimAttributes(mesh, n) {
   const a = new THREE.InstancedBufferAttribute(new Float32Array(n * 4), 4), b = new THREE.InstancedBufferAttribute(new Float32Array(n * 2), 2);
@@ -63,8 +76,11 @@ export function addAnimAttributes(mesh, n) {
 // stands on the ground under them, tipped with the slope)
 export const GAIT = { goat: { amp: 0.55, ref: 0.5, leg: 0.29, feet: [0.09, 0.25] }, chicken: { amp: 0.75, cycle: 0.24, ref: 0.32 },
   cow: { amp: 0.42, ref: 0.32, leg: 0.47, feet: [0.18, 0.66] }, cow_bw: { amp: 0.42, ref: 0.32, leg: 0.45, feet: [0.16, 0.63] },
-  cow_black: { amp: 0.42, ref: 0.32, leg: 0.47, feet: [0.16, 0.67] },
-  horse: { amp: 0.38, ref: 0.42, leg: 1.02, feet: [0.2, 0.6] }, pig: { amp: 0.5, ref: 0.4, leg: 0.21, feet: [0.1, 0.29] } };
+  cow_black: { amp: 0.42, ref: 0.32, leg: 0.47, feet: [0.16, 0.67] }, pig: { amp: 0.5, ref: 0.4, leg: 0.21, feet: [0.1, 0.29] } };
+// the horses (hind: where the hind hooves are — it rears up about them); a recoloured coat walks like its model
+const HORSE_GAIT = { horse_bay: { amp: 0.36, ref: 0.42, leg: 0.74, feet: [0.11, 0.5], hind: -0.565 },
+  horse_black: { amp: 0.36, ref: 0.42, leg: 0.88, feet: [0.19, 0.62], hind: -0.7 }, horse_chestnut: { amp: 0.36, ref: 0.42, leg: 0.75, feet: [0.12, 0.61], hind: -0.665 } };
+Object.assign(GAIT, HORSE_GAIT, { horse: HORSE_GAIT.horse_bay, horse_white: HORSE_GAIT.horse_black, horse_palomino: HORSE_GAIT.horse_chestnut, horse_pinto: HORSE_GAIT.horse_chestnut });
 
 /* ---------- cows, horses and pigs ---------- */
 // standing, they graze: the head goes down to the grass for a while (nodding a little as they crop it), comes
@@ -77,7 +93,7 @@ export function grazePose(a, ms, walking, out) {
   const t = ms / 1000, k = a.k, u = (t + k * 97) % 16, kind = a.type.startsWith('horse') ? 'horse' : a.type, pig = kind === 'pig';
   const down = walking ? 0.25 : u < 10 ? Math.min(1, u / 1.2, (10 - u) / 1.2) : 0;
   const nod = pig ? Math.sin(t * 6.5 + k * 3) * 0.1 : Math.sin(t * 2.4 + k * 3) * 0.07;
-  out.head = walking ? (pig ? 0.1 : 0.22) + Math.sin(t * 3.2 + k * 9) * 0.05 : ease(Math.max(0, down)) * (GRAZE[kind] || GRAZE.cow) + (down > 0.9 ? nod : -0.08);
+  out.head = walking ? (pig ? 0.1 : 0.22) + Math.sin(t * 3.2 + k * 9) * 0.05 : ease(Math.max(0, down)) * ((rigOf(a.type) || {}).graze || GRAZE[kind] || GRAZE.cow) + (down > 0.9 ? nod : -0.08);
   const flick = (t + k * 31) % 7 < 0.9 ? Math.sin(t * 11) * 0.45 : 0;
   out.tail = pig ? Math.sin(t * 9 + k * 5) * ((t + k * 13) % 5 < 1.6 ? 0.4 : 0.08) : Math.sin(t * 1.7 + k * 5) * 0.22 + flick;
   return out;
@@ -163,17 +179,49 @@ export function goatPose(a, ms, land, out) {
   return out;
 }
 
+/* ---------- chance, the same on every screen ---------- */
+// a number in [0, 1) for an animal (k), a turn of time (j) and a purpose (s): random-looking, the same everywhere
+const rnd = (k, j, s) => { const v = Math.sin(k * 9301.7 + j * 49.297 + s * 233.11) * 43758.5453; return v - Math.floor(v); };
+
 /* ---------- chickens ---------- */
-// head down for a peck while standing; a little hop with a wing flap every few seconds
-export function chickenExtras(a, ms, walking, out) {
-  const t = ms / 1000;
-  out.head = 0.08; out.hop = 0; out.flap = 0;
-  if (!walking) {                                         // pecking: quick dips, sometimes two in a row
-    const p = mod(t * 1.7 + a.k * 9, 1), q = mod(t * 1.7 + a.k * 9, 2);
-    out.head = p < 0.14 ? 0.08 + 1.05 * Math.sin(p / 0.14 * Math.PI) : (q > 1.2 && q < 1.34) ? 0.08 + 0.9 * Math.sin((q - 1.2) / 0.14 * Math.PI) : 0.12 + 0.05 * Math.sin(t * 2 + a.k);
+// What a hen does comes in short turns of time, each decided by chance: standing, most turns bring a quick tap of the
+// beak on the ground (now and then two or three in a row, sometimes a pause); walking, it now and then stops to peck;
+// every so often it hops up a little with a flap of its wings, or just stretches and flaps them.
+//   head: how far the neck turns down (peck: the beak on the ground) · lean: the body tips in with a peck (radians) ·
+//   hop: how high (m) · flap: the wings' angle
+export function chickenExtras(a, ms, walking, out, peck = 1.1) {
+  const t = ms / 1000 + a.k * 100;
+  out.head = 0.06 + 0.05 * Math.sin(t * 1.9 + a.k * 7); out.hop = 0; out.flap = 0; out.lean = 0;
+  // pecks: in turns of 0.6 s, a tap of 0.24 s (down fast, up again) at a random moment of the turn
+  const P = 0.6, j = Math.floor(t / P), u = t - j * P, at = rnd(a.k, j, 1) * (P - 0.26);
+  if (rnd(a.k, j, 2) < (walking ? 0.1 : 0.6) && u >= at && u < at + 0.24) {
+    const s = (u - at) / 0.24, d = s < 0.35 ? ease(s / 0.35) : 1 - ease((s - 0.35) / 0.65);
+    out.head = 0.06 + (peck - 0.06) * d; out.lean = 0.3 * d;
   }
-  const hp = 6 + a.k * 7, h = mod(t + a.k * 50, hp);     // a hop now and then
-  if (h < 0.42) { const k = h / 0.42; out.hop = 0.085 * Math.sin(k * Math.PI); out.flap = (0.55 + 0.45 * Math.sin(h * 52)) * Math.sin(k * Math.PI) * 1.1; }
+  // in turns of 1.3 s: a hop with a wing flap (about one every 15 s) or a wing stretch (about one every 20 s)
+  const Q = 1.3, i = Math.floor(t / Q), v = t - i * Q, r = rnd(a.k, i, 3), o = rnd(a.k, i, 4) * (Q - 0.72);
+  if (r < 0.085 && v >= o && v < o + 0.46) {
+    const s = (v - o) / 0.46, b = Math.sin(s * Math.PI);
+    out.hop = (0.06 + 0.07 * rnd(a.k, i, 5)) * b; out.flap = (0.6 + 0.4 * Math.sin(s * 42)) * b * 0.95; out.head = 0.04; out.lean = -0.12 * b;
+  } else if (r > 0.935 && v >= o && v < o + 0.7) {
+    const s = (v - o) / 0.7;
+    out.flap = (0.55 + 0.45 * Math.sin(s * 30)) * Math.sin(s * Math.PI) * 0.75;
+  }
   return out;
 }
+
+/* ---------- horses ---------- */
+// Now and then a horse rears up on its hind legs, the front legs folded and pawing the air, for 2.6–3.4 s. Time is
+// cut in turns of 19 s with one rear each at a random moment, so two rears are 2.6–29 s apart, at random. It stops
+// where it is for the rear (at: the moment it started, to hold the spot) and then catches up with its walk.
+const REAR = 19, CATCH = 1.2;
+export function rearOf(a, ms) {
+  const T = ms / 1000 + a.k * 1000, j = Math.floor(T / REAR), u = T - j * REAR;
+  const len = 2.6 + rnd(a.k, j, 7) * 0.8, at = 0.5 + rnd(a.k, j, 6) * 13;
+  if (u < at || u >= at + len + CATCH) return null;
+  const start = ms - (u - at) * 1000;
+  return u < at + len ? { s: (u - at) / len, at: start } : { s: 1, at: start, back: ease((u - at - len) / CATCH) };
+}
+// how high it is (0 … 1): up quickly, held while the front legs paw, down again
+export const rearHeight = s => (s < 0.26 ? ease(s / 0.26) : s < 0.74 ? 1 : 1 - ease((s - 0.74) / 0.26));
 export { TAU };

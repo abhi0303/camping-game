@@ -41,8 +41,26 @@ const OUTPUTS = {
     about: 'from "Cow" by Josué Boisvert (https://sketchfab.com/JosueBoisvert),\n// "Cow Idle" by kenchoo (https://sketchfab.com/kenchoo) and "Cow Skin" by GSCreations (https://sketchfab.com/gscreations2508),\n// all CC-BY-4.0. The farm\'s cows (cow: the brown one, cow_bw: black and white, cow_black: black)',
     models: {
       cow: { dir: 'models/cows/brown_cow', tris: 4000, colours: 128, face: '+z', height: 1.32 },
-      cow_bw: { dir: 'models/cows/black_and_white_cow', tris: 4000, colours: 128, face: '+z', height: 1.36 },
+      cow_bw: { dir: 'models/cows/black_and_white_cow', tris: 4000, colours: 128, face: '+z', height: 1.36, skinned: false },
       cow_black: { dir: 'models/cows/black_cow', tris: 4000, colours: 128, face: '+z', height: 1.42 },
+    },
+  },
+  horses: {
+    file: 'js/farm/horseModels.js', name: 'HORSE_MODELS',
+    about: 'from "Low poly Horse Brown Colour 3d Model Free" by iRahulRajput\n// (https://sketchfab.com/rt699448, CC-BY-4.0), "Horse free download" by pgonarg (https://sketchfab.com/pgonarg, CC-BY-4.0) and\n// "Horse" by kenchoo (https://sketchfab.com/kenchoo, CC-BY-NC-SA-4.0: this baked copy of it is under the same licence).\n// The farm\'s horses (horse_bay: the brown one, horse_black, horse_chestnut: the brown and white one)',
+    models: {
+      horse_bay: { dir: 'models/horses/adult_brown_horse', tris: 4000, colours: 128, face: '+z', height: 2.0 },
+      horse_black: { dir: 'models/horses/adult_black_horse', tris: 4000, colours: 128, face: '+z', height: 2.0 },
+      horse_chestnut: { dir: 'models/horses/adult_brown_&_white_horse', tris: 4000, colours: 128, face: '+z', height: 2.0 },
+    },
+  },
+  chickens: {
+    file: 'js/farm/chickenModels.js', name: 'CHICKEN_MODELS',
+    about: 'from "fantasy chicken animation" by hino (https://sketchfab.com/Slava251114,\n// CC-BY-4.0), "Chicken Rig" by FourthGreen (https://sketchfab.com/FourthGreen, CC-BY-NC-4.0) and "GA Free_551_Majestic Rooster"\n// by Galaxy Abundant (https://sketchfab.com/galaxyabundant, CC-BY-4.0). The farm\'s hens (chicken: white, chicken_brown: desi,\n// chicken_dark: black)',
+    models: {
+      chicken: { dir: 'models/chickens/white_chicken', tris: 1400, colours: 96, face: '+z', height: 0.55 },
+      chicken_brown: { dir: 'models/chickens/desi_chicken', tris: 1400, colours: 96, face: '+z', height: 0.55 },
+      chicken_dark: { dir: 'models/chickens/black_chicken', tris: 1600, colours: 96, face: '+z', height: 0.62 },
     },
   },
 };
@@ -52,12 +70,13 @@ function loadGltf(dir) {
   const gltf = JSON.parse(readFileSync(join(dir, 'scene.gltf'), 'utf8'));
   const bin = readFileSync(join(dir, gltf.buffers[0].uri));
   const accessor = i => {
-    const a = gltf.accessors[i], bv = gltf.bufferViews[a.bufferView], n = { SCALAR: 1, VEC2: 2, VEC3: 3, VEC4: 4 }[a.type];
+    const a = gltf.accessors[i], bv = gltf.bufferViews[a.bufferView], n = { SCALAR: 1, VEC2: 2, VEC3: 3, VEC4: 4, MAT4: 16 }[a.type];
     const T = { 5126: Float32Array, 5125: Uint32Array, 5123: Uint16Array, 5121: Uint8Array }[a.componentType];
     const start = bin.byteOffset + (bv.byteOffset || 0) + (a.byteOffset || 0), stride = bv.byteStride || n * T.BYTES_PER_ELEMENT;
     const out = new T(a.count * n), view = new DataView(bin.buffer);
     const get = { 5126: o => view.getFloat32(o, true), 5125: o => view.getUint32(o, true), 5123: o => view.getUint16(o, true), 5121: o => view.getUint8(o) }[a.componentType];
     for (let k = 0; k < a.count; k++) for (let c = 0; c < n; c++) out[k * n + c] = get(start + k * stride + c * T.BYTES_PER_ELEMENT);
+    if (a.normalized && a.componentType !== 5126) return Float32Array.from(out, v => v / (a.componentType === 5121 ? 255 : 65535));
     return out;
   };
   return { gltf, accessor };
@@ -71,6 +90,7 @@ function local(n) {
     2 * (x * z + y * w) * sz, 2 * (y * z - x * w) * sz, (1 - 2 * (x * x + y * y)) * sz, 0, tx, ty, tz, 1];
 }
 const isIdentity = M => M.every((v, i) => v === I4[i]);
+const apply = (M, x, y, z) => [M[0] * x + M[4] * y + M[8] * z + M[12], M[1] * x + M[5] * y + M[9] * z + M[13], M[2] * x + M[6] * y + M[10] * z + M[14]];
 
 /* ---------- textures (via sips -> BMP, 1024 px), bilinear; glTF's v runs down the image ---------- */
 function readTexture(file, size) {
@@ -104,13 +124,20 @@ for (let i = 0; i <= 4; i++) for (let j = 0; j <= 4 - i; j++) BARY.push([(i + 0.
 
 async function bake(label, A) {
   const SRC = join(ROOT, A.dir), { gltf, accessor } = loadGltf(SRC);
-  // every primitive of every mesh node, in model space (a skinned mesh: its bind pose — the node's own transform is ignored)
-  const prims = [];
+  // every primitive of every mesh node, in model space. A skinned mesh is posed by its skeleton as it stands (the
+  // joints' transforms × their inverse bind matrices, weighted); `skinned: false` keeps its raw corners (the black &
+  // white cow: its standing pose, baked that way before this)
+  const prims = [], worldOf = [];
   (function walk(i, M) {
     const n = gltf.nodes[i], W = mul(M, local(n));
-    if (n.mesh !== undefined) for (const p of gltf.meshes[n.mesh].primitives) prims.push({ p, W: n.skin !== undefined ? I4 : W });
+    worldOf[i] = W;
+    if (n.mesh !== undefined) for (const p of gltf.meshes[n.mesh].primitives) prims.push({ p, W, skin: n.skin, mesh: gltf.meshes[n.mesh].name });
     for (const c of n.children || []) walk(c, W);
   })(gltf.scenes[0].nodes[0], I4);
+  const jointsOf = sk => {
+    const S = gltf.skins[sk], ibm = accessor(S.inverseBindMatrices);
+    return S.joints.map((j, k) => mul(worldOf[j], Array.from(ibm.subarray(k * 16, k * 16 + 16))));
+  };
   const textures = new Map();
   const texOf = (mat) => {
     const t = mat && mat.pbrMetallicRoughness && mat.pbrMetallicRoughness.baseColorTexture;
@@ -121,15 +148,23 @@ async function bake(label, A) {
   };
   // all corners (placed), uvs, triangles (with their texture and colour factor)
   const P = [], UV = [], IDX = [], TRI = [];
-  for (const { p, W } of prims) {
+  for (const { p, W, skin, mesh } of prims) {
+    if (A.skip && A.skip.includes(mesh)) continue;
     const pos = accessor(p.attributes.POSITION), base = P.length / 3, mat = gltf.materials[p.material], T = texOf(mat);
     const uv = T ? accessor(p.attributes['TEXCOORD_' + T.uv]) : null, idx = p.indices !== undefined ? accessor(p.indices) : null;
     const f = (mat && mat.pbrMetallicRoughness && mat.pbrMetallicRoughness.baseColorFactor) || [1, 1, 1, 1];
-    const id = isIdentity(W);
+    const skinned = skin !== undefined && A.skinned !== false, J = skinned ? jointsOf(skin) : null;
+    const jw = skinned ? [accessor(p.attributes.JOINTS_0), accessor(p.attributes.WEIGHTS_0)] : null;
+    const id = skin !== undefined && !skinned ? true : isIdentity(W);
     for (let i = 0; i < pos.length; i += 3) {
       const x = pos[i], y = pos[i + 1], z = pos[i + 2];
-      if (id) P.push(x, y, z);
-      else P.push(W[0] * x + W[4] * y + W[8] * z + W[12], W[1] * x + W[5] * y + W[9] * z + W[13], W[2] * x + W[6] * y + W[10] * z + W[14]);
+      if (skinned) {                                            // skinMode: 'spec' the skeleton only (glTF: a skinned mesh's own transform is ignored) · 'pre' / 'post' with it before / after
+        const mode = A.skinMode || 'spec';
+        const v = mode === 'pre' ? apply(W, x, y, z) : [x, y, z], o = [0, 0, 0], q = (i / 3) * 4;
+        for (let k = 0; k < 4; k++) { const w = jw[1][q + k]; if (!w) continue; const r = apply(J[jw[0][q + k]], v[0], v[1], v[2]); o[0] += w * r[0]; o[1] += w * r[1]; o[2] += w * r[2]; }
+        P.push(...(mode === 'post' ? apply(W, o[0], o[1], o[2]) : o));
+      } else if (id) P.push(x, y, z);
+      else P.push(...apply(W, x, y, z));
       UV.push(uv ? uv[(i / 3) * 2] : 0, uv ? uv[(i / 3) * 2 + 1] : 0);
     }
     const n = idx ? idx.length : pos.length / 3;

@@ -10,3 +10,5 @@ models/floor/rocky_ground_tile_texture/textures/Material_metallicRoughness.png
 models/cows/brown_cow/textures/tornado_cow_material_normal.png
 models/cows/brown_cow/textures/tornado_cow_material_metallicRoughness.png
 models/cows/black_and_white_cow/textures/material43_metallicRoughness.png
+# the horses' maps the game doesn't use
+models/horses/adult_brown_&_white_horse/textures/defaultMat_normal.png
