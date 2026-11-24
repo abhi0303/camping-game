@@ -536,6 +536,30 @@ UPDATE catalog SET data = data || '{"minLevel": 3, "slots": [
   "rushMin": 20}' WHERE item = 'field';
 `,
   },
+  {
+    id: 14,
+    name: 'cow_breeds',
+    // Three cows. Every cow so far is the brown cow — the common one, bought with rupees only. Two dearer breeds
+    // cost rupees and gold coins and give dearer milk (all one milk every 2 hours while fed, more with care and the
+    // barn's level). Before the Market's demand, feed at ₹2 a unit:
+    //   Brown cow          ₹800                L4 · cow milk ₹60             ₹30/h − feed ₹3/h  → pays back in ~30 h
+    //   Black & white cow  ₹2,500 + 6 gold     L6 · B&W cow milk ₹90         ₹45/h − feed ₹4/h  → ~74 h
+    //   Black cow          ₹4,500 + 15 gold    L8 · black cow milk ₹130      ₹65/h − feed ₹4/h  → ~96 h
+    // A dearer cow earns more for its place in the barn, but takes longer to pay off. (The golden hen and its eggs
+    // get their own icons: they showed the white hen's and egg's.)
+    sql: `
+UPDATE catalog SET name = 'Brown cow', data = data || '{"variety": "Brown", "tier": "Common"}' WHERE item = 'cow';
+UPDATE catalog SET sort = sort + 2 WHERE item LIKE 'horse%';
+INSERT INTO catalog (item, kind, name, icon, buy_price, sell_price, data, sort) VALUES
+  ('cow_bw',    'animal', 'Black & white cow', '🐮', 2500, NULL, '{"feedCost": 4, "feedHours": 2, "product": "cow_milk_bw", "rate": 0.5, "shelter": "barn", "variety": "Black & white", "tier": "Uncommon", "gold": 6, "minLevel": 6}', 6),
+  ('cow_black', 'animal', 'Black cow',         '🐃', 4500, NULL, '{"feedCost": 4, "feedHours": 2, "product": "cow_milk_black", "rate": 0.5, "shelter": "barn", "variety": "Black", "tier": "Rare", "gold": 15, "minLevel": 8}', 7),
+  ('cow_milk_bw',    'good', 'B&W cow milk',   '🧃', NULL, 90,  '{"cap": 30}', 15),
+  ('cow_milk_black', 'good', 'Black cow milk', '🍶', NULL, 130, '{"cap": 30}', 15)
+ON CONFLICT (item) DO NOTHING;
+UPDATE catalog SET icon = '🐤' WHERE item = 'chicken_gold';
+UPDATE catalog SET icon = '🌕' WHERE item = 'egg_gold';
+`,
+  },
 ];
 
 const LOCK_ID = 727001;   // advisory lock: two migrate runs never overlap

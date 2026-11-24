@@ -18,7 +18,7 @@ const clock = ms => {
   return h ? `${h}:${String(m).padStart(2, '0')}:${sec}` : `${String(m).padStart(2, '0')}:${sec}`;
 };
 const money = n => '₹' + Number(n || 0).toLocaleString('en-IN');
-const PRODUCE = ['egg', 'egg_brown', 'egg_dark', 'goat_milk', 'cow_milk', 'wheat', 'flour'];
+const PRODUCE = ['egg', 'egg_brown', 'egg_dark', 'egg_gold', 'goat_milk', 'cow_milk', 'cow_milk_bw', 'cow_milk_black', 'wheat', 'flour'];
 const BUILD = ['wood', 'stone'];
 const FISH = ['fish_small', 'fish_medium', 'fish_large'];
 const MATS = [['logs', 'Logs'], ['planks', 'Planks'], ['rope', 'Rope'], ['stone', 'Stones']];

@@ -9,6 +9,7 @@ import { C, boards, fenceRun, hayBale } from '../farm/props.js';
 // the yard (local: x across, z from the shelter at the back to the fence at the front)
 export const PEN_SIZE = { hw: 2.4, z0: -2.0, z1: 2.2 };
 export const ANIMALS = { chicken: ['chicken', 'chicken', 'chicken_brown'], goat: ['goat', 'goat'], cow: ['cow'], horse: ['horse_chestnut'] };
+export const COW_BREEDS = ['cow', 'cow_bw', 'cow_black'];        // a house's cow is one of the three (picked by the house)
 
 function coop(b) {
   for (const [x, z] of [[-0.6, -0.4], [0.6, -0.4], [-0.6, 0.4], [0.6, 0.4]]) b.box(0.1, 0.55, 0.1, x, 0.27, z, C.woodD);

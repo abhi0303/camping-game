@@ -1,5 +1,5 @@
-// The model animals — the cow and the pig (js/farm/polyAnimals.js, baked by tools/bake-polyfarm.mjs from "Low Poly
-// Farm V2") and the goat (js/farm/goatModel.js, baked by tools/bake-goat.mjs from "Low poly Fat-tailed sheep"):
+// The model animals — the pig (js/farm/polyAnimals.js, baked by tools/bake-polyfarm.mjs from "Low Poly Farm V2"), the
+// goat and the three cows (js/farm/goatModel.js, js/farm/cowModels.js, baked by tools/bake-animals.mjs):
 // unpacked into geometry with a colour per triangle, and given the rig the farm's animal shader moves
 // (js/farm/animals.js): every vertex gets aRig = [kind, a, b, c]. The model is one welded piece, so a vertex's
 // part comes from where it is (the same place always gets the same part, so the skin never tears):
@@ -10,6 +10,7 @@
 import * as THREE from 'three';
 import { PALETTE, POLY_ANIMALS } from './polyAnimals.js';
 import { GOAT_MODEL } from './goatModel.js';
+import { COW_MODELS } from './cowModels.js';
 
 const _c = new THREE.Color();
 const smooth = (a, b, v) => { const k = Math.max(0, Math.min(1, (v - a) / (b - a))); return k * k * (3 - 2 * k); };
@@ -35,11 +36,17 @@ export function unpack(e, palette = PALETTE, q = new Int16Array(bytes(e.q).buffe
 //   legs: [x, z] of each leg's middle, hw/hd: the half size of a leg's column, cut: where the legs leave the
 //   body, knee: front / hind · neck: its base (y, z), the shoulder z0 (no turn) to z1 (the full turn), above y
 //   minY · tail: the free part (|x| < hw, z < z, minY < y < top), swishing from y top · size: drawn that much
-//   smaller (the cow a little: it fits the village pens and the farm's barns) · model: its baked data (with its
-//   own palette) when it isn't one of the farm model's
-const RIGS = {
-  cow: { size: 0.92, legs: [[-0.24, 0.55], [0.19, 0.55], [-0.22, -0.745], [0.2, -0.745]], hw: 0.1, hd: 0.15, cut: 0.6, knee: [0.36, 0.42],
-    neck: { y: 0.85, z: 0.62, z0: 0.62, z1: 1.02, minY: 0.62 }, tail: { hw: 0.08, z: -0.86, top: 1.05 } },
+//   smaller · model: its baked data (with its own palette) when it isn't one of the farm model's · walk: the legs
+//   step one after another like a cow's (hind, front, the other hind, the other front) instead of in diagonal pairs
+// the cows: the neck turns down about a point low in the chest, so the nose reaches the grass
+const COW = { walk: true, hw: 0.075, hd: 0.12 };
+export const RIGS = {
+  cow: { ...COW, model: COW_MODELS.cow, legs: [[-0.178, 0.655], [0.178, 0.655], [-0.19, -0.675], [0.19, -0.675]], cut: 0.47, knee: [0.24, 0.3],
+    neck: { y: 0.86, z: 0.7, z0: 0.7, z1: 1.15, minY: 0.48 }, tail: { hw: 0.06, z: -0.745, top: 1.1, minY: 0.3 } },
+  cow_bw: { ...COW, model: COW_MODELS.cow_bw, legs: [[-0.13, 0.585], [0.13, 0.585], [-0.19, -0.67], [0.19, -0.67]], hw: 0.07, cut: 0.45, knee: [0.25, 0.3],
+    neck: { y: 0.84, z: 0.62, z0: 0.62, z1: 1.0, minY: 0.48 }, tail: { hw: 0.04, z: -0.712, top: 1.18, minY: 0.35 } },
+  cow_black: { ...COW, model: COW_MODELS.cow_black, legs: [[-0.16, 0.645], [0.16, 0.645], [-0.16, -0.69], [0.16, -0.69]], hw: 0.07, cut: 0.47, knee: [0.26, 0.32],
+    neck: { y: 0.86, z: 0.68, z0: 0.68, z1: 1.08, minY: 0.5 }, tail: { hw: 0.05, z: -0.76, top: 1.2, minY: 0.55 } },
   pig: { legs: [[-0.095, 0.2], [0.11, 0.24], [-0.095, -0.34], [0.105, -0.35]], hw: 0.08, hd: 0.14, cut: 0.21, knee: [0.1, 0.11],
     neck: { y: 0.33, z: 0.2, z0: 0.12, z1: 0.3, minY: 0.21 }, tail: { hw: 0.06, z: -0.535, top: 0.45, minY: 0.3 } },
   // the goat (a fat-tailed sheep): short legs, the neck bends down from the withers (a sheep grazes with its whole
@@ -55,8 +62,10 @@ export function polyAnimal(type) {
     const leg = y < R.cut ? R.legs.find(([lx, lz]) => Math.abs(x - lx) < R.hw && Math.abs(z - lz) < R.hd) : null;
     const T = R.tail, N = R.neck;
     if (leg) {
-      const front = leg[1] > 0, ph = (leg[0] < 0) === front ? 0 : Math.PI, knee = R.knee[front ? 0 : 1];
-      tag = y < knee ? [4 + knee * k / 2, ph, R.cut * k, leg[1] * k] : [1, ph, R.cut * k, leg[1] * k];   // diagonal pairs step together
+      const front = leg[1] > 0, left = leg[0] > 0, knee = R.knee[front ? 0 : 1];
+      // a cow's walk: left hind, left front, right hind, right front, a quarter of a step apart · else diagonal pairs
+      const ph = R.walk ? (front ? (left ? 1.5 : 0.5) : (left ? 0 : 1)) * Math.PI : (leg[0] < 0) === front ? 0 : Math.PI;
+      tag = y < knee ? [4 + knee * k / 2, ph, R.cut * k, leg[1] * k] : [1, ph, R.cut * k, leg[1] * k];
     } else if (Math.abs(x) < T.hw && z < T.z && y < T.top && y > (T.minY || 0)) tag = [3, 1e-4, T.top * k, 0];
     else if (z > N.z0 && y > N.minY) tag = [6, smooth(N.z0, N.z1, z), N.y * k, N.z * k];
     rig.set(tag, i * 4);

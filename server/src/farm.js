@@ -137,7 +137,7 @@ async function settle(c, roomId, cat) {
           WHERE a.id = v.id`,
       [animals.map(a => a.id), animals.map(a => a.health), animals.map(a => a.hunger), animals.map(a => a.progress), animals.map(a => a.made), animals.map(a => a.ready), r.now,
         animals.map(a => a.level || 1), animals.map(a => a.care || 0)]);
-      bump(prog, { milk: (out.made.goat_milk || 0) + (out.made.cow_milk || 0) });
+      bump(prog, { milk: Object.entries(out.made).reduce((n, [p, v]) => n + (p.includes('milk') ? v : 0), 0) });   // every goat's and cow's milk
       changed = true;
     }
   }

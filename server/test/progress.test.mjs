@@ -171,6 +171,38 @@ test('the Market\'s demand: a second sale right after pays less, three hours lat
   assert.ok((await farm(w)).body.market.load.egg.load > 70);
 });
 
+test('cows: the brown cow for rupees; black & white (level 6) and black (level 8) cows for rupees and gold; dearer milk', async () => {
+  const w = await world(20000);
+  await q(`UPDATE rooms SET farm_level = 4, gold = 10 WHERE code = $1`, [w.code]);
+  await setInv(w, 'wood', 200); await setInv(w, 'stone', 100);
+  let r = await act(w, { action: 'build', type: 'barn', plot: 0 });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  r = await act(w, { action: 'buy', item: 'cow', qty: 1 });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(r.body.money, 20000 - 900 - 800); assert.match(r.body.message, /1 brown cow for ₹800$/);
+  assert.equal((await act(w, { action: 'buy', item: 'cow_bw', qty: 1 })).body.error.code, 'locked');
+  await q(`UPDATE rooms SET farm_level = 6 WHERE code = $1`, [w.code]);
+  assert.equal((await act(w, { action: 'buy', item: 'cow_bw', qty: 2 })).body.error.code, 'not_enough_gold');   // 12 gold, the farm has 10
+  r = await act(w, { action: 'buy', item: 'cow_bw', qty: 1 });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.deepEqual([r.body.money, r.body.machines.gold], [20000 - 900 - 800 - 2500, 4]);
+  assert.match(r.body.message, /for ₹2500 and 6 gold coins/);
+  assert.equal((await act(w, { action: 'buy', item: 'cow_black', qty: 1 })).body.error.code, 'locked');
+  await q(`UPDATE rooms SET farm_level = 8, gold = 20 WHERE code = $1`, [w.code]);
+  r = await act(w, { action: 'buy', item: 'cow_black', qty: 1 });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(r.body.machines.gold, 5);
+  assert.deepEqual(r.body.animals.map(a => a.type).sort(), ['cow', 'cow_black', 'cow_bw']);
+  // two hours fed: one milk each, each its own kind, and the milk mission counts them all
+  await travel(w, 2);
+  r = await farm(w);
+  assert.deepEqual([r.body.inventory.cow_milk, r.body.inventory.cow_milk_bw, r.body.inventory.cow_milk_black], [1, 1, 1]);
+  assert.equal(r.body.progress.stats.milk, 3);
+  const pays = [];
+  for (const item of ['cow_milk', 'cow_milk_bw', 'cow_milk_black']) pays.push((await act(w, { action: 'sell', item, qty: 1 })).body.result.pay);
+  assert.deepEqual(pays, [60, 90, 130]);
+});
+
 test('gold: sold at the Market, a golden hen at level 10 (30 gold), a field ripened at once, its soil improved', async () => {
   const w = await world(50000);
   await q(`UPDATE rooms SET gold = 100 WHERE code = $1`, [w.code]);
@@ -273,7 +305,7 @@ test('live worlds from before the update keep everything: money, gold, goods, an
     const get = w => go(w, 'GET', `/v1/rooms/${w.code}/farm`), act2 = (w, body) => go(w, 'POST', `/v1/rooms/${w.code}/farm`, { requestId: 'live-request-' + (++rid), ...body });
     let r = await get(A.w);
     assert.equal(r.status, 200, JSON.stringify(r.body));
-    assert.deepEqual((await Q('SELECT max(id)::int AS n FROM schema_migrations'))[0].n, 13);
+    assert.deepEqual((await Q('SELECT max(id)::int AS n FROM schema_migrations'))[0].n, MIGRATIONS[MIGRATIONS.length - 1].id);
     let f = r.body;
     // money, gold, earnings, the storage level and every good: as they were
     assert.deepEqual([f.money, f.machines.gold, f.totalEarned, f.storageLevel], [3500, 7, 2400, 2]);

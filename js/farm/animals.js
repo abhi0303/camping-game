@@ -28,7 +28,7 @@ vec2 rigRot(vec2 p, vec2 o, float a) { vec2 d = p - o; float c = cos(a), s = sin
 //   4.x lower leg: swings with the leg and also bends at the knee (height (x - 4) * 2) while the hoof comes forward
 //   5.x head on a long neck: turns down with the neck (base y (x - 5) * 4, z aRig.y) and nods back at the poll
 //       (aRig.zw), so a grazing horse gets its nose down to the grass
-//   6   neck and head of a one-piece model (js/farm/polyRig.js: the cow, the pig, the goat): turns down about the neck's
+//   6   neck and head of a one-piece model (js/farm/polyRig.js: the cows, the pig, the goat): turns down about the neck's
 //       base (aRig.zw) by aRig.y of the head's angle (0 at the shoulder … 1 at the head), so the neck bends
 const RIG_VERTEX = `#include <begin_vertex>
   float rk = aRig.x;
@@ -57,16 +57,22 @@ export function addAnimAttributes(mesh, n) {
   a.setUsage(THREE.DynamicDrawUsage); b.setUsage(THREE.DynamicDrawUsage);
   mesh.geometry.setAttribute('iAnim', a); mesh.geometry.setAttribute('iAnim2', b);
 }
-// gait per kind: leg swing (radians at full walk), one full step cycle (m), walking speed for a full swing (m/s)
-export const GAIT = { goat: { amp: 0.55, cycle: 0.62, ref: 0.5 }, chicken: { amp: 0.75, cycle: 0.24, ref: 0.32 }, cow: { amp: 0.42, cycle: 1.25, ref: 0.32 },
-  horse: { amp: 0.38, cycle: 1.75, ref: 0.42 }, pig: { amp: 0.5, cycle: 0.55, ref: 0.4 } };
+// gait per kind: leg swing (radians at full walk), walking speed for a full swing (m/s), and either the leg's
+// length (from where it swings: a step is as long as the hooves really go, js/farm/farmland.js) or one full step
+// cycle (m) · feet: half the distance between the left and right feet and between the front and hind ones (it
+// stands on the ground under them, tipped with the slope)
+export const GAIT = { goat: { amp: 0.55, ref: 0.5, leg: 0.29, feet: [0.09, 0.25] }, chicken: { amp: 0.75, cycle: 0.24, ref: 0.32 },
+  cow: { amp: 0.42, ref: 0.32, leg: 0.47, feet: [0.18, 0.66] }, cow_bw: { amp: 0.42, ref: 0.32, leg: 0.45, feet: [0.16, 0.63] },
+  cow_black: { amp: 0.42, ref: 0.32, leg: 0.47, feet: [0.16, 0.67] },
+  horse: { amp: 0.38, ref: 0.42, leg: 1.02, feet: [0.2, 0.6] }, pig: { amp: 0.5, ref: 0.4, leg: 0.21, feet: [0.1, 0.29] } };
 
 /* ---------- cows, horses and pigs ---------- */
 // standing, they graze: the head goes down to the grass for a while (nodding a little as they crop it), comes
 // up to look about, goes down again; walking, the head is carried low and bobs. The tail swishes now and then,
 // with a quick flick from time to time (flies). A pig roots about with quick little nods, and its curly tail
 // twitches. head: how far down (radians) · tail: the swish angle
-const GRAZE = { horse: 1.85, cow: 1.2, pig: 0.5 };   // how far the neck turns down to graze (a horse's head nods back as it goes)
+// how far the neck turns down to graze, so the nose is in the grass (a horse's head nods back as it goes)
+const GRAZE = { horse: 1.85, cow: 1.06, cow_bw: 1.19, cow_black: 1.16, pig: 0.5 };
 export function grazePose(a, ms, walking, out) {
   const t = ms / 1000, k = a.k, u = (t + k * 97) % 16, kind = a.type.startsWith('horse') ? 'horse' : a.type, pig = kind === 'pig';
   const down = walking ? 0.25 : u < 10 ? Math.min(1, u / 1.2, (10 - u) / 1.2) : 0;

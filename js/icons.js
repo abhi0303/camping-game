@@ -18,6 +18,13 @@ const egg = (shell, spot, shine = 'rgba(255,255,255,.75)') => s('M12 3.2c3.4 0 6
   + ln('M8.6 9.4c.6-1.8 1.6-3.2 2.6-3.8', shine, 1.6);
 const bottle = (cap, label) => s('M9.5 2.8h5v3.1l1.6 2.6v11.6a1.8 1.8 0 0 1-1.8 1.8H9.7a1.8 1.8 0 0 1-1.8-1.8V8.5l1.6-2.6z', '#f4f6fa')
   + s('M9.2 2.2h5.6v2.4H9.2z', cap) + s('M7.9 11.6h8.2v5.6H7.9z', label) + ln('M10 9.4v9.2', 'rgba(255,255,255,.9)', 1.2);
+// a cow's face: ears, head, patches, eyes, a pink muzzle (horn: horns in that colour)
+const cowFace = (head, ear, patch, horn) => s('M3 8.2c1.6-.4 3.2.2 4 1.2M21 8.2c-1.6-.4-3.2.2-4 1.2', ear)
+  + (horn ? ln('M5.8 6.4c-.6-1.4-.4-2.6.4-3.2M18.2 6.4c.6-1.4.4-2.6-.4-3.2', horn, 1.8) : '')
+  + s('M6.4 9c0-2.4 2.6-4 5.6-4s5.6 1.6 5.6 4l-.6 6H7z', head)
+  + (patch ? f('M7.6 6.8c1.4-1 3-1.2 4 .2.4 1.4-.8 2.8-2.6 2.6-1.2-.2-1.8-1.6-1.4-2.8zM15.6 10.6c1-.2 1.8.4 1.6 1.6l-.2 1.4c-1 0-2-.8-1.4-3z', patch) : f('M7 7.4c1.4-1.6 3-2.2 5-2.2s3.6.6 5 2.2c-1.6.4-3.2.6-5 .6s-3.4-.2-5-.6z', ear))
+  + ci(9.6, 10.6, 0.8, OL, null) + ci(14.4, 10.6, 0.8, OL, null) + s('M6.8 14.2h10.4c.6 3.4-1.8 6.4-5.2 6.4s-5.8-3-5.2-6.4z', '#f0a8a8')
+  + ci(10, 17.2, 0.8, '#b06060', null) + ci(14, 17.2, 0.8, '#b06060', null);
 const fish = (body, fin, belly, size = 1) => {
   const k = size;
   return `<g transform="translate(12 12) scale(${k}) translate(-12 -12)">`
@@ -85,6 +92,8 @@ const PICS = {
   egg: egg('#fbf6ea', ''), egg_brown: egg('#c98a55', '#9a5f30'), egg_dark: egg('#3d3a48', '#57536a', 'rgba(255,255,255,.4)'), egg_gold: egg('#f5c842', '#d79a1c', 'rgba(255,255,255,.7)'),
   goat_milk: bottle('#5bb36a', '#dff3e2') + ln('M10 14.4h4', '#3f8a4c', 1.2),
   cow_milk: bottle('#3f7fd6', '#dde9fb') + ci(10.6, 14.4, 0.8, OL, null) + ci(13.2, 13.6, 0.6, OL, null),
+  cow_milk_bw: bottle('#2f2c33', '#f4f1ea') + f('M8.6 12.4c.9-.5 2.2-.3 2.4.6.2 1-1 1.6-2.4 1.2zM13.4 14.6c.8-.6 2-.4 2.2.4.1.9-.9 1.4-2.2 1z', '#2f2c33'),
+  cow_milk_black: bottle('#2a282e', '#e8c45a') + s('M12 12.6l.8 1.5 1.6.2-1.2 1.1.3 1.6-1.5-.8-1.5.8.3-1.6-1.2-1.1 1.6-.2z', '#fff6d8'),
   wood: s('M3.4 14.6l11-5.4 4 7.2-11 5.4z', '#a8743f') + el(18.4, 12.8, 2.6, 3.8, '#e8c088', OL, ' transform="rotate(-27 18.4 12.8)"') + el(18.4, 12.8, 1.1, 1.8, 'none', '#b07c40', ' transform="rotate(-27 18.4 12.8)"')
     + s('M2.6 9.4l9.6-4.6 3.4 6-9.6 4.6z', '#95622f') + el(13.9, 7.8, 2.2, 3.4, '#e8c088', OL, ' transform="rotate(-27 13.9 7.8)"') + ci(13.9, 7.8, 0.7, '#b07c40', null),
   stone: s('M2.8 18.6l2.6-6.2 4.4-2.4 3.4 2.2 1.4 6.6z', '#9aa1a8') + s('M10.6 19.2l2.2-8.6 4.6-3.6 3.8 3.4.6 8.8z', '#b9bfc5') + ln('M15 12l1.6 2.6M6.4 14.6l1.6 1.4', '#7d848c', 1),
@@ -94,10 +103,8 @@ const PICS = {
   goat: s('M6.4 7.4C4 6.4 2.4 4 2.6 2.6c1.6.6 3.6 1.8 5 3.6M17.6 7.4c2.4-1 4-3.4 3.8-4.8-1.6.6-3.6 1.8-5 3.6', '#cdbb94')
     + s('M7 8.4c0-1.6 2.2-3.2 5-3.2s5 1.6 5 3.2l-1 7.6c-.4 2.6-2 4.6-4 4.6s-3.6-2-4-4.6z', '#e9e4da') + s('M4.6 9.6l2.6-.6.4 1.8-2 .6zM19.4 9.6l-2.6-.6-.4 1.8 2 .6z', '#d8d0c0')
     + ci(9.8, 10.6, 0.8, OL, null) + ci(14.2, 10.6, 0.8, OL, null) + s('M10.4 16.6h3.2l-.6 1.6h-2z', '#e6a3a3') + s('M11 20.4l1 2.4 1-2.4', '#cfc6b4'),
-  cow: s('M3 8.2c1.6-.4 3.2.2 4 1.2M21 8.2c-1.6-.4-3.2.2-4 1.2', '#e9e4da') + s('M5.8 6.4c-.6-1.4-.4-2.6.4-3.2M18.2 6.4c.6-1.4.4-2.6-.4-3.2', 'none')
-    + s('M6.4 9c0-2.4 2.6-4 5.6-4s5.6 1.6 5.6 4l-.6 6H7z', '#f4f1ea') + f('M7.6 6.8c1.4-1 3-1.2 4 .2.4 1.4-.8 2.8-2.6 2.6-1.2-.2-1.8-1.6-1.4-2.8zM15.6 10.6c1-.2 1.8.4 1.6 1.6l-.2 1.4c-1 0-2-.8-1.4-3z', '#2f2c33')
-    + ci(9.6, 10.6, 0.8, OL, null) + ci(14.4, 10.6, 0.8, OL, null) + s('M6.8 14.2h10.4c.6 3.4-1.8 6.4-5.2 6.4s-5.8-3-5.2-6.4z', '#f0a8a8') + ci(10, 17.2, 0.8, '#b06060', null) + ci(14, 17.2, 0.8, '#b06060', null)
-    + s('M7.8 5.6L6.4 3M16.2 5.6L17.6 3', 'none'),
+  // the three cows (brown, black and white, black — horned, with dark ears)
+  cow: cowFace('#f4f1ea', '#b8622e', '#9a4a22'), cow_bw: cowFace('#f4f1ea', '#e9e4da', '#2f2c33'), cow_black: cowFace('#eee4d2', '#3a383e', null, '#d9c48c'),
   horse: horse('#8b4a2b', '#2b1d14'), horse_bay: horse('#8b4a2b', '#2b1d14'), horse_chestnut: horse('#b5602e', '#7a3a18'), horse_black: horse('#2e2b31', '#141216'),
   horse_white: horse('#f1ede4', '#c9c2b4'), horse_palomino: horse('#d9a441', '#f4ead0'),
   horse_pinto: horse('#f1ede4', '#3a2a20', f('M8.6 15.4c1.2-1.4 3-1.2 3.6.4.4 1.6-.6 3.6-2.2 4.6l-1.4.4c-.4-1.8-.6-3.8 0-5.4zM16 9.6c1 .2 1.6 1.2 1.2 2.2l-1.4.4c-.6-.8-.6-2 .2-2.6z', '#7a4a2a')),
@@ -297,7 +304,7 @@ const EMOJI_ICON = {
   '🐕': 'dog', '🐶': 'dog', '🦮': 'dog', '🦴': 'bone', '🍖': 'dog_treat', '🥷': 'thief', '🕸': 'net', '🚨': 'ui:warn',
   '🪙': 'gold', '🥡': 'flour', '⛏': 'mine',
   '🫘': 'wheat_seeds', '🎃': 'scarecrow', '🏞': 'field', '👒': 'farmer_outfit',
-  '🐔': 'chicken', '🐓': 'chicken_brown', '🐦‍⬛': 'chicken_dark', '🐐': 'goat', '🐄': 'cow', '🥛': 'goat_milk', '🍼': 'cow_milk', '🏚': 'barn', '🛖': 'goat_shed',
+  '🐔': 'chicken', '🐓': 'chicken_brown', '🐦‍⬛': 'chicken_dark', '🐐': 'goat', '🐄': 'cow', '🐮': 'cow_bw', '🐃': 'cow_black', '🥛': 'goat_milk', '🍼': 'cow_milk', '🧃': 'cow_milk_bw', '🍶': 'cow_milk_black', '🐤': 'chicken_gold', '🌕': 'egg_gold', '🏚': 'barn', '🛖': 'goat_shed',
 };
 export function emojiIcon(e) {
   const k = EMOJI_ICON[e] || EMOJI_ICON[e.replace(/[\u{FE0F}\u{FE0E}]/gu, '')];

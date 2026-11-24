@@ -16,7 +16,7 @@ import { signboard } from '../farm/models.js';
 import { broadleafA, broadleafB, roundTree } from '../flora.js';
 import { HOUSES, HALL, buildHouse } from './houses.js';
 import { buildGarden, PLANTS, SHADOW_PLANTS } from './gardens.js';
-import { buildPen, PEN_SIZE, ANIMALS } from './animals.js';
+import { buildPen, PEN_SIZE, ANIMALS, COW_BREEDS } from './animals.js';
 import { well, cart, haystack, clothesline, hearth, shed, stall, tableSet, pots } from './props.js';
 import { Villagers, benchColliders } from './ai.js';
 import { Farmstead } from './farmstead.js';
@@ -282,7 +282,8 @@ export class Village {
         for (let i = 0; i <= n; i++) { const p = Village.at(P, ax + (bx - ax) * i / n, az + (bz - az) * i / n); this.world.addCollider({ x: p.x, z: p.z, r: 0.28 }); }
       }
       if (farmland && farmland.decor) {
-        const list = ANIMALS[kind].map((type, i) => ({ id: `v-${H.spec.name}-${i}`, type, k: hash(`v-${H.spec.name}-${i}`), home: { F: { x: P.x, z: P.z, yaw: P.yaw }, ...home }, gi: i, gn: ANIMALS[kind].length, gk: hash(H.spec.name) }));
+        const breed = type => (type === 'cow' ? COW_BREEDS[Math.floor(hash(H.spec.name + ':cow') * COW_BREEDS.length)] : type);   // each house its own cow
+        const list = ANIMALS[kind].map((type, i) => ({ id: `v-${H.spec.name}-${i}`, type: breed(type), k: hash(`v-${H.spec.name}-${i}`), home: { F: { x: P.x, z: P.z, yaw: P.yaw }, ...home }, gi: i, gn: ANIMALS[kind].length, gk: hash(H.spec.name) }));
         if (kind === 'goat' && list.length >= 2) { list[0].partner = list[1]; list[1].partner = list[0]; }
         farmland.decor.push(...list);
       }

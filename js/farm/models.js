@@ -625,10 +625,12 @@ export const ANIMAL_GEO = {
   chicken_dark: () => rigOf(b => chicken(b, { body: 0x2a2a2e, neck: 0x34343a, head: 0x2e2e32, wing: 0x1c1d24, tail: 0x15161c, tail2: 0x22304a, longTail: true, comb: 0x5a1a2a, beak: 0x3a3a3a, legs: 0x2a2a2a, size: 1.0 })),
   // the golden hen (bought with gold from farm level 10): a shining gold coat, a longer tail
   chicken_gold: () => rigOf(b => chicken(b, { body: 0xf2c440, neck: 0xf7d460, head: 0xf0c038, wing: 0xe0a828, tail: 0xc88a18, tail2: 0xffe08a, longTail: true, comb: 0xd8342a, beak: 0xf08a20, legs: 0xe0a020, size: 1.05 })),
-  // the goat (the "Low poly Fat-tailed sheep" model), the cow and the pig (from "Low Poly Farm V2"):
-  // js/farm/polyRig.js gives them their moving parts
+  // the goat, the three cows (cow: brown, cow_bw: black and white, cow_black: black) and the pig — baked models
+  // (js/farm/goatModel.js, js/farm/cowModels.js, js/farm/polyAnimals.js); js/farm/polyRig.js gives them their moving parts
   goat: () => polyAnimal('goat'),
   cow: () => polyAnimal('cow'),
+  cow_bw: () => polyAnimal('cow_bw'),
+  cow_black: () => polyAnimal('cow_black'),
   pig: () => polyAnimal('pig'),
   // horses in six colours (catalog horse_*); 'horse' is the bay one (worlds from before the colours)
   horse: () => rigOf(b => horse(b, HORSE_COATS.horse_bay)),

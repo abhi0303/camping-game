@@ -10,7 +10,7 @@
 import { ApiError } from './http.js';
 import { xpNeed, levelReward, levelForXp, xpFor, statsFor, makeMissions, missionProgress } from '../../js/farm/progression.js';
 
-const isHen = t => t.startsWith('chicken'), isMilker = t => t === 'goat' || t === 'cow', isHorse = t => t.startsWith('horse');
+const isHen = t => t.startsWith('chicken'), isMilker = t => t === 'goat' || t.startsWith('cow'), isHorse = t => t.startsWith('horse');
 // what the farm has now (missions are picked from what it can do)
 async function facts(c, roomId, level) {
   const a = await c.rows('SELECT type FROM animals WHERE room_id = $1', [roomId]);

@@ -6,3 +6,7 @@ models/floor/generic_grass/textures/Material_metallicRoughness.png
 models/floor/rocky_ground_tile_texture/scene.bin
 models/floor/rocky_ground_tile_texture/textures/Material_normal.png
 models/floor/rocky_ground_tile_texture/textures/Material_metallicRoughness.png
+# the cows' maps the game doesn't use (only their colour textures are: tools/bake-animals.mjs)
+models/cows/brown_cow/textures/tornado_cow_material_normal.png
+models/cows/brown_cow/textures/tornado_cow_material_metallicRoughness.png
+models/cows/black_and_white_cow/textures/material43_metallicRoughness.png

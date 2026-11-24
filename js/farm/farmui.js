@@ -33,7 +33,7 @@ function stats(compact) {
 }
 const BUY_STEP = { feed: 10, wood: 10, stone: 10, wheatin: 10 };
 const FARM_TITLE = { coop: 'CHICKEN FARM', goat_shed: 'GOAT FARM', barn: 'COW FARM', stable: 'HORSE STABLE' };
-const NOUN = { egg: 'egg', egg_brown: 'egg', egg_dark: 'egg', goat_milk: 'milk', cow_milk: 'milk' };
+const NOUN = { egg: 'egg', egg_brown: 'egg', egg_dark: 'egg', egg_gold: 'egg', goat_milk: 'milk', cow_milk: 'milk', cow_milk_bw: 'milk', cow_milk_black: 'milk' };
 const plural = name => name.toLowerCase() + (/s$/.test(name) ? '' : 's');
 // what a shelter's animals are called (a coop holds every chicken variety)
 const kind = a => (a.nest ? 'Chicken' : a.grow ? 'Horse' : a.name);
@@ -505,7 +505,9 @@ export class FarmUI {
     const every = k.rate ? 1 / k.rate : 0, pace = !every ? '' : every === 1 ? '1 an hour' : every < 1 ? `1 every ${Math.round(every * 60)} min` : `1 every ${+every.toFixed(1)} h`;
     const what = p ? `${p.name.toLowerCase()}: ${pace} while fed · ₹${p.sell} each (more as it's cared for)` : 'rides and pulls carts later';
     const feed = `eats ${k.feedCost || 1} feed / ${k.feedHours || 2} h`;
-    const price = n => (k.gold ? `${icon('gold')} ${k.gold * n} gold` : `₹${k.buy * n}`), afford = n => (k.gold ? e.gold >= k.gold * n : e.money >= k.buy * n);
+    // rupees, gold coins, or both (the black & white and black cows)
+    const price = n => [k.buy && `₹${k.buy * n}`, k.gold && `${icon('gold')} ${k.gold * n} gold`].filter(Boolean).join(' + ');
+    const afford = n => e.money >= (k.buy || 0) * n && e.gold >= (k.gold || 0) * n;
     if (!open) {
       const P = e.progress(), pct = P ? Math.min(100, Math.round(P.level / k.minLevel * 100)) : 0;
       return `<div class="fu-row locked"><span class="fu-ico">${k.icon}</span><span class="fu-main"><span class="fu-name">${esc(k.name)} · ${price(1)} 🔒</span>

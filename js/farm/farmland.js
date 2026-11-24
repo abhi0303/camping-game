@@ -16,7 +16,7 @@ import { rigMaterial, rigDepthMaterial, addAnimAttributes, GAIT, goatPose, chick
 
 const MAX_PER_TYPE = 64;
 const ORIGIN = { x: 0, z: 0, yaw: 0 };
-const SPEED = { chicken: 1.6, chicken_brown: 1.5, chicken_dark: 1.4, chicken_gold: 1.3, goat: 0.8, cow: 0.45, pig: 0.55, horse: 0.6,
+const SPEED = { chicken: 1.6, chicken_brown: 1.5, chicken_dark: 1.4, chicken_gold: 1.3, goat: 0.8, cow: 0.45, cow_bw: 0.45, cow_black: 0.42, pig: 0.55, horse: 0.6,
   horse_bay: 0.6, horse_chestnut: 0.62, horse_black: 0.58, horse_white: 0.6, horse_palomino: 0.64, horse_pinto: 0.6 };
 const GATE_OPEN = Math.PI * 0.52;
 const NEST_AT = { x: 2.7, z: -0.9 };          // in the pen, by the coop's nest boxes (behind the back fence)
@@ -345,7 +345,8 @@ export class Farmland {
   wanderLocal(a, serverMs) {
     const t = serverMs / 1000, k = a.k, sp = SPEED[a.type] || 1, chick = a.type.startsWith('chicken');
     const R = a.home ? a.home.R : a.field ? this.goatField.pen : PEN;
-    const cx = (R.x0 + R.x1) / 2, cz = (R.z0 + R.z1) / 2, hx = (R.x1 - R.x0) / 2, hz = (R.z1 - R.z0) / 2;
+    const inset = !a.home && a.type.startsWith('cow') ? 0.5 : 0;                // a cow is long: kept further from the pen's fence
+    const cx = (R.x0 + R.x1) / 2, cz = (R.z0 + R.z1) / 2, hx = Math.max(0.3, (R.x1 - R.x0) / 2 - inset), hz = Math.max(0.3, (R.z1 - R.z0) / 2 - inset);
     const at = tt => ({ x: cx + hx * 0.92 * Math.sin(tt * 0.11 + k * 40) * Math.cos(tt * 0.043 + k * 17), z: cz + hz * 0.92 * Math.sin(tt * 0.083 + k * 23) });
     // speed swings between standing still and walking; tt is its integral over time, so the animal moves
     // smoothly: speed ∝ 1 + sin(w·T + φ)  →  tt = 0.6·sp·(T − cos(w·T + φ) / w)
@@ -375,10 +376,10 @@ export class Farmland {
       const size = a.size || (a.level && a.type.startsWith('horse') ? 0.55 + 0.45 * (Math.min(10, a.level) - 1) / 9 : 1);   // (a decorative piglet: size)
       this._s.setScalar(size);
       const chick = a.type.startsWith('chicken'), sick = a.health !== undefined && a.health < 40 ? 0.06 : 0, i = n[a.type];
-      let x, z, yaw, y, pitch = 0, pivot = 0;
+      let x, z, yaw, y, pitch = 0, pivot = 0, slope = 0, roll = 0;
       const anim = m.geometry.attributes.iAnim;
       if (anim) {                                       // goats, chickens, cows, horses: real steps, head, wings / tail (js/farm/animals.js)
-        const big = a.type === 'cow' || a.type === 'pig' || a.type.startsWith('horse');
+        const big = a.type.startsWith('cow') || a.type === 'pig' || a.type.startsWith('horse');
         const G = chick ? GAIT.chicken : big ? (GAIT[a.type] || GAIT.horse) : GAIT.goat;
         let st = this.animSt.get(a.id);
         if (!st) this.animSt.set(a.id, st = { x: 0, z: 0, ph: a.k * 10, w: 0, init: false, clash: 0 });
@@ -388,8 +389,11 @@ export class Farmland {
           F = a.home ? a.home.F : PLOTS[a.plot]; lx = wl.x; lz = wl.z; lyaw = wl.yaw; head = ce.head; hop = ce.hop; flap = ce.flap;
           if (head > 0.5) lift = 0.18;                   // leaning into a peck
         } else if (big) {                                 // cows, horses and pigs wander and graze
-          const p = this.posOf(a, serverMs), g = grazePose(a, serverMs, p.walking, this._gp || (this._gp = {}));
-          F = ORIGIN; lx = p.x; lz = p.z; lyaw = p.yaw; head = g.head; flap = g.tail;
+          const p = this.posOf(a, serverMs), g = grazePose(a, serverMs, p.walking, this._gp || (this._gp = {})), pig = a.type === 'pig';
+          F = ORIGIN; lx = p.x; lz = p.z; lyaw = p.yaw; flap = g.tail;
+          // the head goes down to graze and comes up smoothly, and nods with each step as it walks
+          st.head = st.head === undefined ? g.head : st.head + (g.head - st.head) * (1 - Math.exp(-(pig ? 10 : 3.5) * dt));
+          head = st.head + (pig ? 0 : Math.sin(st.ph * 2) * 0.07 * st.w);
         } else {
           const P = goatPose(a, serverMs, this, this._pose);
           F = P.F; lx = P.x; lz = P.z; lyaw = P.yaw; head = P.head; lift = P.lift; pivot = -0.25;   // (rears up on its hind legs)
@@ -402,14 +406,20 @@ export class Farmland {
         }
         const wp = toWorld(F, lx, lz);
         x = wp.x; z = wp.z; yaw = lyaw + (F.yaw || 0);
-        // the legs step with how far it really moved since the last frame (no sliding, no floating)
+        // the legs step with how far it really moved since the last frame. A hoof on the ground moves back as far as
+        // the body goes forward (one step = 4 × leg × sin(swing)): slower, the steps get shorter, never sliding
         const d = st.init ? Math.hypot(x - st.x, z - st.z) : 0;
         st.x = x; st.z = z; st.init = true;
-        if (d < 1.5) st.ph += d / G.cycle * Math.PI * 2;
+        const cycle = G.leg ? 4 * G.leg * size * Math.sin(Math.max(0.12, G.amp * st.w)) : G.cycle;
+        if (d < 1.5) st.ph += d / cycle * Math.PI * 2;
         const speed = dt > 0 && d < 1.5 ? d / dt : 0;
         st.w += (Math.min(1, speed / G.ref) - st.w) * (1 - Math.exp(-9 * dt));
         const bob = Math.abs(Math.sin(st.ph)) * (chick ? 0.012 : big ? 0.025 : 0.014) * st.w;
-        y = this.H(x, z) + 0.035 + bob + hop;
+        if (G.feet) {                                    // standing on the ground under its feet: tipped with the slope
+          const fx = G.feet[0] * size, fz = G.feet[1] * size, sy = Math.sin(yaw), cy = Math.cos(yaw);
+          const hf = this.H(x + sy * fz, z + cy * fz), hb = this.H(x - sy * fz, z - cy * fz), hl = this.H(x + cy * fx, z - sy * fx), hr = this.H(x - cy * fx, z + sy * fx);
+          y = (hf + hb) / 2 + 0.035 + bob + hop; slope = Math.atan2(hb - hf, 2 * fz); roll = Math.atan2(hl - hr, 2 * fx);
+        } else y = this.H(x, z) + 0.035 + bob + hop;
         anim.setXYZW(i, st.ph, G.amp * st.w, head, chick ? Math.sin(st.ph * 2) * 0.024 * st.w : 0);
         m.geometry.attributes.iAnim2.setX(i, flap);
         pitch = lift + sick;
@@ -423,7 +433,7 @@ export class Farmland {
       if (voice) { const dv = Math.hypot(x - me.x, z - me.z); if (dv < 22) { voice.n++; if (dv < voice.d) { voice.d = dv; voice.x = x; voice.z = z; } } }
       // rear up about the hind feet: shift so that point stays on the ground
       if (pivot && pitch) { const oy = pivot * Math.sin(pitch), oz = pivot - pivot * Math.cos(pitch); y += oy; x += Math.sin(yaw) * oz; z += Math.cos(yaw) * oz; }
-      this._e.set(pitch, yaw, sick * 2);
+      this._e.set(pitch + slope, yaw, sick * 2 + roll);
       this._q.setFromEuler(this._e);
       this._p.set(x, y, z);
       m.setMatrixAt(n[a.type]++, this._m.compose(this._p, this._q, this._s));

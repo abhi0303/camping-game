@@ -30,10 +30,10 @@ const SOLID = [[7.63, -1.16, 0.25], [6.64, 0.44, 0.25], [9.12, -0.24, 0.25], [8.
   [4.95, 4.99, 1.1], [-5.45, -0.93, 0.5], [-4.45, -0.93, 0.5],                                              // the rocks, the hay
   [-3.1, 9.0, 0.42], [0.42, 9.0, 0.42],                                                                     // the arch's posts
   [-8.45, -1.67, 0.14], [-8.43, -3.71, 0.14], [-8.43, -6.2, 0.14], [-8.49, -8.24, 0.14]];                  // the porch posts
-// where the animals wander (local boxes, well inside the fence: a cow is 2.3 m long): the yard inside the gate,
+// where the animals wander (local boxes, well inside the fence: a cow is about 2.4 m long; one of each breed): the yard inside the gate,
 // the strip east of the barn, the pigs by the rocks, the hens between the tractor and the windmill
 const YARD = { x0: -1.0, x1: 2.7, z0: 4.5, z1: 7.5 }, STRIP = { x0: 7.6, x1: 9.2, z0: -7.0, z1: -2.6 }, STY = { x0: 2.6, x1: 9.2, z0: 6.9, z1: 8.1 }, COOP = { x0: 3.4, x1: 6.2, z0: -0.9, z1: 2.4 };
-const HERD = [['cow', YARD], ['cow', YARD], ['cow', STRIP], ['pig', STY], ['pig', STY], ['pig', STY, 0.62], ['chicken', COOP], ['chicken', COOP], ['chicken_brown', COOP]];
+const HERD = [['cow_bw', YARD], ['cow', YARD], ['cow_black', STRIP], ['pig', STY], ['pig', STY], ['pig', STY, 0.62], ['chicken', COOP], ['chicken', COOP], ['chicken_brown', COOP]];
 
 export class Farmstead {
   constructor(scene, world) {

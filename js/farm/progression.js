@@ -119,7 +119,7 @@ export const shedBonus = (k, level) => shedLevel(k, level).bonus || 1;
 /* ---------- the Market's demand ---------- */
 export const MARKET = {
   floor: 0.35, halfH: 3,                    // the lowest price (share of the normal one), recovery half-life (hours)
-  demand: { egg: 150, egg_brown: 90, egg_dark: 50, egg_gold: 20, goat_milk: 30, cow_milk: 24, fish_small: 40, fish_medium: 24, fish_large: 12, flour: 300, wood: 400, stone: 400, gold: 20 },
+  demand: { egg: 150, egg_brown: 90, egg_dark: 50, egg_gold: 20, goat_milk: 30, cow_milk: 24, cow_milk_bw: 20, cow_milk_black: 14, fish_small: 40, fish_medium: 24, fish_large: 12, flour: 300, wood: 400, stone: 400, gold: 20 },
   gold: 90,                                 // ₹ for a gold coin (before its demand drops)
 };
 // the load left from earlier sales at a moment (it halves every halfH hours)
