@@ -1,4 +1,4 @@
-// The jungle around you, made of synthesized sounds (no audio files):
+// The jungle around you, made of synthesized sounds (and one recording, the dogs' barks):
 //   night    — a cricket chorus with single crickets chirping close by, toads trilling (more near the river),
 //              and now and then a distant owl
 //   morning  — lots of birdsong (fewer birds later in the day), from the birds sitting in the trees nearby
@@ -9,8 +9,13 @@
 //              the wind rising and falling with gusts, thunder rolling in a few seconds after the lightning
 //   farm animals — two goats butting heads clack; walk up to the pens and the hens cluck ("buk-buk… ba-gawk!") and the goats bleat, from
 //              where they are, louder the closer you get (hens mostly sleep at night)
+//   guard dogs — real barks: the one recording in the game, sounds/dog-barks.wav (four barks of a dog recorded outdoors,
+//              "Dog barking mono" by Brandon Morris, CC0), a random one each time, a little deeper for a bigger dog
 // Everything is quiet and low-passed so it sits under the game. Inside the RV it sounds muffled.
 import { audio } from './audio.js';
+
+// where each bark is in sounds/dog-barks.wav: [start, length] (s)
+const BARKS = [[0, 0.29], [0.3, 0.285], [0.5949, 0.315], [0.9199, 0.3636]];
 
 const rnd = (a, b) => a + Math.random() * (b - a);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -64,6 +69,8 @@ export class Ambience {
       o.start(); lfo.start(); swell.start();
     }
     for (let i = 0; i < 4; i++) this.timers.cricket.push({ next: rnd(0, 3), f: rnd(4200, 5200), pan: rnd(-0.9, 0.9), left: 0 });
+    // the dogs' barks (until they've loaded, the synthesized one)
+    fetch('sounds/dog-barks.wav').then(r => (r.ok ? r.arrayBuffer() : Promise.reject(r.status))).then(b => ctx.decodeAudioData(b)).then(buf => { this.barks = buf; }).catch(() => {});
     this.ready = true;
     return true;
   }
@@ -203,9 +210,19 @@ export class Ambience {
       this._env(g, t, vol * 0.9, 0.003, 0.1); this._wire(o, g, pan); o.start(t); o.stop(t + 0.14);
     }
   }
-  // a big dog's bark: "wuf!" — a short, rough, falling tone through a mouth-like band (deeper for a bigger dog)
+  // a dog's bark: one of the recorded barks, at a slightly different pitch each time (deeper for a bigger dog)
   bark(vol, pan, deep = 1) {
-    const ctx = this.ctx, t = ctx.currentTime + 0.01, f0 = rnd(330, 400) / deep;
+    const ctx = this.ctx;
+    if (this.barks) {
+      const [at, len] = BARKS[Math.floor(Math.random() * BARKS.length)], s = ctx.createBufferSource(), g = ctx.createGain(), t = ctx.currentTime + 0.01;
+      s.buffer = this.barks; s.playbackRate.value = rnd(0.93, 1.05) / deep;
+      const dur = len / s.playbackRate.value;
+      g.gain.setValueAtTime(vol * 1.5, t); g.gain.setValueAtTime(vol * 1.5, t + dur - 0.03); g.gain.linearRampToValueAtTime(0, t + dur);
+      this._wire(s, g, pan); s.start(t, at); s.stop(t + dur + 0.01);
+      return;
+    }
+    // (the synthesized "wuf!": a short, rough, falling tone through a mouth-like band)
+    const t = ctx.currentTime + 0.01, f0 = rnd(330, 400) / deep;
     const o = ctx.createOscillator(), g = ctx.createGain(), b = ctx.createBiquadFilter(), n = ctx.createBufferSource(), nf = ctx.createBiquadFilter(), ng = ctx.createGain();
     o.type = 'sawtooth'; o.frequency.setValueAtTime(f0 * 1.3, t); o.frequency.exponentialRampToValueAtTime(f0, t + 0.04); o.frequency.exponentialRampToValueAtTime(f0 * 0.62, t + 0.17);
     b.type = 'bandpass'; b.frequency.value = 900; b.Q.value = 1.4;

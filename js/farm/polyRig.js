@@ -58,15 +58,17 @@ export const RIGS = {
   // neck low), the fat tail hangs below the rump
   goat: { model: GOAT_MODEL, legs: [[-0.085, 0.255], [0.088, 0.248], [-0.1, -0.258], [0.092, -0.25]], hw: 0.078, hd: 0.078, cut: 0.29, knee: [0.14, 0.17],
     neck: { y: 0.55, z: 0.1, z0: 0.08, z1: 0.45, minY: 0.36 }, tail: { hw: 0.11, z: -0.36, top: 0.6, minY: 0.36 } },
-  // the horses (they walk like cows, one leg after another): the neck goes down from its base in the chest and the
-  // head nods back at the poll (poll: where, z0 … z1 the head's weight, nod: how much of the neck's turn); graze: the
-  // neck's turn that puts the nose in the grass
+  // the horses (they walk like cows, one leg after another): the neck's root is the line from the breast up to the
+  // withers; the neck bends just in front of it (axis: across that line toward the head, t0 … t1 the bend) about a
+  // point a quarter of the way up it (y, z) and turns down as one piece — the withers don't move, so the neck
+  // doesn't swell — and the head nods back at the poll (poll: where, z0 … z1 the head's weight, nod: how much of the
+  // neck's turn); graze: the neck's turn that puts the nose in the grass
   horse_bay: { walk: true, model: HORSE_MODELS.horse_bay, legs: [[0.11, 0.44], [-0.1, 0.44], [0.11, -0.565], [-0.13, -0.565]], hw: 0.09, hd: 0.16, cut: 0.74, knee: [0.42, 0.5],
-    neck: { y: 1.02, z: 0.32, z0: 0.3, z1: 0.88, minY: 0.92 }, poll: { y: 1.86, z: 0.93, z0: 0.8, z1: 0.98, nod: 0.62 }, graze: 1.28, tail: { hw: 0.12, z: -0.7, top: 1.3, minY: 0.1 } },
+    neck: { y: 1.113, z: 0.61, axis: [0.654, 0.756], t0: 0, t1: 0.25, minY: 0.85 }, poll: { y: 1.86, z: 0.93, z0: 0.8, z1: 0.98, nod: 0.6 }, graze: 1.76, tail: { hw: 0.12, z: -0.7, top: 1.3, minY: 0.1 } },
   horse_black: { walk: true, twoSided: true, model: HORSE_MODELS.horse_black, legs: [[0.205, 0.58], [-0.205, 0.58], [0.175, -0.69], [-0.175, -0.69]], hw: 0.09, hd: 0.16, cut: 0.88, knee: [0.5, 0.58],
-    neck: { y: 1.2, z: 0.55, z0: 0.5, z1: 1.2, minY: 1.05 }, poll: { y: 1.9, z: 1.3, z0: 1.15, z1: 1.32, nod: 0.62 }, graze: 1.28, tail: { hw: 0.15, z: -0.9, top: 1.55, minY: 0.35 } },
+    neck: { y: 1.195, z: 0.677, axis: [0.884, 0.467], t0: 0, t1: 0.25, minY: 0.9 }, poll: { y: 1.9, z: 1.3, z0: 1.15, z1: 1.32, nod: 0.6 }, graze: 1.43, tail: { hw: 0.15, z: -0.9, top: 1.55, minY: 0.35 } },
   horse_chestnut: { walk: true, model: HORSE_MODELS.horse_chestnut, legs: [[0.115, 0.57], [-0.115, 0.57], [0.125, -0.65], [-0.125, -0.65]], hw: 0.09, hd: 0.16, cut: 0.75, knee: [0.45, 0.52],
-    neck: { y: 1.12, z: 0.45, z0: 0.42, z1: 1.0, minY: 0.98 }, poll: { y: 1.86, z: 1.0, z0: 0.92, z1: 1.08, nod: 0.62 }, graze: 1.47, tail: { hw: 0.1, z: -0.76, top: 1.38, minY: 0.6 } },
+    neck: { y: 1.095, z: 0.672, axis: [0.699, 0.715], t0: 0, t1: 0.25, minY: 0.85 }, poll: { y: 1.86, z: 1.0, z0: 0.92, z1: 1.08, nod: 0.6 }, graze: 1.74, tail: { hw: 0.1, z: -0.76, top: 1.38, minY: 0.6 } },
   // the hens: two legs (kind 1, the feet bend), the neck and head turn down to peck from low in the breast (peck:
   // how far, the hen leaning in a little, so the beak taps the ground), the wings (|x| from x0 to x1 the flap's
   // weight) lift out from the shoulder (px, py)
@@ -130,8 +132,11 @@ export function rigGeometry(g, R) {
       tag = y < knee ? [4 + knee * k / 2, ph, R.cut * k, leg[1] * k] : [1, ph, R.cut * k, leg[1] * k];
     } else if (T && Math.abs(x) < T.hw && z < T.z && y < T.top && y > (T.minY || 0)) tag = [3, 1e-4, T.top * k, 0];
     else if (W && Math.abs(x) > W.x0 && y > W.y0 && y < W.y1 && z > W.z0 && z < W.z1) tag = [3, Math.sign(x) * W.px * k, W.py * k, smooth(W.x0, W.x1, Math.abs(x))];
-    else if (z > N.z0 && y > N.minY) {
-      tag = [6, smooth(N.z0, N.z1, z), N.y * k, N.z * k];
+    else if (N.axis ? y > N.minY && (z - N.z) * N.axis[0] + (y - N.y) * N.axis[1] > N.t0 : z > N.z0 && y > N.minY) {
+      // (axis: a horse's long neck bends only at its root and turns as one piece — measured along the neck from the
+      // root, not by z, so the crest at the withers doesn't swing out and swell it)
+      const w = N.axis ? smooth(N.t0, N.t1, (z - N.z) * N.axis[0] + (y - N.y) * N.axis[1]) : smooth(N.z0, N.z1, z);
+      tag = [6, w, N.y * k, N.z * k];
       if (rig2) { const P = R.poll; rig2.set([P.y * k, P.z * k, smooth(P.z0, P.z1, z), P.nod], i * 4); }
     }
     rig.set(tag, i * 4);

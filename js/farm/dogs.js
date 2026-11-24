@@ -22,7 +22,8 @@ import { PLOTS, toWorld } from './layout.js';
 const TAN = 0xc98a3e, TAN_L = 0xe0b070, BLACK = 0x231d19, NOSE = 0x0f0c0a;
 // the kennels (their doors face the walkway) and each dog's patrol line along the walkway
 export const KENNELS = [{ x: -110.4, z: -184.9, yaw: Math.PI / 2 }, { x: -110.4, z: -172.1, yaw: Math.PI / 2 }];
-const PATROL = [{ x0: -102.5, x1: -58, z: -179.7 }, { x0: -101.5, x1: -59, z: -177.3 }];
+// (they turn back well before the farm storage at the east end: its steps come down to x ≈ -57.5)
+const PATROL = [{ x0: -102.5, x1: -62, z: -179.7 }, { x0: -101.5, x1: -63, z: -177.3 }];
 const STEP = 1.05;                              // metres per step cycle (the level-2 dog built here)
 // the model dogs: where their parts are (js/farm/polyRig.js rigGeometry) and how they step: leg (from where it
 // swings: a step is as long as the paws really go), the legs' swing walking / running
