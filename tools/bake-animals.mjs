@@ -54,6 +54,17 @@ const OUTPUTS = {
       horse_chestnut: { dir: 'models/horses/adult_brown_&_white_horse', tris: 4000, colours: 128, face: '+z', height: 2.0 },
     },
   },
+  // the guard dogs keep their own textures: each is written as models/dogs/<dir>/game.bin (16-bit positions in the
+  // farm's frame, 16-bit texture coordinates, triangles) and game.jpg (its texture, at most 1024 px); js/farm/dogs.js
+  // loads them (textured: the triangles are simplified keeping the texture's seams, the colours are the model's own)
+  dogs: {
+    textured: true,
+    models: {
+      dog_1: { dir: 'models/dogs/cane_corso_level_1', tris: 9000, face: '+z', height: 0.82 },
+      // (level 2: the German Shepherd waits for a standing model — the one there sits, so it can't walk)
+      dog_3: { dir: 'models/dogs/boxer_level_3', tris: 9000, face: '+z', height: 0.8 },
+    },
+  },
   chickens: {
     file: 'js/farm/chickenModels.js', name: 'CHICKEN_MODELS',
     about: 'from "fantasy chicken animation" by hino (https://sketchfab.com/Slava251114,\n// CC-BY-4.0), "Chicken Rig" by FourthGreen (https://sketchfab.com/FourthGreen, CC-BY-NC-4.0) and "GA Free_551_Majestic Rooster"\n// by Galaxy Abundant (https://sketchfab.com/galaxyabundant, CC-BY-4.0). The farm\'s hens (chicken: white, chicken_brown: desi,\n// chicken_dark: black)',
@@ -267,10 +278,67 @@ function kmeans(rgb, k, iters = 12) {
   return { palette: C.map(([r, g, b]) => (Math.round(r) << 16) | (Math.round(g) << 8) | Math.round(b)), lab };
 }
 
+/* ---------- a textured model (the dogs): its own texture kept ---------- */
+async function bakeTextured(label, A) {
+  const SRC = join(ROOT, A.dir), { gltf, accessor } = loadGltf(SRC);
+  const P = [], UV = [], IDX = [];
+  let tex = null;
+  (function walk(i, M) {
+    const n = gltf.nodes[i], W = mul(M, local(n));
+    if (n.mesh !== undefined) for (const p of gltf.meshes[n.mesh].primitives) {
+      const t = gltf.materials[p.material].pbrMetallicRoughness.baseColorTexture, img = gltf.images[gltf.textures[t.index].source].uri;
+      if (tex && tex !== img) throw new Error(label + ': more than one texture');
+      tex = img;
+      const pos = accessor(p.attributes.POSITION), uv = accessor(p.attributes['TEXCOORD_' + (t.texCoord || 0)]), idx = accessor(p.indices), base = P.length / 3;
+      for (let k = 0; k < pos.length; k += 3) P.push(...apply(W, pos[k], pos[k + 1], pos[k + 2]));
+      UV.push(...uv);
+      for (const v of idx) IDX.push(base + v);
+    }
+    for (const c of n.children || []) walk(c, W);
+  })(gltf.scenes[0].nodes[0], I4);
+  // simplify, the texture's seams kept (corners split by the texture stay split)
+  await MeshoptSimplifier.ready;
+  const Pf = Float32Array.from(P), [simple, err] = MeshoptSimplifier.simplify(Uint32Array.from(IDX), Pf, 3, Math.min(IDX.length, A.tris * 3), 0.05);
+  // only the corners still used, in the farm's frame (facing +z, feet on the ground, the legs' middle at z = 0)
+  const lo0 = [1e9, 1e9, 1e9], hi0 = [-1e9, -1e9, -1e9];
+  for (let i = 0; i < P.length; i += 3) for (let k = 0; k < 3; k++) { lo0[k] = Math.min(lo0[k], P[i + k]); hi0[k] = Math.max(hi0[k], P[i + k]); }
+  const ax = { '+x': [0, 1], '-x': [0, -1], '+z': [2, 1], '-z': [2, -1] }[A.face], side = ax[0] === 0 ? 2 : 0, sc = A.height / (hi0[1] - lo0[1]), cx = (lo0[side] + hi0[side]) / 2;
+  let f0 = 1e9, f1 = -1e9;
+  for (const i of simple) if (P[i * 3 + 1] < lo0[1] + (hi0[1] - lo0[1]) * 0.06) { const v = P[i * 3 + ax[0]] * ax[1]; f0 = Math.min(f0, v); f1 = Math.max(f1, v); }
+  const mid = (f0 + f1) / 2, remap = new Map(), pos = [], uvs = [], tri = new Uint32Array(simple.length);
+  simple.forEach((i, t) => {
+    if (!remap.has(i)) {
+      remap.set(i, pos.length / 3);
+      const m = [P[i * 3], P[i * 3 + 1], P[i * 3 + 2]];
+      pos.push((m[side] - cx) * (ax[0] === 0 ? -ax[1] : ax[1]) * sc, (m[1] - lo0[1]) * sc, (m[ax[0]] * ax[1] - mid) * sc);
+      uvs.push(UV[i * 2], UV[i * 2 + 1]);
+    }
+    tri[t] = remap.get(i);
+  });
+  const nV = pos.length / 3, lo = [1e9, 1e9, 1e9], hi = [-1e9, -1e9, -1e9], ulo = [1e9, 1e9], uhi = [-1e9, -1e9];
+  for (let i = 0; i < nV; i++) { for (let k = 0; k < 3; k++) { lo[k] = Math.min(lo[k], pos[i * 3 + k]); hi[k] = Math.max(hi[k], pos[i * 3 + k]); } for (let k = 0; k < 2; k++) { ulo[k] = Math.min(ulo[k], uvs[i * 2 + k]); uhi[k] = Math.max(uhi[k], uvs[i * 2 + k]); } }
+  const box = [...lo.map(v => Math.floor(v * 1e4) / 1e4), ...hi.map(v => Math.ceil(v * 1e4) / 1e4)], ubox = [...ulo.map(v => Math.floor(v * 1e4) / 1e4), ...uhi.map(v => Math.ceil(v * 1e4) / 1e4)];
+  const q = new Int16Array(nV * 3), qu = new Uint16Array(nV * 2), cl = (v, a, b) => Math.max(a, Math.min(b, v));
+  for (let i = 0; i < nV; i++) {
+    for (let k = 0; k < 3; k++) q[i * 3 + k] = cl(Math.round((pos[i * 3 + k] - box[k]) / (box[k + 3] - box[k]) * 65535 - 32768), -32768, 32767);
+    for (let k = 0; k < 2; k++) qu[i * 2 + k] = cl(Math.round((uvs[i * 2 + k] - ubox[k]) / Math.max(1e-6, ubox[k + 2] - ubox[k]) * 65535), 0, 65535);
+  }
+  const I = nV < 65536 ? Uint16Array.from(tri) : tri;
+  const header = Buffer.from(JSON.stringify({ v: 1, verts: nV, tris: tri.length / 3, box, uv: ubox, index: I.BYTES_PER_ELEMENT }));
+  const pad = Buffer.alloc((4 - ((4 + header.length) % 4)) % 4, 32), len = Buffer.alloc(4); len.writeUInt32LE(header.length + pad.length);
+  const body = [Buffer.from(q.buffer), Buffer.from(qu.buffer), Buffer.from(I.buffer)].map(b => Buffer.concat([b, Buffer.alloc((4 - b.length % 4) % 4)]));
+  writeFileSync(join(SRC, 'game.bin'), Buffer.concat([len, header, pad, ...body]));
+  // the texture, at most 1024 px (as it is when smaller)
+  const px = Number(/pixelWidth: (\d+)/.exec(execFileSync('sips', ['-g', 'pixelWidth', join(SRC, tex)]).toString())[1]);
+  execFileSync('sips', ['-s', 'format', 'jpeg', '-s', 'formatOptions', '82', '-Z', String(Math.min(1024, px)), join(SRC, tex), '--out', join(SRC, 'game.jpg')], { stdio: 'ignore' });
+  console.log(`${label}: triangles ${IDX.length / 3} -> ${tri.length / 3} (error ${(err * 100).toFixed(2)} %), ${nV} corners · box ${box.join(', ')} · ${A.dir}/game.bin ${(readFileSync(join(SRC, 'game.bin')).length / 1024).toFixed(0)} KB, game.jpg ${(readFileSync(join(SRC, 'game.jpg')).length / 1024).toFixed(0)} KB`);
+}
+
 /* ---------- the files ---------- */
 const only = process.argv[2];
 for (const [name, O] of Object.entries(OUTPUTS)) {
   if (only && only !== name) continue;
+  if (O.textured) { for (const [k, A] of Object.entries(O.models)) await bakeTextured(k, A); continue; }
   const out = {};
   for (const [k, A] of Object.entries(O.models)) out[k] = await bake(k, A);
   const single = Object.keys(out).length === 1, file = join(ROOT, O.file);

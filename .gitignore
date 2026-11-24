@@ -12,3 +12,6 @@ models/cows/brown_cow/textures/tornado_cow_material_metallicRoughness.png
 models/cows/black_and_white_cow/textures/material43_metallicRoughness.png
 # the horses' maps the game doesn't use
 models/horses/adult_brown_&_white_horse/textures/defaultMat_normal.png
+# the dogs' maps the game doesn't use (it draws their colour textures: models/dogs/*/game.jpg)
+models/dogs/boxer_level_3/textures/material_metallicRoughness.png
+models/dogs/boxer_level_3/textures/material_specularf0.png

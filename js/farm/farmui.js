@@ -5,6 +5,7 @@
 // Every button asks the server; the numbers on screen always come from the server's answer.
 import { fishMarketView, fishHead } from '../fishing/marketui.js';
 import { icon } from '../icons.js';
+import { DOG_BREEDS } from './dogModels.js';
 import { mineView, flourView, machineClick } from './machines/machineUI.js';
 const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -332,11 +333,11 @@ export class FarmUI {
     if (!k || !T) return '<div class="fu-sub">Guard dogs come with the next server update.</div>';
     const now = e.serverNow(), max = k.max || 2, L = lv => (k.levels || []).find(l => l.level === lv) || {};
     const cut = lv => { const c = L(lv).cut || [0, 0]; return c[0] === c[1] ? `${Math.round(c[0] * 100)}%` : `${Math.round(c[0] * 100)}–${Math.round(c[1] * 100)}%`; };
-    const LOOK = { 1: 'a young dog — friendly, tail always wagging', 2: 'spiked collar — strict and focused', 3: 'golden collar and tactical vest — fierce, well trained' };
+    const LOOK = { 1: 'a Cane Corso — friendly, tail always wagging', 2: 'a German Shepherd with a spiked collar — strict and focused', 3: 'a Boxer — fierce, well trained' };
     let html = `<div class="fu-npc"><span class="fu-ico">${k.icon}</span><span class="fu-say"><b>Farmer</b>“Thieves come for eggs left waiting in the nests — more than ${T.rules.threshold}. A good dog keeps them off.”</span></div>`;
     for (const d of T.dogs) {
       const on = e.dogOnDuty(d, now), next = L(d.level + 1);
-      html += `<div class="fu-row dog"><span class="fu-ico">${k.icon}</span><span class="fu-main"><span class="fu-name">Guard dog ${d.slot + 1} · Level ${d.level}</span>
+      html += `<div class="fu-row dog"><span class="fu-ico">${k.icon}</span><span class="fu-main"><span class="fu-name">Guard dog ${d.slot + 1} · ${DOG_BREEDS[d.level] || ''} · Level ${d.level}</span>
         <span class="fu-sub">${LOOK[d.level] || ''} · saves ${cut(d.level)} of what a thief takes · thieves at most ${L(d.level).raids}× a day</span>
         <span class="fu-sub ${on ? 'fu-ok' : 'fu-need'}">${on ? `On duty · <b data-cd="${d.fedUntil}" data-re="1">${clock(Date.parse(d.fedUntil) - now)}</b> left` : 'Asleep — hungry. Give a bone or a treat to put it on duty'}</span></span>
         <span class="fu-col">
@@ -345,8 +346,8 @@ export class FarmUI {
           ${next.cost ? `<button class="fu-go sell" data-x="dogtrain" data-d="${d.id}" data-l="${d.level + 1}" ${e.money < next.cost || this.busy ? 'disabled' : ''}>Train to L${d.level + 1} · ₹${next.cost}</button>` : '<span class="fu-sub fu-c">Top level</span>'}
         </span></div>`;
     }
-    if (T.dogs.length < max) html += `<div class="fu-row"><span class="fu-ico">${k.icon}</span><span class="fu-main"><span class="fu-name">${esc(k.breed || 'Guard dog')} · ₹${k.buy}</span>
-      <span class="fu-sub">Guards your coops. Level 1 saves ${cut(1)} of what a thief takes, Level 2 ${cut(2)}, Level 3 ${cut(3)}. Arrives on duty for ${k.hours || 4} h · ${T.dogs.length}/${max} dogs</span></span>
+    if (T.dogs.length < max) html += `<div class="fu-row"><span class="fu-ico">${k.icon}</span><span class="fu-main"><span class="fu-name">Guard dog (${DOG_BREEDS[1]}) · ₹${k.buy}</span>
+      <span class="fu-sub">Guards your coops. Level 1 (${DOG_BREEDS[1]}) saves ${cut(1)} of what a thief takes, Level 2 (${DOG_BREEDS[2]}) ${cut(2)}, Level 3 (${DOG_BREEDS[3]}) ${cut(3)}. Arrives on duty for ${k.hours || 4} h · ${T.dogs.length}/${max} dogs</span></span>
       <button class="fu-go" data-x="dogbuy" ${e.money < k.buy || this.busy ? 'disabled' : ''}>Buy · ₹${k.buy}</button></div>`;
     else html += `<div class="fu-sub">The farm has its ${max} guard dogs — the most it can keep.</div>`;
     if (!e.qty('bone') && !e.qty('dog_treat') && T.dogs.length) html += `<div class="fu-sub fu-need">No bones or treats — they're under “Buy feed” (bone ₹${(e.cat('bone') || {}).buy}, treat ₹${(e.cat('dog_treat') || {}).buy}).</div>`;
@@ -359,7 +360,7 @@ export class FarmUI {
     if (!k || !d) return '<div class="fu-sub">No dog lives here yet — buy one at the Farm Store (Guard dogs).</div>';
     const now = e.serverNow(), on = e.dogOnDuty(d, now), L = lv => (k.levels || []).find(l => l.level === lv) || {}, next = L(d.level + 1), busy = this.busy ? 'disabled' : '';
     const left = on ? Date.parse(d.fedUntil) - now : 0, ahead = (T.rules && T.rules.aheadH) || 48;
-    let html = `<div class="fu-row dog"><span class="fu-ico">${k.icon}</span><span class="fu-main"><span class="fu-name">Guard dog ${d.slot + 1} · Level ${d.level}</span>
+    let html = `<div class="fu-row dog"><span class="fu-ico">${k.icon}</span><span class="fu-main"><span class="fu-name">Guard dog ${d.slot + 1} · ${DOG_BREEDS[d.level] || ''} · Level ${d.level}</span>
       <span class="fu-sub ${on ? 'fu-ok' : 'fu-need'}">${on ? `On duty · <b data-cd="${d.fedUntil}" data-re="1">${clock(left)}</b> left before it's hungry` : 'Asleep — hungry. Feed it to put it back on duty'}</span></span></div>
       <div class="fu-h">Feed</div>`;
     for (const [id, word, hrs] of [['bone', 'a bone', 4], ['dog_treat', 'a treat', 24]]) {
@@ -372,7 +373,7 @@ export class FarmUI {
         ${have < 3 ? `<button class="fu-go alt" data-x="buy" data-i="${id}" data-q="1" ${e.money < f.buy ? 'disabled' : busy}>Buy 1 · ₹${f.buy}</button>` : ''}</span></div>`;
     }
     html += next.cost ? `<div class="fu-h">Training</div><div class="fu-row"><span class="fu-ico">${k.icon}</span><span class="fu-main"><span class="fu-name">Train to level ${d.level + 1} · ₹${next.cost}</span>
-      <span class="fu-sub">${d.level + 1 === 2 ? 'A spiked collar — strict and focused' : 'A golden collar and a tactical vest — a fierce, trained guard dog'} · saves more of what a thief takes</span></span>
+      <span class="fu-sub">${d.level + 1 === 2 ? 'It becomes a German Shepherd with a spiked collar — strict and focused' : 'It becomes a Boxer — a fierce, trained guard dog'} · saves more of what a thief takes</span></span>
       <button class="fu-go sell" data-x="dogtrain" data-d="${d.id}" data-l="${d.level + 1}" ${e.money < next.cost ? 'disabled' : busy}>Train · ₹${next.cost}</button></div>` : '<div class="fu-sub">Top level — fully trained.</div>';
     return html + '<div class="fu-sub">A fed dog eats at its bowl, then goes back to guarding the coops. Hungry dogs sleep and let thieves in.</div>';
   }

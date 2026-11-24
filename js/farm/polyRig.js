@@ -110,9 +110,14 @@ function recolour(g, fn) {
   }
 }
 export function polyAnimal(type) {
-  const V = VARIANTS[type], R = rigOf(type), e = R.model || POLY_ANIMALS[V ? V.base : type], g = unpack(e, e.palette || PALETTE), k = R.size || 1;
+  const V = VARIANTS[type], R = rigOf(type), e = R.model || POLY_ANIMALS[V ? V.base : type], g = unpack(e, e.palette || PALETTE);
   if (V && V.colour) recolour(g, V.colour);
-  const p = g.attributes.position, n = p.count, rig = new Float32Array(n * 4), rig2 = R.poll ? new Float32Array(n * 4) : null;
+  return rigGeometry(g, R);
+}
+// tag every corner of a geometry (facing +z, feet at y = 0) with its part, by where it is (R: a rig as in RIGS; also
+// for the guard dogs' textured models, js/farm/dogs.js)
+export function rigGeometry(g, R) {
+  const k = R.size || 1, p = g.attributes.position, n = p.count, rig = new Float32Array(n * 4), rig2 = R.poll ? new Float32Array(n * 4) : null;
   for (let i = 0; i < n; i++) {
     const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
     let tag = [0, 0, 0, 0];

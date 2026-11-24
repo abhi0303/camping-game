@@ -1,9 +1,10 @@
-// Guard dogs (Farm World): German Shepherds that guard the coops. The server decides what they do against
-// thieves (server/src/thieves.js); this draws them. At most two, each with a kennel just outside the west end of
-// the walkway.
-//   level 1  a young dog and a cute one: tongue out, ears a little soft, tail up and wagging, trots about
-//   level 2  a spiked collar; stands straight with its ears up and its tail still, watching
-//   level 3  a golden collar and a black tactical vest, brows down and teeth showing: a trained guard dog
+// Guard dogs (Farm World): they guard the coops. The server decides what they do against thieves
+// (server/src/thieves.js); this draws them. At most two, each with a kennel just outside the west end of the walkway.
+//   level 1  a Cane Corso (its model with its own texture, js/farm/dogModels.js): trots about, tail wagging
+//   level 2  a German Shepherd with a spiked collar (built here, until a standing model replaces it); stands straight
+//            with its ears up and its tail still, watching
+//   level 3  a Boxer (its model with its own texture): a trained guard dog
+// On duty they bark every 10 s for 3 s (standing where they are, head up), then go on with their patrol.
 // On duty (fed: a bone keeps a dog on duty 4 hours, a treat 24) they patrol the walkway and stand guard; hungry
 // (off duty) they lie asleep in front of the kennel. When a thief comes they run to the coop he's at and bark.
 // Where they are comes from the shared clock and the server's numbers, so every player sees the same dogs.
@@ -13,14 +14,28 @@
 import * as THREE from 'three';
 import { GeoBuilder } from '../utils.js';
 import { limb } from '../flora.js';
-import { rigMaterial, rigDepthMaterial, addAnimAttributes } from './animals.js';
+import { rigMaterial, rigTexMaterial, rigDepthMaterial, addAnimAttributes } from './animals.js';
+import { rigGeometry } from './polyRig.js';
+import { loadDog } from './dogModels.js';
 import { PLOTS, toWorld } from './layout.js';
 
 const TAN = 0xc98a3e, TAN_L = 0xe0b070, BLACK = 0x231d19, NOSE = 0x0f0c0a;
 // the kennels (their doors face the walkway) and each dog's patrol line along the walkway
 export const KENNELS = [{ x: -110.4, z: -184.9, yaw: Math.PI / 2 }, { x: -110.4, z: -172.1, yaw: Math.PI / 2 }];
 const PATROL = [{ x0: -102.5, x1: -58, z: -179.7 }, { x0: -101.5, x1: -59, z: -177.3 }];
-const STEP = 1.05;                              // metres per step cycle
+const STEP = 1.05;                              // metres per step cycle (the level-2 dog built here)
+// the model dogs: where their parts are (js/farm/polyRig.js rigGeometry) and how they step: leg (from where it
+// swings: a step is as long as the paws really go), the legs' swing walking / running
+export const DOG_RIGS = {
+  1: { legs: [[0.11, 0.29], [-0.185, 0.29], [0.15, -0.32], [-0.145, -0.33]], hw: 0.066, hd: 0.1, cut: 0.27, knee: [0.13, 0.15],
+    neck: { y: 0.55, z: 0.25, z0: 0.22, z1: 0.45, minY: 0.42 }, tail: { hw: 0.09, z: -0.36, top: 0.52, minY: 0.3 } },
+  3: { legs: [[0.05, 0.27], [-0.05, 0.27], [0.05, -0.27], [-0.05, -0.27]], hw: 0.042, hd: 0.1, cut: 0.28, knee: [0.13, 0.15],
+    neck: { y: 0.55, z: 0.2, z0: 0.18, z1: 0.36, minY: 0.45 }, tail: { hw: 0.04, z: -0.33, top: 0.5, minY: 0.38 } },
+};
+const DOG_GAIT = { 1: { leg: 0.27, walk: 0.45, run: 0.75 }, 3: { leg: 0.28, walk: 0.45, run: 0.75 } };
+// barking on duty: every 10 s, 3 s of barks (three bursts of three), the dog standing still; a second to walk on
+const BARK_EVERY = 10, BARK_FOR = 3;
+const ease = k => k * k * (3 - 2 * k);
 const wrap = a => Math.atan2(Math.sin(a), Math.cos(a));
 const dampA = (a, b, k) => a + wrap(b - a) * k;
 
@@ -129,13 +144,17 @@ export class GuardDogs {
   enable() {
     if (this.on) return;
     this.on = true;
-    const mat = rigMaterial(), depth = rigDepthMaterial();
-    this.meshes = [1, 2, 3].map(level => {
-      const m = new THREE.InstancedMesh(rigGeo(b => dog(b, level)), mat, 2);
+    const depth = rigDepthMaterial();
+    const mesh = (g, mat) => {
+      const m = new THREE.InstancedMesh(g, mat, 2);
       addAnimAttributes(m, 2); m.customDepthMaterial = depth;
       m.castShadow = true; m.frustumCulled = false; m.count = 0; m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       this.scene.add(m); return m;
-    });
+    };
+    // level 2 is built here; levels 1 and 3 are models, drawn once they've loaded (a dog of that level waits till then)
+    this.meshes = [null, mesh(rigGeo(b => dog(b, 2)), rigMaterial()), null];
+    for (const lv of [1, 3]) loadDog(lv).then(d => { this.meshes[lv - 1] = mesh(rigGeometry(d.geometry, DOG_RIGS[lv]), rigTexMaterial(d.texture)); })
+      .catch(e => console.warn('dog model', lv, e));
     this.kennels = KENNELS.map(K => {
       const b = new GeoBuilder(); kennel(b);
       const k = b.build(); k.position.set(K.x, this.g.world.heightAt(K.x, K.z), K.z); k.rotation.y = K.yaw; k.visible = false;
@@ -204,7 +223,9 @@ export class GuardDogs {
     const counts = [0, 0, 0];
     this.kennels.forEach((k, i) => { k.visible = dogs.some(d => d.slot === i); });
     for (const d of dogs) {
-      const lv = Math.min(3, Math.max(1, d.level)), m = this.meshes[lv - 1], i = counts[lv - 1]++, st = this.st[d.slot] || (this.st[d.slot] = {});
+      const lv = Math.min(3, Math.max(1, d.level)), m = this.meshes[lv - 1];
+      if (!m) continue;                                   // (its model is still loading)
+      const i = counts[lv - 1]++, st = this.st[d.slot] || (this.st[d.slot] = {});
       const K = KENNELS[d.slot], duty = eco.dogOnDuty(d, now);
       let x, z, face, moving = false, sleep = false, bark = false, run = false;
       const spot = raid && duty ? this.guardSpot(raid, d.slot) : null;
@@ -234,10 +255,25 @@ export class GuardDogs {
         const p0 = this._patrol(d.slot, lv, Date.parse(raid.at) / 1000, {}), dist = Math.hypot(spot.x - p0.x, spot.z - p0.z), k = Math.min(1, (t - Date.parse(raid.at) / 1000) * 5.2 / Math.max(0.1, dist));
         x = p0.x + (spot.x - p0.x) * k; z = p0.z + (spot.z - p0.z) * k;
         run = k < 1; moving = run; face = run ? Math.atan2(spot.x - p0.x, spot.z - p0.z) : spot.face; bark = !run;
-      } else { const p = this._patrol(d.slot, lv, t, {}); x = p.x; z = p.z; face = p.face; moving = p.moving; }
-      // steps from the distance really moved (no sliding)
-      const moved = st.init ? Math.hypot(x - st.x, z - st.z) : 0;
-      if (moved < 3) st.ph = (st.ph || 0) + moved / STEP * Math.PI * 2;
+      } else {
+        const p = this._patrol(d.slot, lv, t, {}), u = (t + d.slot * 4.3) % BARK_EVERY;
+        x = p.x; z = p.z; face = p.face; moving = p.moving;
+        if (u < BARK_FOR + 1) {                         // barking: it stops where it was, then walks on
+          const h = this._patrol(d.slot, lv, t - u, {}), k = u < BARK_FOR ? 0 : ease(u - BARK_FOR);
+          x = h.x + (p.x - h.x) * k; z = h.z + (p.z - h.z) * k; face = k ? p.face : h.face; moving = k > 0 && p.moving;
+          if (u < BARK_FOR) {
+            bark = true;
+            const win = Math.floor((t + d.slot * 4.3) / BARK_EVERY), due = Math.min(3, Math.floor(u) + 1);   // a burst of three barks each second
+            if (st.pbWin !== win) { st.pbWin = win; st.pbN = 0; }
+            while (st.pbN < due) { st.pbN++; if (this.g.bark) this.g.bark(x, z, 3, lv === 1 ? 1.1 : lv === 3 ? 1.0 : 1.15); }
+            st.barkT = t + 1;                           // (no thief's barking on top of it)
+          }
+        }
+      }
+      // steps from the distance really moved (no sliding): a model dog's step is as long as its paws really go
+      const moved = st.init ? Math.hypot(x - st.x, z - st.z) : 0, DG = DOG_GAIT[lv];
+      const stepLen = DG ? 4 * DG.leg * Math.sin(Math.max(0.12, (run ? DG.run : DG.walk) * (st.w || 0))) : STEP;
+      if (moved < 3) st.ph = (st.ph || 0) + moved / stepLen * Math.PI * 2;
       st.w = (st.w || 0) + ((moving ? 1 : 0) - (st.w || 0)) * (1 - Math.exp(-8 * dt));
       st.x = x; st.z = z; st.init = true;
       st.yaw = st.yaw === undefined ? face : dampA(st.yaw, face, 1 - Math.exp(-(run ? 10 : 5) * dt));
@@ -256,6 +292,6 @@ export class GuardDogs {
       // barks (the sound)
       if (bark && this.g.bark && t > (st.barkT || 0)) { st.barkT = t + (lv === 3 ? 1.3 : 1.8) + Math.random() * 0.8; this.g.bark(x, z, lv === 3 ? 2 : 3, lv === 1 ? 0.85 : 1.15); }
     }
-    this.meshes.forEach((m, k) => { m.count = counts[k]; m.instanceMatrix.needsUpdate = true; m.geometry.attributes.iAnim.needsUpdate = true; m.geometry.attributes.iAnim2.needsUpdate = true; });
+    this.meshes.forEach((m, k) => { if (!m) return; m.count = counts[k]; m.instanceMatrix.needsUpdate = true; m.geometry.attributes.iAnim.needsUpdate = true; m.geometry.attributes.iAnim2.needsUpdate = true; });
   }
 }
