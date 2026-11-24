@@ -28,7 +28,7 @@ vec2 rigRot(vec2 p, vec2 o, float a) { vec2 d = p - o; float c = cos(a), s = sin
 //   4.x lower leg: swings with the leg and also bends at the knee (height (x - 4) * 2) while the hoof comes forward
 //   5.x head on a long neck: turns down with the neck (base y (x - 5) * 4, z aRig.y) and nods back at the poll
 //       (aRig.zw), so a grazing horse gets its nose down to the grass
-//   6   neck and head of a one-piece model (js/farm/polyRig.js: the cow, the pig): turns down about the neck's
+//   6   neck and head of a one-piece model (js/farm/polyRig.js: the cow, the pig, the goat): turns down about the neck's
 //       base (aRig.zw) by aRig.y of the head's angle (0 at the shoulder … 1 at the head), so the neck bends
 const RIG_VERTEX = `#include <begin_vertex>
   float rk = aRig.x;
@@ -58,7 +58,7 @@ export function addAnimAttributes(mesh, n) {
   mesh.geometry.setAttribute('iAnim', a); mesh.geometry.setAttribute('iAnim2', b);
 }
 // gait per kind: leg swing (radians at full walk), one full step cycle (m), walking speed for a full swing (m/s)
-export const GAIT = { goat: { amp: 0.5, cycle: 0.95, ref: 0.55 }, chicken: { amp: 0.75, cycle: 0.24, ref: 0.32 }, cow: { amp: 0.42, cycle: 1.25, ref: 0.32 },
+export const GAIT = { goat: { amp: 0.55, cycle: 0.62, ref: 0.5 }, chicken: { amp: 0.75, cycle: 0.24, ref: 0.32 }, cow: { amp: 0.42, cycle: 1.25, ref: 0.32 },
   horse: { amp: 0.38, cycle: 1.75, ref: 0.42 }, pig: { amp: 0.5, cycle: 0.55, ref: 0.4 } };
 
 /* ---------- cows, horses and pigs ---------- */
@@ -78,10 +78,17 @@ export function grazePose(a, ms, walking, out) {
 }
 
 /* ---------- goats ---------- */
+// The goat is the fat-tailed sheep model (js/farm/polyRig.js): its neck turns down from the withers, so about 0.45
+// puts its nose in a trough and about 1.05 down to the grass. Standing, it grazes, now and then looking up.
+const GOAT_GRAZE = 1.05;
+function goatGraze(a, t) {
+  const u = (t + a.k * 97) % 13, down = u < 9 ? Math.min(1, u / 1.3, (9 - u) / 1.3) : 0;
+  return ease(Math.max(0, down)) * GOAT_GRAZE + (down > 0.9 ? Math.sin(t * 2.6 + a.k * 3) * 0.06 : 0.05);
+}
 const FIGHT = 35, WINDOWS = [[0, 10], [20, 5]];        // a 35 s cycle: butting 0–10 s, rest 10 s, butting 20–25 s, rest 10 s
 const APPROACH = 3;                                   // they walk up to each other in the 3 s before a round
 const BUTT = 1.6;                                     // one butt: back off, rear up, lunge, clash
-const CONTACT = 0.52, BACK = 0.38;                    // half the distance between the two goats at the clash / backed off
+const CONTACT = 0.7, BACK = 0.38;                     // half the distance between the two goats at the clash / backed off
 // where things are in a goat's home (local coordinates of its pen or field)
 function home(a, land) {
   if (a.home) return a.home;                         // a village pen (js/village/animals.js)
@@ -126,7 +133,7 @@ export function goatPose(a, ms, land, out) {
       }
     }
     const wn = land.wanderLocal(a, ms);
-    out.x = wn.x; out.z = wn.z; out.yaw = wn.yaw; out.head = wn.walking ? 0.1 : 0.75 + 0.15 * Math.sin(t * 1.3 + a.k * 9);   // grazing
+    out.x = wn.x; out.z = wn.z; out.yaw = wn.yaw; out.head = wn.walking ? 0.12 : goatGraze(a, t);
     return out;
   }
   // eating and drinking: 40 s — eat 16 s, wander 6 s, drink 12 s, wander 6 s
@@ -136,8 +143,8 @@ export function goatPose(a, ms, land, out) {
     if (u >= s0 && u < s0 + len) {
       const t0 = (t - (u - s0)) * 1000, from = land.wanderLocal(a, t0), D = walkTime(from, spot), ti = u - s0;
       if (ti < D) { travel(from, spot, spot.yaw, ti, D, out); return out; }
-      out.x = spot.x; out.z = spot.z; out.yaw = spot.yaw; out.lift = 0.1;              // leaning in
-      out.head = what === 'eat' ? 1.08 + 0.1 * Math.sin(t * 5 + a.k * 7) : 1.12 + 0.06 * Math.max(0, Math.sin(t * 3.2 + a.k * 4));
+      out.x = spot.x; out.z = spot.z; out.yaw = spot.yaw; out.lift = 0.05;             // leaning in
+      out.head = what === 'eat' ? 0.44 + 0.07 * Math.sin(t * 5 + a.k * 7) : 0.5 + 0.05 * Math.max(0, Math.sin(t * 3.2 + a.k * 4));
       return out;
     }
     if (u >= s0 + len && u < s0 + len + 2.5) {                                          // leaving the trough
@@ -146,7 +153,7 @@ export function goatPose(a, ms, land, out) {
     }
   }
   const wn = land.wanderLocal(a, ms);
-  out.x = wn.x; out.z = wn.z; out.yaw = wn.yaw; out.head = wn.walking ? 0.1 : 0.7;
+  out.x = wn.x; out.z = wn.z; out.yaw = wn.yaw; out.head = wn.walking ? 0.12 : goatGraze(a, t);
   return out;
 }
 

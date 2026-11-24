@@ -1,4 +1,5 @@
-// The model's animals (js/farm/polyAnimals.js, baked by tools/bake-polyfarm.mjs from "Low Poly Farm V2"):
+// The model animals — the cow and the pig (js/farm/polyAnimals.js, baked by tools/bake-polyfarm.mjs from "Low Poly
+// Farm V2") and the goat (js/farm/goatModel.js, baked by tools/bake-goat.mjs from "Low poly Fat-tailed sheep"):
 // unpacked into geometry with a colour per triangle, and given the rig the farm's animal shader moves
 // (js/farm/animals.js): every vertex gets aRig = [kind, a, b, c]. The model is one welded piece, so a vertex's
 // part comes from where it is (the same place always gets the same part, so the skin never tears):
@@ -8,6 +9,7 @@
 //   tail   the part hanging free of the rump: swishes from where it leaves it (kind 3)
 import * as THREE from 'three';
 import { PALETTE, POLY_ANIMALS } from './polyAnimals.js';
+import { GOAT_MODEL } from './goatModel.js';
 
 const _c = new THREE.Color();
 const smooth = (a, b, v) => { const k = Math.max(0, Math.min(1, (v - a) / (b - a))); return k * k * (3 - 2 * k); };
@@ -32,16 +34,21 @@ export function unpack(e, palette = PALETTE, q = new Int16Array(bytes(e.q).buffe
 // where the parts are (metres, the animal facing +z, feet at y = 0)
 //   legs: [x, z] of each leg's middle, hw/hd: the half size of a leg's column, cut: where the legs leave the
 //   body, knee: front / hind · neck: its base (y, z), the shoulder z0 (no turn) to z1 (the full turn), above y
-//   minY · tail: the free part (|x| < hw, z < z, y < top), swishing from y top · size: drawn that much smaller
-//   (the cow a little: it fits the village pens and the farm's barns)
+//   minY · tail: the free part (|x| < hw, z < z, minY < y < top), swishing from y top · size: drawn that much
+//   smaller (the cow a little: it fits the village pens and the farm's barns) · model: its baked data (with its
+//   own palette) when it isn't one of the farm model's
 const RIGS = {
   cow: { size: 0.92, legs: [[-0.24, 0.55], [0.19, 0.55], [-0.22, -0.745], [0.2, -0.745]], hw: 0.1, hd: 0.15, cut: 0.6, knee: [0.36, 0.42],
     neck: { y: 0.85, z: 0.62, z0: 0.62, z1: 1.02, minY: 0.62 }, tail: { hw: 0.08, z: -0.86, top: 1.05 } },
   pig: { legs: [[-0.095, 0.2], [0.11, 0.24], [-0.095, -0.34], [0.105, -0.35]], hw: 0.08, hd: 0.14, cut: 0.21, knee: [0.1, 0.11],
     neck: { y: 0.33, z: 0.2, z0: 0.12, z1: 0.3, minY: 0.21 }, tail: { hw: 0.06, z: -0.535, top: 0.45, minY: 0.3 } },
+  // the goat (a fat-tailed sheep): short legs, the neck bends down from the withers (a sheep grazes with its whole
+  // neck low), the fat tail hangs below the rump
+  goat: { model: GOAT_MODEL, legs: [[-0.085, 0.255], [0.088, 0.248], [-0.1, -0.258], [0.092, -0.25]], hw: 0.078, hd: 0.078, cut: 0.29, knee: [0.14, 0.17],
+    neck: { y: 0.55, z: 0.1, z0: 0.08, z1: 0.45, minY: 0.36 }, tail: { hw: 0.11, z: -0.36, top: 0.6, minY: 0.36 } },
 };
 export function polyAnimal(type) {
-  const g = unpack(POLY_ANIMALS[type]), R = RIGS[type], k = R.size || 1, p = g.attributes.position, n = p.count, rig = new Float32Array(n * 4);
+  const R = RIGS[type], e = R.model || POLY_ANIMALS[type], g = unpack(e, e.palette || PALETTE), k = R.size || 1, p = g.attributes.position, n = p.count, rig = new Float32Array(n * 4);
   for (let i = 0; i < n; i++) {
     const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
     let tag = [0, 0, 0, 0];

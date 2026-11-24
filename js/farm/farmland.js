@@ -392,7 +392,11 @@ export class Farmland {
           F = ORIGIN; lx = p.x; lz = p.z; lyaw = p.yaw; head = g.head; flap = g.tail;
         } else {
           const P = goatPose(a, serverMs, this, this._pose);
-          F = P.F; lx = P.x; lz = P.z; lyaw = P.yaw; head = P.head; lift = P.lift; pivot = -0.24;   // (rears up on its hind legs)
+          F = P.F; lx = P.x; lz = P.z; lyaw = P.yaw; head = P.head; lift = P.lift; pivot = -0.25;   // (rears up on its hind legs)
+          // the head goes down and up smoothly between walking, grazing and the troughs (butting is quick)
+          st.head = st.head === undefined || P.clash >= 0 ? head : st.head + (head - st.head) * (1 - Math.exp(-5 * dt));
+          head = st.head;
+          flap = Math.sin(t * 2.1 + a.k * 7) * 0.05 + Math.sin(st.ph * 2) * 0.07 * st.w;   // the fat tail wobbles (more as it walks)
           if (P.clash < 0) st.clash = 0;
           else if (P.clash > st.clash) { st.clash = P.clash; if (a.gi === 0 && this.hooks.onClash) { const cw = toWorld(F, lx, lz); this.hooks.onClash(cw.x, cw.z); } }
         }
