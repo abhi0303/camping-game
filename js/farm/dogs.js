@@ -1,9 +1,9 @@
 // Guard dogs (Farm World): they guard the coops. The server decides what they do against thieves
 // (server/src/thieves.js); this draws them. At most two, each with a kennel just outside the west end of the walkway.
-//   level 1  a Cane Corso (its model with its own texture, js/farm/dogModels.js): trots about, tail wagging
-//   level 2  a German Shepherd with a spiked collar (built here, until a standing model replaces it); stands straight
-//            with its ears up and its tail still, watching
-//   level 3  a Boxer (its model with its own texture): a trained guard dog
+//   level 1  a Cane Corso: trots about, tail wagging
+//   level 2  a German Shepherd: stands straight, its tail still, watching
+//   level 3  a Boxer: a trained guard dog
+// Each is its model with its own textures (js/farm/dogModels.js).
 // On duty they bark every 10 s for 3 s (standing where they are, head up), then go on with their patrol.
 // On duty (fed: a bone keeps a dog on duty 4 hours, a treat 24) they patrol the walkway and stand guard; hungry
 // (off duty) they lie asleep in front of the kennel. When a thief comes they run to the coop he's at and bark.
@@ -13,111 +13,32 @@
 // Legs, head and tail move on the graphics card like the other animals (js/farm/animals.js).
 import * as THREE from 'three';
 import { GeoBuilder } from '../utils.js';
-import { limb } from '../flora.js';
-import { rigMaterial, rigTexMaterial, rigDepthMaterial, addAnimAttributes } from './animals.js';
+import { rigTexMaterial, rigDepthMaterial, addAnimAttributes } from './animals.js';
 import { rigGeometry } from './polyRig.js';
 import { loadDog } from './dogModels.js';
 import { PLOTS, toWorld } from './layout.js';
 
-const TAN = 0xc98a3e, TAN_L = 0xe0b070, BLACK = 0x231d19, NOSE = 0x0f0c0a;
 // the kennels (their doors face the walkway) and each dog's patrol line along the walkway
 export const KENNELS = [{ x: -110.4, z: -184.9, yaw: Math.PI / 2 }, { x: -110.4, z: -172.1, yaw: Math.PI / 2 }];
 // (they turn back well before the farm storage at the east end: its steps come down to x ≈ -57.5)
 const PATROL = [{ x0: -102.5, x1: -62, z: -179.7 }, { x0: -101.5, x1: -63, z: -177.3 }];
-const STEP = 1.05;                              // metres per step cycle (the level-2 dog built here)
 // the model dogs: where their parts are (js/farm/polyRig.js rigGeometry) and how they step: leg (from where it
 // swings: a step is as long as the paws really go), the legs' swing walking / running
 export const DOG_RIGS = {
   1: { legs: [[0.11, 0.29], [-0.185, 0.29], [0.15, -0.32], [-0.145, -0.33]], hw: 0.066, hd: 0.1, cut: 0.27, knee: [0.13, 0.15],
     neck: { y: 0.55, z: 0.25, z0: 0.22, z1: 0.45, minY: 0.42 }, tail: { hw: 0.09, z: -0.36, top: 0.52, minY: 0.3 } },
+  2: { legs: [[0.065, 0.245], [-0.065, 0.245], [0.08, -0.28], [-0.08, -0.28]], hw: 0.052, hd: 0.08, cut: 0.27, knee: [0.12, 0.16],
+    neck: { y: 0.55, z: 0.22, z0: 0.2, z1: 0.4, minY: 0.42 }, tail: { hw: 0.07, z: -0.36, top: 0.62, minY: 0.45 } },
   3: { legs: [[0.05, 0.27], [-0.05, 0.27], [0.05, -0.27], [-0.05, -0.27]], hw: 0.042, hd: 0.1, cut: 0.28, knee: [0.13, 0.15],
     neck: { y: 0.55, z: 0.2, z0: 0.18, z1: 0.36, minY: 0.45 }, tail: { hw: 0.04, z: -0.33, top: 0.5, minY: 0.38 } },
 };
-const DOG_GAIT = { 1: { leg: 0.27, walk: 0.45, run: 0.75 }, 3: { leg: 0.28, walk: 0.45, run: 0.75 } };
+const DOG_GAIT = { 1: { leg: 0.27, walk: 0.45, run: 0.75 }, 2: { leg: 0.27, walk: 0.45, run: 0.75 }, 3: { leg: 0.28, walk: 0.45, run: 0.75 } };
 // barking on duty: every 10 s, 3 s of barks (three bursts of three), the dog standing still; a second to walk on
 const BARK_EVERY = 10, BARK_FOR = 3;
 const ease = k => k * k * (3 - 2 * k);
 const wrap = a => Math.atan2(Math.sin(a), Math.cos(a));
 const dampA = (a, b, k) => a + wrap(b - a) * k;
 
-// a model whose parts move: every vertex gets aRig = [kind, a, b, c] (see js/farm/animals.js)
-function rigGeo(fn) {
-  const b = new GeoBuilder(), add = b.add.bind(b);
-  let cur = [0, 0, 0, 0];
-  b.add = (...args) => {
-    const g = add(...args), n = g.attributes.position.count, r = new Float32Array(n * 4);
-    for (let i = 0; i < n; i++) r.set(cur, i * 4);
-    g.setAttribute('aRig', new THREE.BufferAttribute(r, 4));
-    return g;
-  };
-  b.rig = (tag, f) => { const prev = cur; cur = tag; f(); cur = prev; };
-  fn(b);
-  return b.build().children[0].geometry;
-}
-
-// a German Shepherd (faces +z, paws at y = 0, about 0.65 m at the shoulder)
-function dog(b, level) {
-  const ico = (r, d = 1) => new THREE.IcosahedronGeometry(r, d);
-  b.add(ico(1), TAN, 0, 0.56, -0.02, 0, 0, 0, 'solid', 0.17, 0.17, 0.42);                       // body
-  b.add(ico(1), TAN, 0, 0.56, 0.25, 0, 0, 0, 'solid', 0.17, 0.2, 0.19);                         // deep chest
-  b.add(ico(1, 0), BLACK, 0, 0.67, -0.07, 0, 0, 0, 'solid', 0.155, 0.085, 0.34);                // the black saddle
-  b.add(ico(1, 0), TAN_L, 0, 0.45, 0.02, 0, 0, 0, 'solid', 0.12, 0.07, 0.3);                    // belly
-  // legs: front straight, back with the hock; diagonal pairs step together
-  for (const x of [-0.085, 0.085]) for (const z of [0.27, -0.3]) b.rig([1, (x < 0) === (z > 0) ? 0 : Math.PI, 0.56, z], () => {
-    const back = z < 0;
-    limb(b, [x, 0.56, z], [x, 0.3, z + (back ? -0.08 : 0.015)], 0.05, 0.034, back ? TAN : TAN_L, 5);
-    limb(b, [x, 0.3, z + (back ? -0.08 : 0.015)], [x, 0.04, z + (back ? -0.03 : 0.02)], 0.032, 0.027, TAN_L, 5);
-    b.box(0.06, 0.04, 0.09, x, 0.02, z + 0.04, TAN_L);
-  });
-  // tail: up and curled for the young dog, hanging low for the trained ones (it swishes / wags)
-  b.rig([3, 1e-4, 0.6, 0], () => {
-    const P = level === 1 ? [[0, 0.62, -0.42], [0, 0.73, -0.56], [0, 0.82, -0.6]] : [[0, 0.6, -0.43], [0, 0.46, -0.57], [0, 0.3, -0.61]];
-    limb(b, P[0], P[1], 0.045, 0.05, TAN, 5); limb(b, P[1], P[2], 0.05, 0.03, BLACK, 5);
-  });
-  // collars, the vest
-  if (level === 2) {
-    b.cyl(0.085, 0.09, 0.05, 10, 0, 0.71, 0.36, 0x1a1a1c, 0.75, 0, 0);
-    for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2; b.add(new THREE.ConeGeometry(0.014, 0.05, 4), 0xb8bec4, Math.cos(a) * 0.095, 0.71 + Math.sin(a) * 0.07, 0.36 - Math.sin(a) * 0.065, 0.75 + Math.sin(a) * 0.9, 0, -Math.cos(a) * 1.4); }
-  }
-  if (level === 3) {
-    b.cyl(0.085, 0.09, 0.055, 10, 0, 0.71, 0.36, 0xd4a82a, 0.75, 0, 0);
-    b.box(0.04, 0.05, 0.012, 0, 0.64, 0.43, 0xf0cc4a, 'solid', 0.4, 0, 0);                        // the gold tag
-    b.box(0.3, 0.07, 0.4, 0, 0.7, -0.02, 0x23272a);                                               // tactical vest
-    for (const s of [-1, 1]) {
-      b.box(0.022, 0.2, 0.36, s * 0.16, 0.6, -0.02, 0x23272a);
-      b.box(0.012, 0.07, 0.11, s * 0.173, 0.62, 0.02, 0xdad6c8);                                    // the K9 patch
-      b.box(0.014, 0.05, 0.08, s * 0.168, 0.53, -0.14, 0x3a4044);                                   // a pocket
-    }
-    b.box(0.32, 0.03, 0.05, 0, 0.47, 0.16, 0x23272a); b.box(0.32, 0.03, 0.05, 0, 0.47, -0.16, 0x23272a);   // straps under the belly
-    b.box(0.08, 0.025, 0.12, 0, 0.745, -0.12, 0x3a4044);                                            // the grab handle
-  }
-  // neck and head (the head turns down / up together with the neck)
-  b.rig([2, 0, 0.62, 0.32], () => {
-    limb(b, [0, 0.6, 0.3], [0, 0.79, 0.43], 0.095, 0.078, TAN, 6);
-    b.add(ico(1, 0), BLACK, 0, 0.73, 0.33, 0, 0, 0, 'solid', 0.07, 0.06, 0.08);
-    b.group(0, 0.83, 0.5, level === 1 ? 0.04 : 0.1, 0, 0, () => {
-      b.box(0.16, 0.15, 0.18, 0, 0, 0, TAN);                                                         // skull
-      b.box(0.1, 0.05, 0.12, 0, 0.065, -0.01, BLACK);                                                // dark forehead
-      b.box(0.095, 0.085, 0.17, 0, -0.03, 0.15, BLACK);                                              // muzzle
-      b.box(0.045, 0.032, 0.03, 0, -0.004, 0.24, NOSE);
-      for (const s of [-1, 1]) {
-        b.box(0.026, 0.022, 0.012, s * 0.047, 0.028, 0.09, 0x2a1a10);                               // eye
-        b.box(0.008, 0.008, 0.006, s * 0.05, 0.034, 0.097, 0xffffff);                               // a glint
-        // ears: up; the young dog's lean out a little
-        b.add(new THREE.ConeGeometry(0.042, 0.13, 4), BLACK, s * 0.055, 0.12, -0.035, -0.1, Math.PI / 4, level === 1 ? -s * 0.42 : -s * 0.12);
-        if (level === 3) b.box(0.045, 0.013, 0.01, s * 0.046, 0.054, 0.094, NOSE, 'solid', 0, 0, s * 0.45);   // angry brows
-      }
-      if (level === 1) {                                                                             // a happy open mouth, tongue out
-        b.box(0.075, 0.025, 0.12, 0, -0.085, 0.13, BLACK, 'solid', 0.18, 0, 0);
-        b.box(0.048, 0.012, 0.085, 0, -0.088, 0.19, 0xe2707a, 'solid', 0.7, 0, 0);
-      }
-      if (level === 3) {                                                                             // teeth bared
-        b.box(0.07, 0.012, 0.01, 0, -0.056, 0.236, 0x5a1a1a);
-        for (const s of [-1, 1]) b.add(new THREE.ConeGeometry(0.008, 0.026, 4), 0xf4f0e6, s * 0.022, -0.06, 0.235, Math.PI, 0, 0);
-      }
-    });
-  });
-}
 // a wooden kennel with a gable roof, its door toward +z, a bowl in front
 function kennel(b) {
   b.box(0.9, 0.62, 1.0, 0, 0.33, 0, 0x9a6a3e);
@@ -152,9 +73,9 @@ export class GuardDogs {
       m.castShadow = true; m.frustumCulled = false; m.count = 0; m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       this.scene.add(m); return m;
     };
-    // level 2 is built here; levels 1 and 3 are models, drawn once they've loaded (a dog of that level waits till then)
-    this.meshes = [null, mesh(rigGeo(b => dog(b, 2)), rigMaterial()), null];
-    for (const lv of [1, 3]) loadDog(lv).then(d => { this.meshes[lv - 1] = mesh(rigGeometry(d.geometry, DOG_RIGS[lv]), rigTexMaterial(d.texture)); })
+    // the three models, drawn once they've loaded (a dog of that level waits till then); a material per texture
+    this.meshes = [null, null, null];
+    for (const lv of [1, 2, 3]) loadDog(lv).then(d => { this.meshes[lv - 1] = mesh(rigGeometry(d.geometry, DOG_RIGS[lv]), d.textures.map(t => rigTexMaterial(t.texture, t.alpha))); })
       .catch(e => console.warn('dog model', lv, e));
     this.kennels = KENNELS.map(K => {
       const b = new GeoBuilder(); kennel(b);
@@ -271,9 +192,9 @@ export class GuardDogs {
           }
         }
       }
-      // steps from the distance really moved (no sliding): a model dog's step is as long as its paws really go
+      // steps from the distance really moved (no sliding): a step is as long as the paws really go
       const moved = st.init ? Math.hypot(x - st.x, z - st.z) : 0, DG = DOG_GAIT[lv];
-      const stepLen = DG ? 4 * DG.leg * Math.sin(Math.max(0.12, (run ? DG.run : DG.walk) * (st.w || 0))) : STEP;
+      const stepLen = 4 * DG.leg * Math.sin(Math.max(0.12, (run ? DG.run : DG.walk) * (st.w || 0)));
       if (moved < 3) st.ph = (st.ph || 0) + moved / stepLen * Math.PI * 2;
       st.w = (st.w || 0) + ((moving ? 1 : 0) - (st.w || 0)) * (1 - Math.exp(-8 * dt));
       st.x = x; st.z = z; st.init = true;

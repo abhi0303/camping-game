@@ -1,0 +1,11 @@
+Model Information:
+* title:	German Shepherd Rig
+* source:	https://sketchfab.com/3d-models/german-shepherd-rig-62b04b0d87ba40c9ab826e0534061c59
+* author:	Puppies4life (https://sketchfab.com/FlyingSou)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "German Shepherd Rig" (https://sketchfab.com/3d-models/german-shepherd-rig-62b04b0d87ba40c9ab826e0534061c59) by Puppies4life (https://sketchfab.com/FlyingSou) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)

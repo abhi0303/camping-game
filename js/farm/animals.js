@@ -63,8 +63,9 @@ function rigged(mat, key) {
 }
 // (two-sided for the models with thin parts that show from both sides: a horse's mane)
 export const rigMaterial = (twoSided = false) => rigged(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, side: twoSided ? THREE.DoubleSide : THREE.FrontSide }), 'animal-rig-v4');
-// the same with a texture (the guard dogs keep their models' own textures)
-export const rigTexMaterial = map => rigged(new THREE.MeshLambertMaterial({ map, flatShading: true }), 'animal-rig-tex-v4');
+// the same with a texture (the guard dogs keep their models' own textures); cut: a see-through texture (fur fringes)
+// drawn with its alpha cut out, from both sides
+export const rigTexMaterial = (map, cut = false) => rigged(new THREE.MeshLambertMaterial({ map, flatShading: true, alphaTest: cut ? 0.5 : 0, side: cut ? THREE.DoubleSide : THREE.FrontSide }), cut ? 'animal-rig-tex-cut-v4' : 'animal-rig-tex-v4');
 export const rigDepthMaterial = () => rigged(new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking }), 'animal-rig-depth-v4');
 // add the per-animal animation values to an instanced mesh's geometry
 export function addAnimAttributes(mesh, n) {

@@ -333,7 +333,7 @@ export class FarmUI {
     if (!k || !T) return '<div class="fu-sub">Guard dogs come with the next server update.</div>';
     const now = e.serverNow(), max = k.max || 2, L = lv => (k.levels || []).find(l => l.level === lv) || {};
     const cut = lv => { const c = L(lv).cut || [0, 0]; return c[0] === c[1] ? `${Math.round(c[0] * 100)}%` : `${Math.round(c[0] * 100)}–${Math.round(c[1] * 100)}%`; };
-    const LOOK = { 1: 'a Cane Corso — friendly, tail always wagging', 2: 'a German Shepherd with a spiked collar — strict and focused', 3: 'a Boxer — fierce, well trained' };
+    const LOOK = { 1: 'a Cane Corso — friendly, tail always wagging', 2: 'a German Shepherd — strict and focused', 3: 'a Boxer — fierce, well trained' };
     let html = `<div class="fu-npc"><span class="fu-ico">${k.icon}</span><span class="fu-say"><b>Farmer</b>“Thieves come for eggs left waiting in the nests — more than ${T.rules.threshold}. A good dog keeps them off.”</span></div>`;
     for (const d of T.dogs) {
       const on = e.dogOnDuty(d, now), next = L(d.level + 1);
@@ -373,7 +373,7 @@ export class FarmUI {
         ${have < 3 ? `<button class="fu-go alt" data-x="buy" data-i="${id}" data-q="1" ${e.money < f.buy ? 'disabled' : busy}>Buy 1 · ₹${f.buy}</button>` : ''}</span></div>`;
     }
     html += next.cost ? `<div class="fu-h">Training</div><div class="fu-row"><span class="fu-ico">${k.icon}</span><span class="fu-main"><span class="fu-name">Train to level ${d.level + 1} · ₹${next.cost}</span>
-      <span class="fu-sub">${d.level + 1 === 2 ? 'It becomes a German Shepherd with a spiked collar — strict and focused' : 'It becomes a Boxer — a fierce, trained guard dog'} · saves more of what a thief takes</span></span>
+      <span class="fu-sub">${d.level + 1 === 2 ? 'It becomes a German Shepherd — strict and focused' : 'It becomes a Boxer — a fierce, trained guard dog'} · saves more of what a thief takes</span></span>
       <button class="fu-go sell" data-x="dogtrain" data-d="${d.id}" data-l="${d.level + 1}" ${e.money < next.cost ? 'disabled' : busy}>Train · ₹${next.cost}</button></div>` : '<div class="fu-sub">Top level — fully trained.</div>';
     return html + '<div class="fu-sub">A fed dog eats at its bowl, then goes back to guarding the coops. Hungry dogs sleep and let thieves in.</div>';
   }
