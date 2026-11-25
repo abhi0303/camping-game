@@ -13,7 +13,9 @@
 //   - positions as 16-bit integers inside the box, one palette byte per triangle (js/farm/polyRig.js unpack).
 // js/farm/polyRig.js gives them their moving legs, necks and tails.
 //   npm i --no-save meshoptimizer@0.21.0   (once, anywhere; or MESHOPT=<path to its index.module.js>)
-//   node tools/bake-animals.mjs [goat|cows]
+//   node tools/bake-animals.mjs [goat|cows|horses|dogs|fish|chickens]
+// The fish (js/fishing/fishModels.js, "Low Poly Fish": three fish in one file) are in plain colours: every triangle
+// kept with its material's colour, centred, head toward +z.
 // The models are CC-BY-4.0 (each folder's license.txt; credited in the README). Textures are read through macOS
 // `sips` (Node has no JPEG / PNG decoder of its own).
 import { readFileSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs';
@@ -63,6 +65,16 @@ const OUTPUTS = {
       dog_1: { dir: 'models/dogs/cane_corso_level_1', tris: 9000, face: '+z', height: 0.82 },
       dog_2: { dir: 'models/dogs/german_shepherd_level_2', tris: 9000, face: '+x', height: 0.86 },
       dog_3: { dir: 'models/dogs/boxer_level_3', tris: 9000, face: '+z', height: 0.8 },
+    },
+  },
+  // the fish: plain colours, every triangle kept; nose to tail as long as the game's fish were
+  fish: {
+    file: 'js/fishing/fishModels.js', name: 'FISH_MODELS', note: 'head toward +z, centred on the origin\n// (js/fishing/models.js unpacks them)',
+    about: 'from "Low Poly Fish" by Floreswa (https://sketchfab.com/floreswa), CC-BY-4.0.\n// The river\'s fish (fish_small: the blue one, fish_medium: the green one, fish_large: the red one)',
+    models: {
+      fish_small: { dir: 'models/low_poly_fish', only: /^fish\.002_/, flat: true, colours: 16, face: '-z', length: 0.28 },
+      fish_medium: { dir: 'models/low_poly_fish', only: /^fish\.001_/, flat: true, colours: 16, face: '-z', length: 0.48 },
+      fish_large: { dir: 'models/low_poly_fish', only: /^fish_/, flat: true, colours: 16, face: '-z', length: 0.9 },
     },
   },
   chickens: {
@@ -160,7 +172,7 @@ async function bake(label, A) {
   // all corners (placed), uvs, triangles (with their texture and colour factor)
   const P = [], UV = [], IDX = [], TRI = [];
   for (const { p, W, skin, mesh } of prims) {
-    if (A.skip && A.skip.includes(mesh)) continue;
+    if ((A.skip && A.skip.includes(mesh)) || (A.only && !A.only.test(mesh))) continue;
     const pos = accessor(p.attributes.POSITION), base = P.length / 3, mat = gltf.materials[p.material], T = texOf(mat);
     const uv = T ? accessor(p.attributes['TEXCOORD_' + T.uv]) : null, idx = p.indices !== undefined ? accessor(p.indices) : null;
     const f = (mat && mat.pbrMetallicRoughness && mat.pbrMetallicRoughness.baseColorFactor) || [1, 1, 1, 1];
@@ -212,14 +224,30 @@ async function bake(label, A) {
   // simplify (keeping colour edges)
   await MeshoptSimplifier.ready;
   MeshoptSimplifier.useExperimentalFeatures = true;
-  const [simple, err] = MeshoptSimplifier.simplifyWithAttributes(idx, V, 3, vcol, 3, [0.4, 0.4, 0.4], null, A.tris * 3, 0.05);
+  let simple, err = 0, rgb;
+  if (A.flat) {
+    // a model in plain colours (no textures, few triangles): every triangle kept, with its own material's colour
+    // (the welded corners' averages would blur the colour edges); only the ones the weld flattened go
+    const keep = [];
+    for (let t = 0; t < idx.length; t += 3) if (idx[t] !== idx[t + 1] && idx[t + 1] !== idx[t + 2] && idx[t] !== idx[t + 2]) keep.push(t / 3);
+    simple = Uint32Array.from(keep.flatMap(t => [idx[t * 3], idx[t * 3 + 1], idx[t * 3 + 2]]));
+    rgb = Float32Array.from(keep.flatMap(t => TRI[t].f.slice(0, 3).map(srgb)));
+  } else {
+    [simple, err] = MeshoptSimplifier.simplifyWithAttributes(idx, V, 3, vcol, 3, [0.4, 0.4, 0.4], null, A.tris * 3, 0.05);
+    rgb = new Float32Array(simple.length);
+    for (let t = 0; t < simple.length / 3; t++) for (let k = 0; k < 3; k++) rgb[t * 3 + k] = srgb((vcol[simple[t * 3] * 3 + k] + vcol[simple[t * 3 + 1] * 3 + k] + vcol[simple[t * 3 + 2] * 3 + k]) / 3);
+  }
   const tris = simple.length / 3;
-  const rgb = new Float32Array(tris * 3);
-  for (let t = 0; t < tris; t++) for (let k = 0; k < 3; k++) rgb[t * 3 + k] = srgb((vcol[simple[t * 3] * 3 + k] + vcol[simple[t * 3 + 1] * 3 + k] + vcol[simple[t * 3 + 2] * 3 + k]) / 3);
   const { palette, lab } = kmeans(rgb, A.colours);
 
   // into the farm's frame
   let place = A.place;
+  if (!place && A.length) {
+    // a fish: `length` nose to tail, centred on its box (head toward +z)
+    const ax = { '+x': [0, 1], '-x': [0, -1], '+z': [2, 1], '-z': [2, -1] }[A.face], side = ax[0] === 0 ? 2 : 0;
+    const sc = A.length / (hi0[ax[0]] - lo0[ax[0]]), mid = (lo0[ax[0]] + hi0[ax[0]]) / 2 * ax[1], cx = (lo0[side] + hi0[side]) / 2, cy = (lo0[1] + hi0[1]) / 2;
+    place = (x, y, z) => { const m = [x, y, z]; return [(m[side] - cx) * (ax[0] === 0 ? -ax[1] : ax[1]) * sc, (y - cy) * sc, (m[ax[0]] * ax[1] - mid) * sc]; };
+  }
   if (!place) {
     const ax = { '+x': [0, 1], '-x': [0, -1], '+z': [2, 1], '-z': [2, -1] }[A.face], side = ax[0] === 0 ? 2 : 0;
     const used = new Set(simple), sc = A.height / (hi0[1] - lo0[1]), cx = (lo0[side] + hi0[side]) / 2;
@@ -375,8 +403,8 @@ for (const [name, O] of Object.entries(OUTPUTS)) {
   for (const [k, A] of Object.entries(O.models)) out[k] = await bake(k, A);
   const single = Object.keys(out).length === 1, file = join(ROOT, O.file);
   const tris = Object.values(out).map(m => m.tris).join(' / ');
-  writeFileSync(file, `// Generated by tools/bake-animals.mjs ${O.about}: ${tris} triangles, facing +z, feet at y = 0
-// (js/farm/polyRig.js unpacks and rigs ${single ? 'it' : 'them'}). Do not edit by hand.
+  writeFileSync(file, `// Generated by tools/bake-animals.mjs ${O.about}: ${tris} triangles, ${O.note || `facing +z, feet at y = 0
+// (js/farm/polyRig.js unpacks and rigs ${single ? 'it' : 'them'})`}. Do not edit by hand.
 export const ${O.name} = ${JSON.stringify(single ? Object.values(out)[0] : out)};
 `);
   console.log(`${O.file} ${(readFileSync(file).length / 1024).toFixed(0)} KB`);

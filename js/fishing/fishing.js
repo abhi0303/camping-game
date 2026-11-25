@@ -5,7 +5,7 @@
 // your rod, line, bobber and catches through the normal player updates (PeerJS).
 import * as THREE from 'three';
 import { RODS, FISH, WHY, STEP, SAFE, DANGER, startChallenge, step } from './sim.js';
-import { rodRig, bobberModel, fishModel, rodTip } from './models.js';
+import { rodRig, bobberModel, fishModel, fishMouth, rodTip } from './models.js';
 import { thumb } from './thumbs.js';
 import { noEmoji } from '../icons.js';
 
@@ -249,9 +249,10 @@ export class Fishing {
           bendTo = 0.35; pose = 'rodPull';
           const f = this.caught.get(this.result.fish);
           if (f) {
+            // it hangs by its mouth, turning slowly on the line and wriggling
             f.position.set(this.tip.x, this.tip.y - 0.65 - FISH[this.result.fish].strength * 0.1, this.tip.z);
-            f.rotation.set(Math.PI / 2 + Math.sin(this.t * 7) * 0.15, this.t * 1.3, Math.sin(this.t * 11) * 0.3);
-            this.bob.set(f.position.x, f.position.y + 0.25, f.position.z);
+            f.rotation.set(-Math.PI / 2 + Math.sin(this.t * 7) * 0.15, this.t * 1.3, Math.sin(this.t * 11) * 0.3);
+            this.bob.set(f.position.x, f.position.y + fishMouth(this.result.fish), f.position.z);
           }
         }
         if (E) { this.phase = 'ready'; this._card(null); this._hideCatch(); this.cast(); }
@@ -307,8 +308,8 @@ export class Fishing {
       o.ph = f[1];
       if (fish) {
         if (!o.fish || o.fishType !== fish) { if (o.fish) this.g.scene.remove(o.fish); o.fish = fishModel(fish); o.fishType = fish; this.g.scene.add(o.fish); }
-        o.fish.visible = true; o.fish.position.set(this._w.x, this._w.y - 0.7, this._w.z); o.fish.rotation.set(Math.PI / 2, this.t, Math.sin(this.t * 9) * 0.3);
-        this._lineTo(o.line, this._w, o.fish.position, 0.02); o.line.visible = true;
+        o.fish.visible = true; o.fish.position.set(this._w.x, this._w.y - 0.7, this._w.z); o.fish.rotation.set(-Math.PI / 2, this.t, Math.sin(this.t * 9) * 0.3);
+        this._lineTo(o.line, this._w, this._v.set(this._w.x, this._w.y - 0.7 + fishMouth(fish), this._w.z), 0.02); o.line.visible = true;
       } else if (o.fish) o.fish.visible = false;
     }
     for (const [id, o] of this.remote) if (!seen.has(id)) { this.g.scene.remove(o.line, o.bob); if (o.fish) this.g.scene.remove(o.fish); this.remote.delete(id); }

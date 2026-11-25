@@ -1,14 +1,15 @@
-// Low-poly fishing models: the three rods (each looks different), the three fish, the bobber and a wooden
-// dock (the Fish Market is a baked model: js/fishing/area.js). Built like the farm models: their own frame, front = +z, ground at
-// y = 0 under the centre; hAt(x, z) gives the ground height at a local point.
+// Low-poly fishing models: the three rods (each looks different), the three fish (a model: js/fishing/fishModels.js),
+// the bobber and a wooden dock (the Fish Market is a baked model: js/fishing/area.js). Built like the farm models: their
+// own frame, front = +z, ground at y = 0 under the centre; hAt(x, z) gives the ground height at a local point.
 import * as THREE from 'three';
 import { GeoBuilder } from '../utils.js';
 import { C, FARM_MAT, barrel, lampPost } from '../farm/props.js';
+import { unpack } from '../farm/polyRig.js';
+import { FISH_MODELS } from './fishModels.js';
 
 const flat = () => 0;
 const build = b => b.build(FARM_MAT);
 const H = Math.PI / 2;
-const ball = () => new THREE.SphereGeometry(1, 8, 6);
 const shade = (c, k) => new THREE.Color(c).multiplyScalar(k).getHex();
 
 /* ---------- rods ---------- */
@@ -87,29 +88,15 @@ export function rodRig(level) {
 // where the tip of a straight rod is (item-local)
 export const rodTip = level => new THREE.Vector3(0, 0, ROD_LOOK[level].len);
 
-/* ---------- fish (head toward +z) ---------- */
-export const FISH_LOOK = {
-  fish_small: { len: 0.28, back: 0x4f7390, side: 0x9fc3da, belly: 0xe6eef2, fin: 0x6d8fa8, name: 'Small fish' },
-  fish_medium: { len: 0.48, back: 0x5c7a32, side: 0xc9a945, belly: 0xf0e2b0, fin: 0xb0603a, stripe: 0xd2694a, name: 'Medium fish' },
-  fish_large: { len: 0.9, back: 0x5a3a24, side: 0xb8742e, belly: 0xe8c890, fin: 0xd0502a, name: 'Large fish', whiskers: true },
-};
-export function buildFish(b, type) {
-  const F = FISH_LOOK[type] || FISH_LOOK.fish_small, l = F.len, w = l * 0.16, h = l * 0.24;
-  b.add(ball(), F.side, 0, 0, 0, 0, 0, 0, 'solid', w, h, l * 0.5);                      // body
-  b.add(ball(), F.back, 0, h * 0.35, -l * 0.02, 0, 0, 0, 'solid', w * 0.9, h * 0.7, l * 0.46);   // darker back
-  b.add(ball(), F.belly, 0, -h * 0.35, 0.02 * l, 0, 0, 0, 'solid', w * 0.85, h * 0.55, l * 0.4);
-  if (F.stripe) b.add(ball(), F.stripe, 0, 0.02 * l, 0, 0, 0, 0, 'solid', w * 1.02, h * 0.18, l * 0.42);
-  // tail, fins, eyes, mouth
-  b.box(0.012, h * 1.5, l * 0.2, 0, 0, -l * 0.55, F.fin, 'solid', 0, 0, 0);
-  b.box(0.012, h * 0.6, l * 0.3, 0, h * 0.95, -l * 0.05, F.fin, 'solid', 0.25, 0, 0);
-  for (const s of [-1, 1]) {
-    b.box(0.01, h * 0.35, l * 0.14, s * w * 0.9, -h * 0.35, l * 0.18, F.fin, 'solid', 0, s * 0.5, s * 0.6);
-    b.add(new THREE.SphereGeometry(Math.max(0.01, l * 0.03), 6, 4), 0x111111, s * w * 0.8, h * 0.22, l * 0.36);
-    if (F.whiskers) b.box(0.008, 0.008, l * 0.22, s * w * 0.5, -h * 0.25, l * 0.56, 0x3a2414, 'solid', 0.4, s * 0.5, 0);
-  }
-  b.box(w * 0.9, 0.012, 0.02, 0, -h * 0.08, l * 0.49, 0x2a1a14);
-}
-export function fishModel(type) { const b = new GeoBuilder(); buildFish(b, type); return build(b); }
+/* ---------- fish (head toward +z, centred): "Low Poly Fish" by Floreswa ---------- */
+// fish_small: the blue one (0.28 m nose to tail), fish_medium: the green one (0.48 m), fish_large: the red one (0.9 m)
+export const fishData = type => FISH_MODELS[type] || FISH_MODELS.fish_small;
+export function fishGeometry(type) { const e = fishData(type); return unpack(e, e.palette); }
+export function buildFish(b, type) { b.add(fishGeometry(type), null); }
+// a fish on its own; it turns round the vertical first (rotation order YXZ), so (-π/2, a, 0) hangs it mouth up turned by a
+export function fishModel(type) { const b = new GeoBuilder(); buildFish(b, type); const o = build(b); o.rotation.order = 'YXZ'; return o; }
+// how far its mouth is from its middle (where the line holds it)
+export const fishMouth = type => fishData(type).box[5];
 
 // a red and white float
 export function bobberModel() {

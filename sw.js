@@ -14,7 +14,7 @@ const FILES = [
     'zombies', 'survival', 'combat', 'voice', 'structures', 'designer', 'giants', 'app', 'icons', 'ambience', 'birds', 'grass', 'music', 'flora',
     'farm/config', 'farm/api', 'farm/logins', 'farm/farm', 'farm/menu', 'farm/panel',
     'farm/layout', 'farm/props', 'farm/models', 'farm/polyRig', 'farm/polyAnimals', 'farm/goatModel', 'farm/cowModels', 'farm/horseModels', 'farm/chickenModels', 'farm/dogModels', 'farm/progression', 'farm/npc', 'farm/farmland', 'farm/economy', 'farm/farmui', 'farm/notebook', 'farm/animals', 'farm/dogs', 'farm/thieves', 'farm/guide', 'farm/dutchmill', 'farm/fields', 'farm/crops', 'farm/scarecrow', 'farm/machines/machineProduction', 'farm/machines/machineModels', 'farm/machines/mining', 'farm/machines/flour', 'farm/machines/machines', 'farm/machines/machineUI', 'village/layout', 'village/houses', 'village/cottage', 'village/gardens', 'village/props', 'village/animals', 'village/characters', 'village/animations', 'village/navigation', 'village/schedule', 'village/interactions', 'village/ai', 'village/index', 'village/football', 'village/farmstead', 'village/modelHomes', 'baked',
-    'fishing/sim', 'fishing/models', 'fishing/thumbs', 'fishing/area', 'fishing/fishing', 'fishing/marketui'].map(f => `./js/${f}.js`),
+    'fishing/sim', 'fishing/models', 'fishing/fishModels', 'fishing/thumbs', 'fishing/area', 'fishing/fishing', 'fishing/marketui'].map(f => `./js/${f}.js`),
 ];
 const LIBS = [
   'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js',

@@ -25,12 +25,14 @@ const cowFace = (head, ear, patch, horn) => s('M3 8.2c1.6-.4 3.2.2 4 1.2M21 8.2c
   + (patch ? f('M7.6 6.8c1.4-1 3-1.2 4 .2.4 1.4-.8 2.8-2.6 2.6-1.2-.2-1.8-1.6-1.4-2.8zM15.6 10.6c1-.2 1.8.4 1.6 1.6l-.2 1.4c-1 0-2-.8-1.4-3z', patch) : f('M7 7.4c1.4-1.6 3-2.2 5-2.2s3.6.6 5 2.2c-1.6.4-3.2.6-5 .6s-3.4-.2-5-.6z', ear))
   + ci(9.6, 10.6, 0.8, OL, null) + ci(14.4, 10.6, 0.8, OL, null) + s('M6.8 14.2h10.4c.6 3.4-1.8 6.4-5.2 6.4s-5.8-3-5.2-6.4z', '#f0a8a8')
   + ci(10, 17.2, 0.8, '#b06060', null) + ci(14, 17.2, 0.8, '#b06060', null);
-const fish = (body, fin, belly, size = 1) => {
+// (stripes: two white bands round the body, the large fish's)
+const fish = (body, fin, belly, size = 1, stripes = null) => {
   const k = size;
   return `<g transform="translate(12 12) scale(${k}) translate(-12 -12)">`
     + s('M3.2 12c2.6-4 6.4-5.6 10-5.6 3.2 0 5.6 2 6.6 5.6-1 3.6-3.4 5.6-6.6 5.6-3.6 0-7.4-1.6-10-5.6z', body)
     + s('M3.4 12L.9 8.4v7.2z', fin) + s('M11 6.8c1-1.8 2.8-2.6 4.6-2.4l-1 2.4', fin)
     + f('M6 13.4c2.4 2.2 5 3 7.4 3 2.4 0 4.6-1.2 5.8-3.6-3 1-8.6 1.6-13.2.6z', belly)
+    + (stripes ? f('M6.4 9L8.2 7.9V16.1L6.4 15z', stripes) + f('M10.2 7.2L12 6.9V17.1L10.2 16.8z', stripes) : '')
     + ci(16.6, 10.8, 1, '#fff', OL, 0.8) + ci(16.8, 10.8, 0.45, OL, null) + ln('M13 9.2c.8 1.6.8 3.6 0 5.6', OL, 1) + '</g>';
 };
 const hen = (body, wing, comb = '#e0362a') => s('M5.5 13.5c0-4 2.6-6.6 6-6.6l1-2.6c1.2-1.4 3.6-1 4 .8.3 1.2-.3 2.4.3 3.4 1.6 2.4 2.4 4.4 2.4 6.8 0 3.6-3 6.2-6.8 6.2-4 0-6.9-3-6.9-8z', body)
@@ -98,7 +100,8 @@ const PICS = {
     + s('M2.6 9.4l9.6-4.6 3.4 6-9.6 4.6z', '#95622f') + el(13.9, 7.8, 2.2, 3.4, '#e8c088', OL, ' transform="rotate(-27 13.9 7.8)"') + ci(13.9, 7.8, 0.7, '#b07c40', null),
   stone: s('M2.8 18.6l2.6-6.2 4.4-2.4 3.4 2.2 1.4 6.6z', '#9aa1a8') + s('M10.6 19.2l2.2-8.6 4.6-3.6 3.8 3.4.6 8.8z', '#b9bfc5') + ln('M15 12l1.6 2.6M6.4 14.6l1.6 1.4', '#7d848c', 1),
   worms: ln('M4 17.4c1.6-3 4-3 5 0s3.4 3 5 0 3.4-3 5.4-.6', '#b4566a', 4.2) + ln('M4 17.4c1.6-3 4-3 5 0s3.4 3 5 0 3.4-3 5.4-.6', '#ef8fa0', 2.6) + ci(19.6, 16.6, 0.5, OL, null),
-  fish_small: fish('#8fb6c9', '#5f8ba3', '#d8e7ee', 0.8), fish_medium: fish('#f29a4a', '#d0672a', '#ffe0bf', 0.92), fish_large: fish('#4f9a7a', '#2f6e55', '#cfe8c8', 1.04),
+  // the river's fish (js/fishing/fishModels.js): the blue one, the green one and the red one with white bands
+  fish_small: fish('#6a83b4', '#a3aab8', '#e3eefb', 0.8), fish_medium: fish('#5f9a68', '#7d9180', '#e3eefb', 0.92), fish_large: fish('#c2655a', '#9a6a64', '#eef4fb', 1.04, '#f4f7fb'),
   chicken: hen('#f7f3ea', '#e2dccc'), chicken_brown: hen('#b76a35', '#8f4e24'), chicken_dark: hen('#3a3842', '#55525f'), chicken_gold: hen('#f2c440', '#d99a1e'),
   goat: s('M6.4 7.4C4 6.4 2.4 4 2.6 2.6c1.6.6 3.6 1.8 5 3.6M17.6 7.4c2.4-1 4-3.4 3.8-4.8-1.6.6-3.6 1.8-5 3.6', '#cdbb94')
     + s('M7 8.4c0-1.6 2.2-3.2 5-3.2s5 1.6 5 3.2l-1 7.6c-.4 2.6-2 4.6-4 4.6s-3.6-2-4-4.6z', '#e9e4da') + s('M4.6 9.6l2.6-.6.4 1.8-2 .6zM19.4 9.6l-2.6-.6-.4 1.8 2 .6z', '#d8d0c0')

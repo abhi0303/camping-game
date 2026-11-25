@@ -11,12 +11,28 @@ import { signboard, wallSign } from '../farm/models.js';
 import { C, FARM_MAT, lampPost, barrel, crate } from '../farm/props.js';
 import { FarmerNPC } from '../farm/npc.js';
 import { flambeau } from '../day-night.js';
-import { dockModel, buildFish } from './models.js';
+import { dockModel, fishGeometry, fishData } from './models.js';
 import { loadBaked } from '../baked.js';
 
 const DOCK_X = [-112, -97, -82];        // roughly where the three docks meet the river (world x)
 const DOCK_LEN = 6.5, DOCK_W = 2.4;
 const SWIMMERS = 4;                     // fish swimming around each dock
+const SWIM_KINDS = ['fish_small', 'fish_medium', 'fish_large'];
+// the fish's own colours, its tail sweeping side to side as it swims (more toward its end; each fish in its own time)
+function swimMaterial(time, len) {
+  const m = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
+  m.onBeforeCompile = s => {
+    s.uniforms.uSwim = time; s.uniforms.uLen = { value: len };
+    s.vertexShader = 'uniform float uSwim;\nuniform float uLen;\n' + s.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+      #ifdef USE_INSTANCING
+        float u = -position.z / uLen, bend = smoothstep(-0.2, 0.5, u);
+        float ph = uSwim * 7.0 + instanceMatrix[3].x * 1.7 + instanceMatrix[3].z * 2.3 - u * 3.5;
+        transformed.x += sin(ph) * bend * bend * uLen * 0.17;
+      #endif`);
+  };
+  m.customProgramCacheKey = () => 'fish-swim';
+  return m;
+}
 const v3 = (x, y, z) => new THREE.Vector3(x, y, z);
 // the Fish Market's model in the market's frame (FISH_MARKET): its origin sits at (x, z), to one side so the path to
 // the docks still starts clear of the hull. In the model's own frame (metres): the store (floor h), the deck round
@@ -202,13 +218,22 @@ export class FishingArea {
 
   /* ---------- water life: swimming fish, jumps, rings and drops ---------- */
   _water() {
-    const fb = new GeoBuilder(); buildFish(fb, 'fish_medium');
-    const fishGeo = fb.build(FARM_MAT).children[0].geometry;
-    this.swim = new THREE.InstancedMesh(fishGeo, FARM_MAT.solid, this.spots.length * SWIMMERS);
-    this.swim.instanceMatrix.setUsage(THREE.DynamicDrawUsage); this.swim.frustumCulled = false;
-    this.scene.add(this.swim);
-    this.fish = [];
-    this.spots.forEach((sp, i) => { for (let k = 0; k < SWIMMERS; k++) this.fish.push({ sp, r: 1.6 + k * 0.7, w: (k % 2 ? 1 : -1) * (0.35 + k * 0.07), a: i * 2 + k * 1.7, s: 0.7 + (k % 3) * 0.25, jump: -1, next: 4 + ((i * 5 + k * 3) % 9) }); });
+    // all three fish swim here (small ones the most), each kind one instanced mesh; they swim just under the surface
+    this.swimT = { value: 0 }; this.fish = [];
+    const used = Object.fromEntries(SWIM_KINDS.map(t => [t, 0]));
+    this.spots.forEach((sp, i) => {
+      for (let k = 0; k < SWIMMERS; k++) {
+        const kind = SWIM_KINDS[[0, 1, 0, 2][(k + i) % SWIMMERS]];
+        this.fish.push({ sp, kind, slot: used[kind]++, r: 1.6 + k * 0.7, w: (k % 2 ? 1 : -1) * (0.35 + k * 0.07), a: i * 2 + k * 1.7, s: 0.7 + (k % 3) * 0.25, jump: -1, next: 4 + ((i * 5 + k * 3) % 9) });
+      }
+    });
+    this.swim = {};
+    for (const kind of SWIM_KINDS) {
+      if (!used[kind]) continue;
+      const e = fishData(kind), m = new THREE.InstancedMesh(fishGeometry(kind), swimMaterial(this.swimT, e.box[5] - e.box[2]), used[kind]);
+      m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); m.frustumCulled = false; m.userData.depth = 0.04 + e.box[4];
+      this.scene.add(m); this.swim[kind] = m;
+    }
     const ringGeo = new THREE.RingGeometry(0.82, 1, 28);
     for (let i = 0; i < 16; i++) {
       const m = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ color: 0xe8f4ff, transparent: true, opacity: 0, depthWrite: false }));
@@ -244,10 +269,11 @@ export class FishingArea {
     if (this.npc) this.npc.update(dt, p);
     const W = this.W;
     // fish swim in circles in front of each dock; now and then one jumps
-    this.fish.forEach((f, i) => {
+    this.swimT.value = this.t;
+    this.fish.forEach(f => {
       f.a += f.w * f.s * dt;
-      const c = f.sp.water, x = c.x + Math.cos(f.a) * f.r, z = c.z + Math.sin(f.a) * f.r * 0.7;
-      let y = W - 0.13, pitch = 0;
+      const c = f.sp.water, x = c.x + Math.cos(f.a) * f.r, z = c.z + Math.sin(f.a) * f.r * 0.7, mesh = this.swim[f.kind];
+      let y = W - mesh.userData.depth, pitch = 0;
       f.next -= dt;
       if (f.jump < 0 && f.next <= 0) { f.jump = 0; this.splash(x, z, 6, 0.6); this.onJump && this.onJump(x, z, false); }
       if (f.jump >= 0) {
@@ -257,9 +283,9 @@ export class FishingArea {
       }
       const yaw = Math.atan2(-Math.sin(f.a) * f.w, Math.cos(f.a) * 0.7 * f.w);
       this._e.set(pitch, yaw, 0); this._q.setFromEuler(this._e);
-      this.swim.setMatrixAt(i, this._m.compose(this._p.set(x, y, z), this._q, this._s));
+      mesh.setMatrixAt(f.slot, this._m.compose(this._p.set(x, y, z), this._q, this._s));
     });
-    this.swim.instanceMatrix.needsUpdate = true;
+    for (const m of Object.values(this.swim)) m.instanceMatrix.needsUpdate = true;
     // a calm ring now and then near each dock
     if (Math.random() < dt * 0.9) { const sp = this.spots[Math.floor(Math.random() * this.spots.length)], a = Math.random() * 6.28; this.ripple(sp.water.x + Math.cos(a) * 2.5, sp.water.z + Math.sin(a) * 2, 0.6, 2.2); }
     for (const r of this.ripples) {

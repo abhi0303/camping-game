@@ -66,11 +66,13 @@ export class GeoBuilder {
     if (g.attributes.uv) g.deleteAttribute('uv');
     if (g.attributes.uv2) g.deleteAttribute('uv2');
     if (!g.attributes.normal) g.computeVertexNormals();
-    _c.set(color);
-    const n = g.attributes.position.count;
-    const col = new Float32Array(n * 3);
-    for (let i = 0; i < n; i++) { col[i * 3] = _c.r; col[i * 3 + 1] = _c.g; col[i * 3 + 2] = _c.b; }
-    g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    if (color !== null || !g.attributes.color) {          // (null: a model with its own colours keeps them)
+      _c.set(color);
+      const n = g.attributes.position.count;
+      const col = new Float32Array(n * 3);
+      for (let i = 0; i < n; i++) { col[i * 3] = _c.r; col[i * 3 + 1] = _c.g; col[i * 3 + 2] = _c.b; }
+      g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    }
     (this.buckets[mat] || (this.buckets[mat] = [])).push(g);
     return g;
   }
