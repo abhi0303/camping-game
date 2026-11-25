@@ -17,16 +17,23 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  deploy:
+  # 1. pack the game's files as the Pages artifact
+  build:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
           path: .
+  # 2. publish it, in a job of its own: deploy-pages looks the artifact up in the run's list, and straight after the
+  #    upload in the same job that list can still be empty ("No artifacts named github-pages were found")
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
       - id: deployment
         uses: actions/deploy-pages@v4
