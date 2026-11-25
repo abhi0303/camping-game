@@ -83,13 +83,13 @@ export async function buyRod(c, { me, b, s, cat }) {
 }
 
 // the farm's fishing record (for the Fish Market's collection) and this member's rod
-export async function fishingState(c, roomId, memberId) {
+// one: this member's rod_level and fish_mine (read with the other single values in farm.js state())
+export async function fishingState(c, roomId, memberId, one) {
   const caught = {}, best = {};
   for (const r of await c.rows(`SELECT fish, count(*)::int AS n, max(weight) AS w FROM fishing_casts WHERE room_id = $1 AND status = 'caught' GROUP BY fish`, [roomId])) {
     caught[r.fish] = r.n; best[r.fish] = Math.round(r.w * 100) / 100;
   }
-  const mine = await c.one(`SELECT count(*)::int AS n FROM fishing_casts WHERE member_id = $1 AND status = 'caught'`, [memberId]);
-  return { rod: await rodLevel(c, memberId), caught, best, mine: mine ? mine.n : 0 };
+  return { rod: one.rod_level || 1, caught, best, mine: one.fish_mine || 0 };
 }
 
 // same storage limit rule as the farm (catalog cap × storage level multiplier)

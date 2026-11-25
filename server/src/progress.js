@@ -46,10 +46,13 @@ export async function loadProgress(c, roomId, r, cat = {}) {
   }
   return P;
 }
+// the world's columns that hold it (farm.js writes them together with the money after an action)
+export const progressCols = P => ({ farm_level: P.level, xp: P.xp, xp_total: P.total, stats: JSON.stringify(P.stats), missions: JSON.stringify(P.missions) });
 export async function saveProgress(c, roomId, P) {
   if (!P.dirty) return;
+  const v = progressCols(P);
   await c.rows('UPDATE rooms SET farm_level = $2, xp = $3, xp_total = $4, stats = $5, missions = $6 WHERE id = $1',
-    [roomId, P.level, P.xp, P.total, JSON.stringify(P.stats), JSON.stringify(P.missions)]);
+    [roomId, v.farm_level, v.xp, v.xp_total, v.stats, v.missions]);
   P.dirty = false;
 }
 // counters grow (milk made while nobody played, an action's eggs, sales…)

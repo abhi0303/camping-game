@@ -7,6 +7,12 @@ name = "rv-van-api"
 main = "src/index.js"
 compatibility_date = "2025-10-01"
 
+# Run next to the database, not next to the player: one farm action is ~25 queries one after another, and from a
+# Cloudflare city far from the database every one of them crosses that distance (from India to Neon's us-east-2,
+# ~200 ms each). Placed here only the player's one request makes the long trip. Keep it on the database's region.
+[placement]
+region = "aws:us-east-2"
+
 [vars]
 # web pages allowed to call the API (localhost / 127.0.0.1 are always allowed for testing)
 ALLOWED_ORIGINS = "https://abhi0303.github.io"

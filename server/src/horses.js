@@ -41,10 +41,12 @@ async function freeHorses(c, roomId, cat, nowDate) {
 // end requests nobody took and rentals whose time is up; make a new request when one is due
 export async function ensureRentals(c, roomId, cat, s) {
   const now = s.now;
-  await c.rows(`UPDATE horse_rentals SET status = 'expired' WHERE room_id = $1 AND status = 'offer' AND expires_at <= $2`, [roomId, now]);
-  await c.rows(`UPDATE horse_rentals SET status = 'done' WHERE room_id = $1 AND status = 'active' AND returns_at <= $2`, [roomId, now]);
-  if (await c.one(`SELECT 1 FROM horse_rentals WHERE room_id = $1 AND status = 'offer'`, [roomId])) return;
-  const r = await c.one('SELECT next_rental_at FROM rooms WHERE id = $1', [roomId]);
+  // (one statement: the update ends requests nobody took and rentals whose time is up; the open requests left are
+  // the ones that haven't run out — the select sees the rows as they were before the update)
+  const r = await c.one(`WITH ended AS (UPDATE horse_rentals SET status = CASE WHEN status = 'offer' THEN 'expired' ELSE 'done' END
+        WHERE room_id = $1 AND ((status = 'offer' AND expires_at <= $2) OR (status = 'active' AND returns_at <= $2)) RETURNING 1)
+      SELECT EXISTS (SELECT 1 FROM horse_rentals WHERE room_id = $1 AND status = 'offer' AND expires_at > $2) AS open, next_rental_at FROM rooms WHERE id = $1`, [roomId, now]);
+  if (r && r.open) return;
   if (r && r.next_rental_at && r.next_rental_at > now) return;
   const free = await freeHorses(c, roomId, cat, now);
   if (!free.length) return;                     // asked again as soon as a horse is ready

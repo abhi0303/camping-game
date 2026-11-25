@@ -26,22 +26,27 @@ const row = m => ({ level: m.level, ready: m.ready, progress: m.progress, hopper
 // bring the machines up to `now` (every farm gets its mine the first time). Returns true when something changed.
 export async function settleMachines(c, roomId, now) {
   const t = now.getTime();
-  await c.rows(`INSERT INTO farm_machines (room_id, kind, calc_at) VALUES ($1, 'mine', $2) ON CONFLICT (room_id, kind) DO NOTHING`, [roomId, now]);
-  const list = await c.rows('SELECT id, kind, level, calc_at, progress, ready, hopper, win_start, win_used FROM farm_machines WHERE room_id = $1', [roomId]);
+  // (the mine made the first time is in `made`: the select sees the table as it was before the insert)
+  const COLS = 'id, kind, level, calc_at, progress, ready, hopper, win_start, win_used';
+  const list = await c.rows(`WITH made AS (INSERT INTO farm_machines (room_id, kind, calc_at) VALUES ($1, 'mine', $2) ON CONFLICT (room_id, kind) DO NOTHING RETURNING ${COLS})
+      SELECT ${COLS} FROM farm_machines WHERE room_id = $1 UNION ALL SELECT ${COLS} FROM made`, [roomId, now]);
   let changed = false;
+  const up = [];
   for (const m of list) {
     const from = Math.max(m.calc_at.getTime(), t - MAX_OFFLINE_H * H);
     if (m.kind === 'mine') {
       const x = mineAt(row(m), from, t, MINE);
       if (x.ready !== m.ready) changed = true;
-      await c.rows('UPDATE farm_machines SET ready = $2, progress = $3, calc_at = $4 WHERE id = $1', [m.id, x.ready, x.progress, now]);
+      up.push([m.id, x.ready, x.progress, m.hopper, m.win_start, m.win_used]);         // (the mine has no hopper: kept as it is)
     } else {
       const x = flourAt(row(m), from, t, FLOUR);
       if (x.ready !== m.ready) changed = true;
-      await c.rows('UPDATE farm_machines SET ready = $2, progress = $3, hopper = $4, win_start = $5, win_used = $6, calc_at = $7 WHERE id = $1',
-        [m.id, x.ready, x.progress, x.hopper, new Date(x.winStart), x.used, now]);
+      up.push([m.id, x.ready, x.progress, x.hopper, new Date(x.winStart), x.used]);
     }
   }
+  if (up.length) await c.rows(`UPDATE farm_machines f SET ready = v.ready, progress = v.progress, hopper = v.hopper, win_start = v.win_start, win_used = v.win_used, calc_at = $7
+      FROM unnest($1::uuid[], $2::int[], $3::float8[], $4::int[], $5::timestamptz[], $6::int[]) AS v(id, ready, progress, hopper, win_start, win_used) WHERE f.id = v.id`,
+    [up.map(u => u[0]), up.map(u => u[1]), up.map(u => u[2]), up.map(u => u[3]), up.map(u => u[4]), up.map(u => u[5]), now]);
   return changed;
 }
 

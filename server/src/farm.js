@@ -11,12 +11,12 @@ import { member } from './rooms.js';
 import { PLOTS } from './layout.js';
 import { withAnimalConfig } from './animals.js';
 import { cast, reel, buyRod, fishingState } from './fishing.js';
-import { ensureOrders, ordersState, deliver } from './orders.js';
+import { ensureOrders, ordersState, deliver, istDay } from './orders.js';
 import { ensureRentals, rentalsState, rent, sellHorse, isHorse, HORSES } from './horses.js';
 import { thiefCtx, thiefStep, thiefSave, thievesState, catchThief, dogAction, seenThefts } from './thieves.js';
 import { fieldsState, fieldAction, outfitAction } from './fields.js';
 import { settleMachines, machinesState, machineAction } from './machines.js';
-import { loadProgress, saveProgress, bump, earn, progressState, levelUp } from './progress.js';
+import { loadProgress, saveProgress, progressCols, bump, earn, progressState, levelUp } from './progress.js';
 import { careLevel, careMult, shedCapacity, shedBonus, MARKET, loadNow, salePay, priceShare } from '../../js/farm/progression.js';
 
 const H = 3600e3;
@@ -32,10 +32,12 @@ const r1 = v => Math.round(v * 10) / 10;
 const lower = s => s.toLowerCase();
 
 /* ---------- reading ---------- */
-async function catalog(c) {
-  const list = await c.rows('SELECT item, kind, name, icon, buy_price, sell_price, data FROM catalog ORDER BY sort, item');
+// Every query is a trip to the database and back, one after another, so the reads that go together are asked
+// together. The catalog (prices and rules: the same for every world) comes with the world's row in settle().
+const CATALOG_JSON = `(SELECT json_agg(k ORDER BY k.sort, k.item) FROM (SELECT item, kind, name, icon, buy_price, sell_price, data, sort FROM catalog) k)`;
+function catalogOf(list) {
   // chickens' timings come from the central animal config (server/src/animals.js)
-  return Object.fromEntries(list.map(r => [r.item, withAnimalConfig(r.item, { ...r.data, kind: r.kind, name: r.name, icon: r.icon, buy: r.buy_price, sell: r.sell_price })]));
+  return Object.fromEntries((list || []).map(r => [r.item, withAnimalConfig(r.item, { ...r.data, kind: r.kind, name: r.name, icon: r.icon, buy: r.buy_price, sell: r.sell_price })]));
 }
 async function invMap(c, roomId) {
   const inv = {};
@@ -99,10 +101,13 @@ export function simulate(animals, inv, cat, fromMs, toMs, level = 1) {
   return { made, laid };
 }
 
-// Bring the farm up to now. Must run inside a transaction; locks the world's row.
-async function settle(c, roomId, cat) {
-  const r = await c.one(`SELECT money, gold, econ_rev, produced_at, total_earned, storage_level, thief_due_at, farm_level, xp, xp_total, stats, missions, now() AS now
-      FROM rooms WHERE id = $1 FOR UPDATE`, [roomId]);
+// Bring the farm up to now. Must run inside a transaction; locks the world's row (and reads the catalog with it:
+// s.cat). The inventory is read after the lock, never with it: a statement that waited for the lock still sees
+// the other player's changes to the world's row, but not to other tables.
+async function settle(c, roomId) {
+  const r = await c.one(`SELECT money, gold, econ_rev, produced_at, total_earned, storage_level, thief_due_at, farm_level, xp, xp_total, stats, missions, now() AS now,
+      ${CATALOG_JSON} AS catalog FROM rooms WHERE id = $1 FOR UPDATE`, [roomId]);
+  const cat = catalogOf(r.catalog);
   const prog = await loadProgress(c, roomId, r, cat);
   const inv = await invMap(c, roomId), dirty = [];
   let changed = false;
@@ -146,12 +151,19 @@ async function settle(c, roomId, cat) {
   if (prog.dirty) changed = true;
   await saveProgress(c, roomId, prog);
   await c.rows('UPDATE rooms SET produced_at = $2, econ_rev = econ_rev + $3 WHERE id = $1', [roomId, r.now, changed ? 1 : 0]);
-  return { money: Number(r.money), gold: Number(r.gold), rev: r.econ_rev + (changed ? 1 : 0), now: r.now, inv, level: r.storage_level, earned: Number(r.total_earned), prog };
+  return { money: Number(r.money), gold: Number(r.gold), rev: r.econ_rev + (changed ? 1 : 0), now: r.now, inv, level: r.storage_level, earned: Number(r.total_earned), prog, cat };
 }
 
 async function state(c, roomId, cat, s, me) {
   await ensureOrders(c, roomId, cat, s);
   await ensureRentals(c, roomId, cat, s);
+  // the single values the parts below show, in one go: the order streak, the thief's time, today's thefts, this
+  // player's rod, catches, outfits and when they last looked at the thefts
+  const one = await c.one(`SELECT r.order_streak, r.order_streak_day::text AS order_streak_day, r.thief_due_at,
+      (SELECT count(*)::int FROM farm_thefts WHERE room_id = r.id AND day = $3::date) AS thefts_today,
+      m.rod_level, m.thefts_seen_at, m.created_at, m.outfits, m.outfit,
+      (SELECT count(*)::int FROM fishing_casts WHERE member_id = m.id AND status = 'caught') AS fish_mine
+    FROM rooms r LEFT JOIN room_members m ON m.id = $2 WHERE r.id = $1`, [roomId, me ? me.id : null, istDay(s.now.getTime())]);
   const blds = await c.rows('SELECT id, type, plot, level, x, z, yaw, gate_open FROM buildings WHERE room_id = $1 ORDER BY plot', [roomId]);
   const ans = await c.rows('SELECT id, type, shelter_id, health, hunger, progress, ready, level, care, rented_until, fed_until, born_at FROM animals WHERE room_id = $1 ORDER BY born_at, id', [roomId]);
   const loads = await c.rows('SELECT item, load, at FROM market_load WHERE room_id = $1', [roomId]);
@@ -166,11 +178,11 @@ async function state(c, roomId, cat, s, me) {
     progress: progressState(s.prog, { animals: ans.length }),
     market: { rules: MARKET, load: Object.fromEntries(loads.map(m => [m.item, { load: m.load, at: m.at.toISOString() }])) },
     catalog: cat, plots: PLOTS.length,
-    fishing: me ? await fishingState(c, roomId, me.id) : null,
-    orders: await ordersState(c, roomId, s),
+    fishing: me ? await fishingState(c, roomId, me.id, one) : null,
+    orders: await ordersState(c, roomId, s, one),
     rentals: await rentalsState(c, roomId, s),
-    thieves: await thievesState(c, roomId, s, me, cat),
-    fields: await fieldsState(c, roomId, s, cat, me),
+    thieves: await thievesState(c, roomId, s, me, cat, one),
+    fields: await fieldsState(c, roomId, s, cat, me, one),
     machines: await machinesState(c, roomId, s),
   };
 }
@@ -180,9 +192,8 @@ export async function farmState(req, env, db, code) {
   rateLimit(req, 'farmget', 120, 60e3, env);
   const me = await member(db, req, code);
   return tx(db, async c => {
-    const cat = await catalog(c);
-    const s = await settle(c, me.room_id, cat);
-    return json(await state(c, me.room_id, cat, s, me));
+    const s = await settle(c, me.room_id);
+    return json(await state(c, me.room_id, s.cat, s, me));
   });
 }
 
@@ -205,23 +216,25 @@ export async function farmAct(req, env, db, code) {
   const fn = ACTIONS[b.action];
   if (!fn) throw badInput('Unknown farm action');
   return tx(db, async c => {
-    const cat = await catalog(c);
-    const s = await settle(c, me.room_id, cat);
+    const s = await settle(c, me.room_id), cat = s.cat;
     const dup = await c.one('SELECT detail FROM room_transactions WHERE room_id = $1 AND request_id = $2', [me.room_id, rid]);
     if (dup) return json({ ok: true, replay: true, message: dup.detail.message || '', result: dup.detail, ...(await state(c, me.room_id, cat, s, me)) });
     const out = await fn(c, { me, b, cat, s });
     const xp = earn(s.prog, b.action, out.detail);             // the farm level's XP and counters (progress.js)
     if (xp) out.detail = { ...out.detail, xp };
-    await saveProgress(c, me.room_id, s.prog);
     await writeInv(c, me.room_id, out.items || [], s.inv);
-    // the CHECK (money >= 0) constraint backs up the checks in the actions
-    if (out.money) await c.rows('UPDATE rooms SET money = money + $2, total_earned = total_earned + $3 WHERE id = $1', [me.room_id, out.money, out.earned || 0]);
-    if (out.gold) await c.rows('UPDATE rooms SET gold = gold + $2 WHERE id = $1', [me.room_id, out.gold]);   // (CHECK (gold >= 0) backs up the checks)
+    // the world's row in one write: money, gold, the farm level's progress and the revision. The CHECK (money >= 0)
+    // and CHECK (gold >= 0) constraints back up the checks in the actions
+    const set = ['econ_rev = econ_rev + 1'], args = [me.room_id];
+    const put = (col, v, add) => { args.push(v); set.push(add ? `${col} = ${col} + $${args.length}` : `${col} = $${args.length}`); };
+    if (out.money) { put('money', out.money, true); put('total_earned', out.earned || 0, true); }
+    if (out.gold) put('gold', out.gold, true);
+    if (s.prog.dirty) { for (const [col, v] of Object.entries(progressCols(s.prog))) put(col, v); s.prog.dirty = false; }
+    await c.rows(`UPDATE rooms SET ${set.join(', ')} WHERE id = $1`, args);
     s.money += out.money || 0; s.earned += out.earned || 0; s.gold += out.gold || 0;
     const detail = { ...out.detail, message: out.message };
     await c.rows(`INSERT INTO room_transactions (room_id, member_id, request_id, kind, detail, money_delta) VALUES ($1, $2, $3, $4, $5, $6)`,
       [me.room_id, me.id, rid, b.action, JSON.stringify(detail), out.money || 0]);
-    await c.rows('UPDATE rooms SET econ_rev = econ_rev + 1 WHERE id = $1', [me.room_id]);
     s.rev++;
     return json({ ok: true, message: out.message, result: detail, ...(await state(c, me.room_id, cat, s, me)) });
   });

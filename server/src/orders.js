@@ -81,9 +81,10 @@ async function addOrder(c, roomId, cat, s, day, n, availableMs) {
 // today's first order exists; yesterday's open orders are over. Runs with the world's row locked.
 export async function ensureOrders(c, roomId, cat, s) {
   const now = s.now.getTime(), day = istDay(now);
-  await c.rows(`UPDATE farm_orders SET status = 'expired' WHERE room_id = $1 AND status = 'open' AND day < $2::date`, [roomId, day]);
-  const first = await c.one('SELECT 1 FROM farm_orders WHERE room_id = $1 AND day = $2::date LIMIT 1', [roomId, day]);
-  if (!first) await addOrder(c, roomId, cat, s, day, 1, now);
+  // (one statement: the expiring only touches earlier days, so today's orders read the same before and after it)
+  const r = await c.one(`WITH gone AS (UPDATE farm_orders SET status = 'expired' WHERE room_id = $1 AND status = 'open' AND day < $2::date RETURNING 1)
+      SELECT EXISTS (SELECT 1 FROM farm_orders WHERE room_id = $1 AND day = $2::date) AS first`, [roomId, day]);
+  if (!r.first) await addOrder(c, roomId, cat, s, day, 1, now);
 }
 
 // the streak as it stands now: days in a row with a delivered order (0 if a day was missed)
@@ -93,11 +94,12 @@ function streakNow(row, day) {
   return { days: row.order_streak, today: last === day };
 }
 
-export async function ordersState(c, roomId, s) {
+// one: the world's order_streak and order_streak_day (read with the other single values in farm.js state())
+export async function ordersState(c, roomId, s, one) {
   const now = s.now.getTime(), day = istDay(now);
   const list = await c.rows(`SELECT o.id, o.n, o.customer, o.items, o.pay, o.status, o.available_at, o.done_at, m.name AS done_by
       FROM farm_orders o LEFT JOIN room_members m ON m.id = o.done_by WHERE o.room_id = $1 AND o.day = $2::date ORDER BY o.n`, [roomId, day]);
-  const r = await c.one(`SELECT order_streak, order_streak_day::text AS order_streak_day FROM rooms WHERE id = $1`, [roomId]);
+  const r = one;
   return {
     day, endsAt: new Date(istDayEnd(now)).toISOString(), perDay: ORDERS.perDay, extra: ORDERS.extra, bonus: ORDERS.bonus, streakDays: ORDERS.streakDays,
     streak: streakNow(r, day),

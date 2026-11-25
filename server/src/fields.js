@@ -39,12 +39,13 @@ export function birdShare(cat, level, r = rand) {
 }
 
 /* ---------- state ---------- */
-export async function fieldsState(c, roomId, s, cat, me) {
+// one: this member's outfits and outfit (read with the other single values in farm.js state())
+export async function fieldsState(c, roomId, s, cat, me, one) {
   if (!cat.field) return null;
   const list = await c.rows(`SELECT slot, crop, stage, sow_started_at, sow_by, sown_at, watered_at, ready_at, yield, harvested, scarecrow, soil, bought_at
       FROM farm_fields WHERE room_id = $1 ORDER BY slot`, [roomId]);
   const iso = d => (d ? d.toISOString() : null);
-  const w = me ? await c.one('SELECT outfits, outfit FROM room_members WHERE id = $1', [me.id]) : null;
+  const w = me && one.created_at ? one : null;
   return {
     slots: FIELDS.slots,
     list: list.map(f => ({ slot: f.slot, crop: f.crop, stage: f.stage, sowStartedAt: iso(f.sow_started_at), sowBy: f.sow_by, sownAt: iso(f.sown_at),

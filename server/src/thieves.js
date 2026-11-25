@@ -113,15 +113,16 @@ export async function thiefSave(c, roomId, ctx) {
 }
 
 /* ---------- what the players see ---------- */
-export async function thievesState(c, roomId, s, me, cat) {
+// one: the world's thief_due_at and thefts_today, this member's thefts_seen_at and created_at (read with the other
+// single values in farm.js state())
+export async function thievesState(c, roomId, s, me, cat, one) {
   const now = s.now.getTime();
   const list = await c.rows(`SELECT t.id, t.at, t.steal_at, t.escape_at, t.shelter_id, t.wanted, t.taken, t.saved, t.dog_level, t.dogs, t.status, t.seed, t.caught_at, m.name AS caught_by
       FROM farm_thefts t LEFT JOIN room_members m ON m.id = t.caught_by WHERE t.room_id = $1 ORDER BY t.at DESC LIMIT 15`, [roomId]);
   const dogs = await c.rows('SELECT id, slot, level, fed_until FROM farm_dogs WHERE room_id = $1 ORDER BY slot', [roomId]);
-  const r = await c.one('SELECT thief_due_at FROM rooms WHERE id = $1', [roomId]);
-  const m = me ? await c.one('SELECT thefts_seen_at, created_at FROM room_members WHERE id = $1', [me.id]) : null;
+  const r = one, m = me && one.created_at ? one : null;
   const best = dogs.filter(d => d.fed_until && d.fed_until.getTime() > now).reduce((x, d) => Math.max(x, d.level), 0);
-  const today = await c.one(`SELECT count(*)::int AS n FROM farm_thefts WHERE room_id = $1 AND day = $2::date`, [roomId, istDay(now)]);
+  const today = { n: one.thefts_today };
   return {
     rules: { threshold: THIEVES.threshold, bonus: THIEVES.bonus, approachS: THIEVES.approachS, stealS: THIEVES.stealS, runS: THIEVES.runS, aheadH: THIEVES.aheadH, perDay: THIEVES.perDay[0] },
     dogs: dogs.map(d => ({ id: d.id, slot: d.slot, level: d.level, fedUntil: d.fed_until ? d.fed_until.toISOString() : null })),

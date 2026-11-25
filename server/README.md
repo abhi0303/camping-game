@@ -110,6 +110,8 @@ npx wrangler secret put SERVER_SECRET     # a long random string
 npx wrangler secret put ADMIN_SECRET      # another long random string
 ```
 
+**Where it runs:** `wrangler.toml` places the Worker in the database's cloud region (`[placement] region = "aws:us-east-2"`, Neon's region for this project). A farm action is about 25 database queries one after another; next to the database each takes a millisecond or two, while from a Cloudflare city near the player (India) each would cross to the US and back. With the placement a purchase takes about 0.8 s instead of about 5 s. If the database ever moves, change the region to match. Responses carry a `cf-placement: remote-…` header while it applies.
+
 Deploy. It prints the address, like `https://rv-van-api.<you>.workers.dev`.
 
 ```bash
